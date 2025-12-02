@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: pos-system-backend
+  datasource:
+    url: jdbc:postgresql://localhost:5432/imbasac
+    username: imbasac
+    password: imbasac
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 10000
+
+server:
+  port: 8091
+
+logging:
+  level:
+    root: INFO
+
+security:
+  token:
+    secret: bSZWQDl3ZDVtUW0memhHNEc3ME82ZlYmYms5enVFSmU=
+    expiration: 1200
+  session:
+    ttl: 1800
+
+sale:
+  sunat:
+    mode: "0"
+    url: https://facturaciondirecta.com/API_SUNAT/post.php
+    username: "MODDATOS"
+    password: "MODDATOS"
+    business:
+      ruc: "20611603739"
+      businessName: "IMPORTACIONES EL HUECO 365 DIAS DE 1000 OFERTAS S.A.C"
+      tradeName: "IMPORTACIONES EL HUECO"
+      taxAddress: "JR. SAN CRISTOBAL 327"
+      ubigeo: "180101"
+      neighborhood: "CHAUPIMARCA"
+      district: "CHAUPIMARCA"
+      province: "CERRO DE PASCO"
+      department: "PASCO"
+
+common:
+  hashedPassword: $2a$12$UJsm7R3LJ0IvFNXuOpxB2OPWBrBp/1kTcivvYXlsji2ZlpA.I./j6
