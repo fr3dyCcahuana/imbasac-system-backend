@@ -44,3 +44,13 @@ sale:
 
 common:
   hashedPassword: $2a$12$UJsm7R3LJ0IvFNXuOpxB2OPWBrBp/1kTcivvYXlsji2ZlpA.I./j6
+
+#app:
+#  files:
+#    products-images-dir: /var/www/altoquik/images/products
+#    products-images-base-url: http://localhost:8091
+
+app:
+  files:
+    products-images-dir: src/main/resources/static/images/products
+    products-images-base-url: http://localhost:8091/images/products
