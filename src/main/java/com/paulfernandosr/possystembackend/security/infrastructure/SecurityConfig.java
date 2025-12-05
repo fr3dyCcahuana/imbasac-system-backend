@@ -39,6 +39,7 @@ public class SecurityConfig {
                         .accessDeniedHandler(securityAccessDeniedHandler))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/auth/**").permitAll()
+                        .requestMatchers("/images/**").permitAll()
 //                        .requestMatchers("/permissions/**").hasAnyAuthority("MANAGE_PERMISSIONS")
 //                        .requestMatchers("/products/**").hasAnyAuthority("MANAGE_PRODUCTS")
                         .anyRequest().authenticated())

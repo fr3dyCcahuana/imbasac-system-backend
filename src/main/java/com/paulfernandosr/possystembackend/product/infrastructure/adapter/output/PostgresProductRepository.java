@@ -26,32 +26,53 @@ public class PostgresProductRepository implements ProductRepository {
     private final JdbcClient jdbcClient;
 
     @Override
-    public void create(Product product) {
+    public Product create(Product product) {
         String sql = """
-                INSERT INTO product(
-                    sku,
-                    name,
-                    product_type,
-                    category,
-                    presentation,
-                    factor,
-                    origin_type,
-                    origin_country,
-                    factory_code,
-                    compatibility,
-                    barcode,
-                    warehouse_location,
-                    price_a,
-                    price_b,
-                    price_c,
-                    price_d,
-                    cost_reference
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """;
+            INSERT INTO product(
+                sku,
+                name,
+                product_type,
+                category,
+                presentation,
+                factor,
+                origin_type,
+                origin_country,
+                factory_code,
+                compatibility,
+                barcode,
+                warehouse_location,
+                price_a,
+                price_b,
+                price_c,
+                price_d,
+                cost_reference
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING
+                id          AS product_id,
+                sku,
+                name,
+                product_type,
+                category,
+                presentation,
+                factor,
+                origin_type,
+                origin_country,
+                factory_code,
+                compatibility,
+                barcode,
+                warehouse_location,
+                price_a,
+                price_b,
+                price_c,
+                price_d,
+                cost_reference,
+                created_at,
+                updated_at
+            """;
 
         try {
-            jdbcClient.sql(sql)
+            return jdbcClient.sql(sql)
                     .params(
                             product.getSku(),
                             product.getName(),
@@ -71,7 +92,8 @@ public class PostgresProductRepository implements ProductRepository {
                             product.getPriceD(),
                             product.getCostReference()
                     )
-                    .update();
+                    .query(new ProductRowMapper())
+                    .single();   // ✅ devuelve el Product insertado
         } catch (DataIntegrityViolationException ex) {
             String message = ex.getMostSpecificCause() != null
                     ? ex.getMostSpecificCause().getMessage()

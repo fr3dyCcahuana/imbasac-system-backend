@@ -13,7 +13,7 @@ public class CreateNewProductService implements CreateNewProductUseCase {
     private final ProductRepository productRepository;
 
     @Override
-    public void createNewProduct(Product product) {
-        productRepository.create(product);
+    public Product createNewProduct(Product product) {
+        return productRepository.create(product);
     }
 }

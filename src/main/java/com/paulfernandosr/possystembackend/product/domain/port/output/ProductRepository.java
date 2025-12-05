@@ -9,7 +9,7 @@ import java.util.Optional;
 
 public interface ProductRepository {
 
-    void create(Product product);
+    Product create(Product product);
 
     Page<Product> findPage(String query, Pageable pageable);
 

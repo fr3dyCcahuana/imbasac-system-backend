@@ -15,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
 import java.util.Collection;
 
 @RestController
@@ -29,9 +30,17 @@ public class ProductRestController {
 
     // POST /products
     @PostMapping
-    public ResponseEntity<SuccessResponse<Void>> createNewProduct(@Valid @RequestBody Product product) {
-        createNewProductUseCase.createNewProduct(product);
-        return new ResponseEntity<>(HttpStatus.CREATED);
+    public ResponseEntity<SuccessResponse<Product>> createNewProduct(
+            @Valid @RequestBody Product product
+    ) {
+        Product createdProduct = createNewProductUseCase.createNewProduct(product);
+
+        // Opcional: Location header con la URL del recurso creado
+        URI location = URI.create("/products/" + createdProduct.getId());
+
+        return ResponseEntity
+                .created(location) // HTTP 201 + Location
+                .body(SuccessResponse.ok(createdProduct));
     }
 
     // GET /products?query=&page=0&size=10
