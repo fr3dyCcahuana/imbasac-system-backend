@@ -2,12 +2,9 @@ package com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output
 
 import com.paulfernandosr.possystembackend.salev2.domain.model.ProductSnapshot;
 import com.paulfernandosr.possystembackend.salev2.domain.port.output.ProductSnapshotRepository;
-import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.mapper.ProductSnapshotRowMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
-
-import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
@@ -16,28 +13,31 @@ public class PostgresProductSnapshotRepository implements ProductSnapshotReposit
     private final JdbcClient jdbcClient;
 
     @Override
-    public Optional<ProductSnapshot> findById(Long productId) {
+    public ProductSnapshot findSnapshotById(Long productId) {
+        // Nota: si tu columna manage_by_serial tiene otro nombre, ajusta aquí.
         String sql = """
-                SELECT
-                    p.id AS product_id,
-                    p.sku,
-                    p.name,
-                    p.presentation,
-                    p.factor,
-                    p.price_a,
-                    p.price_b,
-                    p.price_c,
-                    p.price_d,
-                    p.facturable_sunat,
-                    p.affects_stock,
-                    p.gift_allowed
-                FROM product p
-                WHERE p.id = ?
-                """;
+            SELECT
+                id,
+                sku,
+                name,
+                presentation,
+                factor,
+                facturable_sunat AS facturableSunat,
+                affects_stock    AS affectsStock,
+                gift_allowed     AS giftAllowed,
+                COALESCE(manage_by_serial, FALSE) AS manageBySerial,
+                price_a AS priceA,
+                price_b AS priceB,
+                price_c AS priceC,
+                price_d AS priceD
+            FROM product
+            WHERE id = ?
+        """;
 
         return jdbcClient.sql(sql)
                 .param(productId)
-                .query(new ProductSnapshotRowMapper())
-                .optional();
+                .query(ProductSnapshot.class)
+                .optional()
+                .orElse(null);
     }
 }

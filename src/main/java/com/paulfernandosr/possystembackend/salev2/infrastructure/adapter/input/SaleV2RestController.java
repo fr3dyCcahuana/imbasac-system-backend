@@ -5,10 +5,10 @@ import com.paulfernandosr.possystembackend.salev2.domain.port.input.CreateSaleV2
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2CreateRequest;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2DocumentResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
 import java.security.Principal;
 
 @RestController
@@ -22,6 +22,8 @@ public class SaleV2RestController {
     public ResponseEntity<SuccessResponse<SaleV2DocumentResponse>> create(@RequestBody SaleV2CreateRequest request,
                                                                           Principal principal) {
         SaleV2DocumentResponse document = createSaleV2UseCase.create(request, principal.getName());
-        return new ResponseEntity<>(SuccessResponse.created(document), HttpStatus.CREATED);
+        return ResponseEntity
+                .created(URI.create("/sales/" + document.getSaleId()))
+                .body(SuccessResponse.ok(document));
     }
 }

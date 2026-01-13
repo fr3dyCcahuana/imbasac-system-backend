@@ -3,12 +3,7 @@ package com.paulfernandosr.possystembackend.salev2.application;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
 import com.paulfernandosr.possystembackend.salev2.domain.model.*;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.CreateSaleV2UseCase;
-import com.paulfernandosr.possystembackend.salev2.domain.port.output.DocumentSeriesRepository;
-import com.paulfernandosr.possystembackend.salev2.domain.port.output.ProductSnapshotRepository;
-import com.paulfernandosr.possystembackend.salev2.domain.port.output.ProductStockMovementRepository;
-import com.paulfernandosr.possystembackend.salev2.domain.port.output.ProductStockRepository;
-import com.paulfernandosr.possystembackend.salev2.domain.port.output.ProductCostRepository;
-import com.paulfernandosr.possystembackend.salev2.domain.port.output.SaleV2Repository;
+import com.paulfernandosr.possystembackend.salev2.domain.port.output.*;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2CreateRequest;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2DocumentResponse;
 import com.paulfernandosr.possystembackend.user.domain.User;
@@ -20,304 +15,374 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.util.List;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
 public class CreateSaleV2Service implements CreateSaleV2UseCase {
 
     private final UserRepository userRepository;
+
     private final DocumentSeriesRepository documentSeriesRepository;
     private final ProductSnapshotRepository productSnapshotRepository;
+
+    private final SaleV2Repository saleV2Repository;
+    private final SalePaymentRepository salePaymentRepository;
+
     private final ProductStockRepository productStockRepository;
     private final ProductStockMovementRepository productStockMovementRepository;
-    private final ProductCostRepository productCostRepository;
-    private final SaleV2Repository saleV2Repository;
 
-    // Política de costo snapshot para reportes (PROMEDIO=average_cost, ULTIMO=last_unit_cost)
+    private final ProductSerialUnitRepository productSerialUnitRepository;
+
+    private final SaleSessionAccumulatorRepository saleSessionAccumulatorRepository;
+
+    // Política de costo snapshot (Regla #8)
     private final CostPolicy costPolicy = CostPolicy.PROMEDIO;
 
     @Override
     @Transactional
     public SaleV2DocumentResponse create(SaleV2CreateRequest request, String username) {
+
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new InvalidSaleV2Exception("Usuario inválido: " + username));
 
-        // Mantener regla de sesión (no tocar tu módulo de sesión actual)
         if (user.isNotOnRegister()) {
-            throw new InvalidSaleV2Exception("El usuario no tiene una sesión de ventas abierta: " + username);
+            throw new InvalidSaleV2Exception("El usuario no tiene una sesión de caja abierta.");
         }
 
         validateRequest(request);
 
-        DocType docType = request.getDocType();
+        LocalDate issueDate = request.getIssueDate() != null ? request.getIssueDate() : LocalDate.now();
 
-        // 1) Reservar correlativo con bloqueo
-        DocumentSeriesRepository.LockedSeries locked = documentSeriesRepository
-                .lockAndGetNextNumber(request.getStationId(), docType, request.getSeries());
+        // 1) Reservar correlativo (FOR UPDATE) - Regla #2
+        LockedDocumentSeries locked = documentSeriesRepository.lockSeries(
+                request.getStationId(),
+                request.getDocType().name(),
+                request.getSeries()
+        );
 
-        // 2) Insert cabecera
+        Long number = locked.getNextNumber();
+
+        // 2) Pre-cargar snapshots y validar reglas por ítem (incluye seriales) - Regla #3/#4/#6/#7
+        List<ComputedLine> computedLines = new ArrayList<>();
+
+        int lineNumber = 1;
+        for (SaleV2CreateRequest.Item item : request.getItems()) {
+
+            ProductSnapshot product = productSnapshotRepository.findSnapshotById(item.getProductId());
+            if (product == null) {
+                throw new InvalidSaleV2Exception("Producto no encontrado: " + item.getProductId());
+            }
+
+            BigDecimal quantity = nz(item.getQuantity());
+            if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new InvalidSaleV2Exception("Cantidad inválida para productId=" + item.getProductId());
+            }
+
+            LineKind kind = item.getLineKind() != null ? item.getLineKind() : LineKind.VENDIDO;
+
+            // Obsequio: validaciones - Regla #7
+            if (kind == LineKind.OBSEQUIO) {
+                if (item.getGiftReason() == null || item.getGiftReason().trim().isEmpty()) {
+                    throw new InvalidSaleV2Exception("giftReason es obligatorio para obsequios (productId=" + item.getProductId() + ")");
+                }
+                if (Boolean.FALSE.equals(product.getGiftAllowed())) {
+                    throw new InvalidSaleV2Exception("El producto no permite obsequio: " + nzs(product.getSku()));
+                }
+            }
+
+            // Seriales/VIN - Regla #6
+            if (Boolean.TRUE.equals(product.getManageBySerial())) {
+                // Cantidad debe ser entera
+                int qtyInt;
+                try {
+                    qtyInt = quantity.intValueExact();
+                } catch (ArithmeticException ex) {
+                    throw new InvalidSaleV2Exception("Cantidad debe ser entera para productos con serie/VIN. productId=" + item.getProductId());
+                }
+
+                List<Long> serialIds = item.getSerialUnitIds();
+                if (serialIds == null || serialIds.size() != qtyInt) {
+                    throw new InvalidSaleV2Exception("Debe seleccionar exactamente " + qtyInt + " unidades (serialUnitIds) para productId=" + item.getProductId());
+                }
+
+                // Bloquear unidades y validar estado EN_ALMACEN
+                List<SerialUnit> units = productSerialUnitRepository.lockByIds(serialIds);
+
+                if (units.size() != serialIds.size()) {
+                    throw new InvalidSaleV2Exception("Alguna(s) unidades serializadas no existen o no están disponibles.");
+                }
+
+                for (SerialUnit u : units) {
+                    if (!Objects.equals(u.getProductId(), product.getId())) {
+                        throw new InvalidSaleV2Exception("Unidad serializada no pertenece al producto. serialUnitId=" + u.getId());
+                    }
+                    if (!"EN_ALMACEN".equalsIgnoreCase(nzs(u.getStatus()))) {
+                        throw new InvalidSaleV2Exception("Unidad serializada no disponible (status=" + u.getStatus() + "). serialUnitId=" + u.getId());
+                    }
+                }
+
+                // Si es serializado, típicamente afecta stock; si tu negocio define lo contrario, ajusta.
+                if (Boolean.FALSE.equals(product.getAffectsStock())) {
+                    throw new InvalidSaleV2Exception("Producto serializado debe afectar stock. productId=" + product.getId());
+                }
+
+            } else {
+                if (item.getSerialUnitIds() != null && !item.getSerialUnitIds().isEmpty()) {
+                    throw new InvalidSaleV2Exception("serialUnitIds solo aplica para productos con manage_by_serial=true. productId=" + item.getProductId());
+                }
+            }
+
+            // Precio por lista (snapshot) - Regla #3
+            BigDecimal unitPrice = product.priceFor(request.getPriceList());
+            if (unitPrice == null) unitPrice = BigDecimal.ZERO;
+
+            if (kind == LineKind.OBSEQUIO) {
+                unitPrice = BigDecimal.ZERO;
+            }
+
+            BigDecimal discountPercent = nz(item.getDiscountPercent());
+            if (discountPercent.compareTo(BigDecimal.ZERO) < 0) {
+                throw new InvalidSaleV2Exception("discountPercent no puede ser negativo. productId=" + item.getProductId());
+            }
+
+            BigDecimal gross = quantity.multiply(unitPrice);
+            BigDecimal discountAmount = gross.multiply(discountPercent)
+                    .divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
+
+            BigDecimal revenueTotal = (kind == LineKind.OBSEQUIO)
+                    ? BigDecimal.ZERO
+                    : gross.subtract(discountAmount);
+
+            // Regla visible_in_document (Regla #4)
+            boolean visibleInDocument = request.getDocType() == DocType.SIMPLE
+                    || Boolean.TRUE.equals(product.getFacturableSunat());
+
+            // Costo snapshot (Regla #8) si afecta stock
+            BigDecimal unitCostSnapshot = null;
+            BigDecimal totalCostSnapshot = null;
+            boolean affectsStock = Boolean.TRUE.equals(product.getAffectsStock());
+            if (affectsStock) {
+                unitCostSnapshot = (costPolicy == CostPolicy.PROMEDIO)
+                        ? nz(productStockRepository.getAverageCost(product.getId()))
+                        : nz(productStockRepository.getLastUnitCost(product.getId()));
+
+                totalCostSnapshot = unitCostSnapshot.multiply(quantity).setScale(4, RoundingMode.HALF_UP);
+            }
+
+            computedLines.add(ComputedLine.builder()
+                    .lineNumber(lineNumber++)
+                    .product(product)
+                    .quantity(quantity)
+                    .unitPrice(unitPrice.setScale(4, RoundingMode.HALF_UP))
+                    .discountPercent(discountPercent.setScale(4, RoundingMode.HALF_UP))
+                    .discountAmount(discountAmount.setScale(4, RoundingMode.HALF_UP))
+                    .lineKind(kind)
+                    .giftReason(item.getGiftReason())
+                    .visibleInDocument(visibleInDocument)
+                    .unitCostSnapshot(unitCostSnapshot)
+                    .totalCostSnapshot(totalCostSnapshot)
+                    .revenueTotal(revenueTotal.setScale(4, RoundingMode.HALF_UP))
+                    .serialUnitIds(item.getSerialUnitIds())
+                    .build());
+        }
+
+        // 3) Calcular totales cabecera (Regla #7/#8)
+        Totals totals = calculateTotals(request, computedLines);
+
+        // 4) Insertar sale + items
         Long saleId = saleV2Repository.insertSale(
                 request.getStationId(),
-                null, // sale_session_id se integra luego (sin romper la sesión actual)
+                request.getSaleSessionId(),
                 user.getId(),
-                docType,
-                locked.series(),
-                locked.number(),
-                defaultIfNull(request.getIssueDate(), LocalDate.now()),
-                defaultIfBlank(request.getCurrency(), "PEN"),
+                request.getDocType().name(),
+                request.getSeries(),
+                number,
+                issueDate,
+                nzs(request.getCurrency(), "PEN"),
                 request.getExchangeRate(),
-                request.getPriceList(),
+                request.getPriceList().name(),
                 request.getCustomerId(),
                 request.getCustomerDocType(),
                 request.getCustomerDocNumber(),
                 request.getCustomerName(),
                 request.getCustomerAddress(),
-                defaultIfNull(request.getTaxStatus(), TaxStatus.NO_GRAVADA),
-                null,
-                defaultIfNull(request.getIgvRate(), new BigDecimal("18.00")),
-                request.getPaymentType(),
-                null,
-                null,
+                request.getTaxStatus().name(),
+                request.getTaxReason(),
+                nz(request.getIgvRate(), new BigDecimal("18.00")),
+                request.getPaymentType().name(),
+                request.getCreditDays(),
+                request.getDueDate(),
                 request.getNotes()
         );
 
-        // 3) Items + totales
-        Totals totals = persistItemsAndComputeTotals(
-                saleId,
-                docType,
-                request.getPriceList(),
-                request.getTaxStatus(),
-                defaultIfNull(request.getIgvRate(), new BigDecimal("18.00")),
-                request.getItems()
-        );
+        for (ComputedLine line : computedLines) {
+            Long saleItemId = saleV2Repository.insertSaleItem(
+                    saleId,
+                    line.getLineNumber(),
+                    line.getProduct().getId(),
+                    nzs(line.getProduct().getSku()),
+                    nzs(line.getProduct().getName()),
+                    line.getProduct().getPresentation(),
+                    line.getProduct().getFactor(),
+                    line.getQuantity(),
+                    line.getUnitPrice(),
+                    line.getDiscountPercent(),
+                    line.getDiscountAmount(),
+                    line.getLineKind().name(),
+                    line.getGiftReason(),
+                    Boolean.TRUE.equals(line.getProduct().getFacturableSunat()),
+                    Boolean.TRUE.equals(line.getProduct().getAffectsStock()),
+                    line.getVisibleInDocument(),
+                    line.getUnitCostSnapshot(),
+                    line.getTotalCostSnapshot(),
+                    line.getRevenueTotal()
+            );
 
+            // 5) Stock + Kardex (Regla #5)
+            if (Boolean.TRUE.equals(line.getProduct().getAffectsStock())) {
+                productStockRepository.decreaseOnHandOrFail(line.getProduct().getId(), line.getQuantity());
+                productStockMovementRepository.createOutSale(line.getProduct().getId(), line.getQuantity(), saleItemId);
+            }
+
+            // 6) Seriales: asociar unidades a sale_item y marcar VENDIDO (Regla #6)
+            if (Boolean.TRUE.equals(line.getProduct().getManageBySerial())) {
+                for (Long serialUnitId : line.getSerialUnitIds()) {
+                    productSerialUnitRepository.markAsSold(serialUnitId, saleItemId);
+                }
+            }
+        }
+
+        // 7) Actualizar totales
         saleV2Repository.updateTotals(
                 saleId,
                 totals.subtotal,
                 totals.discountTotal,
                 totals.igvAmount,
                 totals.total,
-                BigDecimal.ZERO
+                totals.giftCostTotal
         );
 
-        // 4) Pago (Paso 1: solo contado)
+        // 8) Pago contado único (Regla #9)
         if (request.getPaymentType() == PaymentType.CONTADO) {
-            String method = request.getPayment() != null ? request.getPayment().getMethod() : null;
-            saleV2Repository.insertPayment(saleId, method, totals.total);
+            if (request.getPayment() == null || request.getPayment().getMethod() == null) {
+                throw new InvalidSaleV2Exception("payment.method es obligatorio en CONTADO.");
+            }
+            salePaymentRepository.insert(saleId, request.getPayment().getMethod().name(), totals.total);
         } else {
-            throw new InvalidSaleV2Exception("Paso 1: solo se admite CONTADO. CREDITO se habilita en el siguiente entregable.");
+            // CREDITO se implementa en entregable posterior
+            throw new InvalidSaleV2Exception("CREDITO aún no implementado en v2. (Siguiente entregable)");
         }
 
-        // 5) Actualizar sesión (misma lógica que tu implementación anterior)
-        saleV2Repository.addIncomeToOpenSession(user.getId(), totals.total, totals.discountTotal);
+        // 9) Acumular en sesión (mantener sesión sin refactor)
+        if (request.getSaleSessionId() != null) {
+            saleSessionAccumulatorRepository.addSaleIncomeAndDiscount(request.getSaleSessionId(), totals.total, totals.discountTotal);
+        }
 
-        // 6) Confirmar correlativo
-        documentSeriesRepository.incrementNextNumber(locked.id());
+        // 10) Incrementar correlativo (Regla #2)
+        documentSeriesRepository.incrementNextNumber(locked.getId());
 
         return SaleV2DocumentResponse.builder()
                 .saleId(saleId)
-                .docType(docType)
-                .series(locked.series())
-                .number(locked.number())
-                .currency(defaultIfBlank(request.getCurrency(), "PEN"))
+                .docType(request.getDocType())
+                .series(request.getSeries())
+                .number(number)
+                .issueDate(issueDate)
+                .subtotal(totals.subtotal)
+                .discountTotal(totals.discountTotal)
+                .igvAmount(totals.igvAmount)
                 .total(totals.total)
+                .giftCostTotal(totals.giftCostTotal)
                 .build();
     }
 
-    private Totals persistItemsAndComputeTotals(
-            Long saleId,
-            DocType docType,
-            PriceList priceList,
-            TaxStatus taxStatus,
-            BigDecimal igvRate,
-            List<SaleV2CreateRequest.Item> items
-    ) {
-        if (items == null || items.isEmpty()) {
-            throw new InvalidSaleV2Exception("La venta debe tener al menos 1 ítem.");
+    private void validateRequest(SaleV2CreateRequest request) {
+        if (request == null) throw new InvalidSaleV2Exception("Request vacío.");
+        if (request.getStationId() == null) throw new InvalidSaleV2Exception("stationId es obligatorio.");
+        if (request.getDocType() == null) throw new InvalidSaleV2Exception("docType es obligatorio.");
+        if (request.getSeries() == null || request.getSeries().trim().isEmpty()) throw new InvalidSaleV2Exception("series es obligatorio.");
+        if (request.getPriceList() == null) throw new InvalidSaleV2Exception("priceList es obligatorio.");
+        if (request.getTaxStatus() == null) request.setTaxStatus(TaxStatus.NO_GRAVADA);
+        if (request.getPaymentType() == null) throw new InvalidSaleV2Exception("paymentType es obligatorio.");
+        if (request.getItems() == null || request.getItems().isEmpty()) throw new InvalidSaleV2Exception("Debe enviar items.");
+    }
+
+    private Totals calculateTotals(SaleV2CreateRequest request, List<ComputedLine> lines) {
+        BigDecimal subtotal = BigDecimal.ZERO;
+        BigDecimal discountTotal = BigDecimal.ZERO;
+        BigDecimal giftCostTotal = BigDecimal.ZERO;
+
+        for (ComputedLine l : lines) {
+            subtotal = subtotal.add(l.getRevenueTotal());
+            discountTotal = discountTotal.add(l.getDiscountAmount());
+
+            if (l.getLineKind() == LineKind.OBSEQUIO && l.getTotalCostSnapshot() != null) {
+                giftCostTotal = giftCostTotal.add(l.getTotalCostSnapshot());
+            }
         }
 
-        BigDecimal subtotal = BigDecimal.ZERO;       // suma de (qty * unit_price) para VENDIDO/OBSEQUIO (obsequio será 0)
-        BigDecimal discountTotal = BigDecimal.ZERO;  // suma descuentos
-        BigDecimal giftCostTotal = BigDecimal.ZERO;  // suma costos de obsequios (solo ítems que afectan stock)
-
-        int lineNumber = 1;
-        for (SaleV2CreateRequest.Item item : items) {
-            if (item.getProductId() == null) {
-                throw new InvalidSaleV2Exception("Cada ítem debe tener productId.");
-            }
-
-            ProductSnapshot product = productSnapshotRepository.findSnapshotById(item.getProductId())
-                    .orElseThrow(() -> new InvalidSaleV2Exception("Producto no encontrado: " + item.getProductId()));
-
-            BigDecimal qty = normalizeQty(item.getQuantity());
-
-            LineKind kind = defaultIfNull(item.getLineKind(), LineKind.VENDIDO);
-
-            // Precio snapshot por lista A/B/C/D (Regla #3)
-            BigDecimal unitPrice;
-            if (kind == LineKind.OBSEQUIO) {
-                if (!product.isGiftAllowed()) {
-                    throw new InvalidSaleV2Exception("Producto no permite obsequio (gift_allowed=false): " + product.getSku());
-                }
-                if (item.getGiftReason() == null || item.getGiftReason().isBlank()) {
-                    throw new InvalidSaleV2Exception("giftReason es obligatorio para ítems OBSEQUIO.");
-                }
-                unitPrice = BigDecimal.ZERO;
-            } else {
-                unitPrice = resolveUnitPrice(product, priceList);
-            }
-
-            BigDecimal gross = scale(qty.multiply(unitPrice));
-
-            BigDecimal discountPercent = defaultIfNull(item.getDiscountPercent(), BigDecimal.ZERO);
-            if (discountPercent.compareTo(BigDecimal.ZERO) < 0) {
-                throw new InvalidSaleV2Exception("discountPercent no puede ser negativo.");
-            }
-
-            BigDecimal discountAmount = scale(gross.multiply(discountPercent).divide(new BigDecimal("100"), 6, RoundingMode.HALF_UP));
-            if (discountAmount.compareTo(gross) > 0) {
-                discountAmount = gross;
-            }
-
-            // Regla de visible_in_document (Regla #4)
-            boolean visibleInDocument = switch (docType) {
-                case BOLETA, FACTURA -> product.isFacturableSunat();
-                case SIMPLE -> true;
-            };
-
-            // Costo snapshot + stock/kardex (Reglas #5 y #8)
-            boolean affectsStock = product.isAffectsStock();
-            BigDecimal unitCostSnapshot = null;
-            BigDecimal totalCostSnapshot = null;
-
-            if (affectsStock) {
-                unitCostSnapshot = productCostRepository.getUnitCost(product.getId(), costPolicy).setScale(6, RoundingMode.HALF_UP);
-                totalCostSnapshot = scale(unitCostSnapshot.multiply(qty));
-            }
-
-            BigDecimal revenueTotal = (kind == LineKind.OBSEQUIO)
-                    ? BigDecimal.ZERO
-                    : scale(gross.subtract(discountAmount));
-
-            Long saleItemId = saleV2Repository.insertSaleItem(
-                    saleId,
-                    lineNumber++,
-                    product.getId(),
-                    product.getSku(),
-                    product.getName(),
-                    product.getPresentation(),
-                    product.getFactor(),
-                    qty,
-                    unitPrice,
-                    discountPercent,
-                    discountAmount,
-                    kind.name(),
-                    item.getGiftReason(),
-                    product.isFacturableSunat(),
-                    product.isAffectsStock(),
-                    visibleInDocument,
-                    unitCostSnapshot,
-                    totalCostSnapshot,
-                    revenueTotal
-            );
-
-            // PROFORMA nunca llega aquí (este use case es solo ventas),
-            // pero reforzamos que SOLO SIMPLE/BOLETA/FACTURA generan stock/kardex.
-            if (docType != DocType.SIMPLE && docType != DocType.BOLETA && docType != DocType.FACTURA) {
-                throw new InvalidSaleV2Exception("docType inválido para ventas: " + docType);
-            }
-
-            if (affectsStock) {
-                // 1) Validar + descontar stock (seguro por UPDATE ... WHERE on_hand>=qty)
-                productStockRepository.decreaseOnHand(product.getId(), qty);
-
-                // 2) Kardex OUT_SALE
-                productStockMovementRepository.createOutSaleMovement(product.getId(), qty, saleItemId);
-
-                // 3) Acumulador costo obsequios
-                if (kind == LineKind.OBSEQUIO && totalCostSnapshot != null) {
-                    giftCostTotal = giftCostTotal.add(totalCostSnapshot);
-                }
-            }
-
-            subtotal = subtotal.add(gross);
-            discountTotal = discountTotal.add(discountAmount);
-        }
-
-        subtotal = scale(subtotal);
-        discountTotal = scale(discountTotal);
-
-        BigDecimal base = subtotal.subtract(discountTotal);
-        if (base.compareTo(BigDecimal.ZERO) < 0) {
-            base = BigDecimal.ZERO;
-        }
+        subtotal = subtotal.setScale(4, RoundingMode.HALF_UP);
+        discountTotal = discountTotal.setScale(4, RoundingMode.HALF_UP);
+        giftCostTotal = giftCostTotal.setScale(4, RoundingMode.HALF_UP);
 
         BigDecimal igvAmount = BigDecimal.ZERO;
-        if (taxStatus == TaxStatus.GRAVADA) {
-            igvAmount = scale(base.multiply(igvRate).divide(new BigDecimal("100"), 6, RoundingMode.HALF_UP));
+        if (request.getTaxStatus() == TaxStatus.GRAVADA) {
+            BigDecimal igvRate = nz(request.getIgvRate(), new BigDecimal("18.00"));
+            igvAmount = subtotal.multiply(igvRate).divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
         }
 
-        BigDecimal total = scale(base.add(igvAmount));
-        giftCostTotal = scale(giftCostTotal);
+        BigDecimal total = subtotal.add(igvAmount).setScale(4, RoundingMode.HALF_UP);
 
         return new Totals(subtotal, discountTotal, igvAmount, total, giftCostTotal);
     }
 
-
-    private void validateRequest(SaleV2CreateRequest request) {
-        if (request.getStationId() == null) {
-            throw new InvalidSaleV2Exception("stationId es obligatorio");
-        }
-        if (request.getDocType() == null) {
-            throw new InvalidSaleV2Exception("docType es obligatorio");
-        }
-        if (request.getSeries() == null || request.getSeries().isBlank()) {
-            throw new InvalidSaleV2Exception("series es obligatorio");
-        }
-        if (request.getPriceList() == null) {
-            throw new InvalidSaleV2Exception("priceList es obligatorio (A/B/C/D)");
-        }
-        if (request.getPaymentType() == null) {
-            throw new InvalidSaleV2Exception("paymentType es obligatorio (CONTADO/CREDITO)");
-        }
-        if (request.getDocType() == DocType.FACTURA) {
-            if (request.getCustomerDocType() == null || !"RUC".equalsIgnoreCase(request.getCustomerDocType())) {
-                throw new InvalidSaleV2Exception("FACTURA exige cliente con RUC");
-            }
-            if (request.getCustomerDocNumber() == null || request.getCustomerDocNumber().isBlank()) {
-                throw new InvalidSaleV2Exception("FACTURA exige customerDocNumber (RUC)");
-            }
-        }
+    private static BigDecimal nz(BigDecimal v) {
+        return v == null ? BigDecimal.ZERO : v;
     }
 
-    private static BigDecimal getPriceByList(ProductSnapshot p, PriceList list) {
-        return switch (list) {
-            case A -> defaultIfNull(p.getPriceA(), BigDecimal.ZERO);
-            case B -> defaultIfNull(p.getPriceB(), BigDecimal.ZERO);
-            case C -> defaultIfNull(p.getPriceC(), BigDecimal.ZERO);
-            case D -> defaultIfNull(p.getPriceD(), BigDecimal.ZERO);
-        };
+    private static BigDecimal nz(BigDecimal v, BigDecimal def) {
+        return v == null ? def : v;
     }
 
-    private static BigDecimal normalizeQty(BigDecimal qty) {
-        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new InvalidSaleV2Exception("quantity debe ser > 0");
+    private static String nzs(String v) {
+        return v == null ? "" : v;
+    }
+
+    private static String nzs(String v, String def) {
+        return (v == null || v.trim().isEmpty()) ? def : v;
+    }
+
+    @lombok.Builder
+    @lombok.Getter
+    private static class ComputedLine {
+        private Integer lineNumber;
+        private ProductSnapshot product;
+        private BigDecimal quantity;
+        private BigDecimal unitPrice;
+        private BigDecimal discountPercent;
+        private BigDecimal discountAmount;
+        private LineKind lineKind;
+        private String giftReason;
+        private Boolean visibleInDocument;
+        private BigDecimal unitCostSnapshot;
+        private BigDecimal totalCostSnapshot;
+        private BigDecimal revenueTotal;
+        private List<Long> serialUnitIds;
+    }
+
+    private static class Totals {
+        private final BigDecimal subtotal;
+        private final BigDecimal discountTotal;
+        private final BigDecimal igvAmount;
+        private final BigDecimal total;
+        private final BigDecimal giftCostTotal;
+
+        private Totals(BigDecimal subtotal, BigDecimal discountTotal, BigDecimal igvAmount, BigDecimal total, BigDecimal giftCostTotal) {
+            this.subtotal = subtotal;
+            this.discountTotal = discountTotal;
+            this.igvAmount = igvAmount;
+            this.total = total;
+            this.giftCostTotal = giftCostTotal;
         }
-        return qty.setScale(3, RoundingMode.HALF_UP);
     }
-
-    private static BigDecimal scale(BigDecimal value) {
-        return value.setScale(4, RoundingMode.HALF_UP);
-    }
-
-    private static String defaultIfBlank(String val, String def) {
-        return (val == null || val.isBlank()) ? def : val;
-    }
-
-    private static <T> T defaultIfNull(T val, T def) {
-        return val == null ? def : val;
-    }
-
-    private record Totals(BigDecimal subtotal, BigDecimal discountTotal, BigDecimal igvAmount, BigDecimal total, BigDecimal giftCostTotal) {}
 }

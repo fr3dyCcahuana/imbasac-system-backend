@@ -14,27 +14,21 @@ public class PostgresProductStockMovementRepository implements ProductStockMovem
     private final JdbcClient jdbcClient;
 
     @Override
-    public void createOutSaleMovement(Long productId, BigDecimal quantityOut, Long saleItemId) {
+    public void createOutSale(Long productId, BigDecimal quantityOut, Long saleItemId) {
+        // Ajusta columnas si tu kardex tiene nombres distintos.
         String sql = """
             INSERT INTO product_stock_movement(
-                product_id,
-                movement_type,
-                source_table,
-                source_id,
-                quantity_out,
-                created_at
-            )
-            VALUES (?,?,?,?,?, NOW())
-            """;
+              product_id,
+              movement_type,
+              source_table,
+              source_id,
+              quantity_out,
+              created_at
+            ) VALUES (?, 'OUT_SALE', 'sale_item', ?, ?, NOW())
+        """;
 
         jdbcClient.sql(sql)
-                .params(
-                        productId,
-                        "OUT_SALE",
-                        "sale_item",
-                        saleItemId,
-                        quantityOut
-                )
+                .params(productId, saleItemId, quantityOut)
                 .update();
     }
 }

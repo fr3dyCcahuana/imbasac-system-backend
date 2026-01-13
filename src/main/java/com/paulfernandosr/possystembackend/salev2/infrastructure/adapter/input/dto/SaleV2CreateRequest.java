@@ -15,18 +15,16 @@ import java.util.List;
 public class SaleV2CreateRequest {
 
     private Long stationId;
-    private DocType docType;
-    private String series;
-    private PriceList priceList;
+    private Long saleSessionId;
 
+    private DocType docType;          // SIMPLE/BOLETA/FACTURA
+    private String series;            // e.g. B001
     private LocalDate issueDate;
-    private String currency;
+
+    private String currency;          // PEN
     private BigDecimal exchangeRate;
 
-    private TaxStatus taxStatus;
-    private BigDecimal igvRate;
-
-    private PaymentType paymentType;
+    private PriceList priceList;      // A/B/C/D
 
     private Long customerId;
     private String customerDocType;
@@ -34,10 +32,17 @@ public class SaleV2CreateRequest {
     private String customerName;
     private String customerAddress;
 
+    private TaxStatus taxStatus;      // GRAVADA/NO_GRAVADA
+    private String taxReason;
+    private BigDecimal igvRate;       // 18.00
+
+    private PaymentType paymentType;  // CONTADO/CREDITO
+    private Integer creditDays;
+    private LocalDate dueDate;
+
     private String notes;
 
     private List<Item> items;
-
     private Payment payment;
 
     @Getter
@@ -49,8 +54,11 @@ public class SaleV2CreateRequest {
         private Long productId;
         private BigDecimal quantity;
         private BigDecimal discountPercent;
-        private LineKind lineKind;
+        private LineKind lineKind;        // VENDIDO/OBSEQUIO
         private String giftReason;
+
+        // Para productos manage_by_serial=true:
+        private List<Long> serialUnitIds;
     }
 
     @Getter
@@ -59,6 +67,6 @@ public class SaleV2CreateRequest {
     @AllArgsConstructor
     @Builder
     public static class Payment {
-        private String method; // EFECTIVO/YAPE/TRANSFERENCIA/OTRO
+        private PaymentMethod method; // EFECTIVO/YAPE/TRANSFERENCIA/OTRO
     }
 }

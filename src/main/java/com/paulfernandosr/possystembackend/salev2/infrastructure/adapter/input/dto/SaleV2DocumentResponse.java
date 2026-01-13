@@ -4,6 +4,7 @@ import com.paulfernandosr.possystembackend.salev2.domain.model.DocType;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Getter
 @Setter
@@ -15,6 +16,11 @@ public class SaleV2DocumentResponse {
     private DocType docType;
     private String series;
     private Long number;
-    private String currency;
+    private LocalDate issueDate;
+
+    private BigDecimal subtotal;
+    private BigDecimal discountTotal;
+    private BigDecimal igvAmount;
     private BigDecimal total;
+    private BigDecimal giftCostTotal;
 }
