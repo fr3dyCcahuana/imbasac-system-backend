@@ -6,7 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
-@Repository
+@Repository("saleV2PostgresProductSnapshotRepository")
 @RequiredArgsConstructor
 public class PostgresProductSnapshotRepository implements ProductSnapshotRepository {
 

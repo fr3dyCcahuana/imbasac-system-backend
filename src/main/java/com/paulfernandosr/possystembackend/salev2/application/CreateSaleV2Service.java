@@ -36,6 +36,10 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
 
     private final SaleSessionAccumulatorRepository saleSessionAccumulatorRepository;
 
+    // Crédito / CxC
+    private final AccountsReceivableRepository accountsReceivableRepository;
+    private final CustomerAccountRepository customerAccountRepository;
+
     // Política de costo snapshot (Regla #8)
     private final CostPolicy costPolicy = CostPolicy.PROMEDIO;
 
@@ -190,6 +194,62 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         // 3) Calcular totales cabecera (Regla #7/#8)
         Totals totals = calculateTotals(request, computedLines);
 
+        // 3.1) Validaciones por documento (Regla #11)
+        validateDocumentRules(request, totals);
+
+        // 3.2) Preparar crédito (Regla #10)
+        Integer creditDays = request.getCreditDays();
+        LocalDate dueDate = request.getDueDate();
+
+        if (request.getPaymentType() == PaymentType.CREDITO) {
+            if (request.getCustomerId() == null) {
+                throw new InvalidSaleV2Exception("customerId es obligatorio en CREDITO.");
+            }
+
+            if (dueDate == null) {
+                if (creditDays == null || creditDays <= 0) {
+                    throw new InvalidSaleV2Exception("creditDays debe ser > 0 cuando dueDate no se envía.");
+                }
+                dueDate = issueDate.plusDays(creditDays);
+            } else {
+                if (creditDays == null) {
+                    creditDays = (int) java.time.temporal.ChronoUnit.DAYS.between(issueDate, dueDate);
+                } else {
+                    LocalDate expected = issueDate.plusDays(creditDays);
+                    if (!expected.equals(dueDate)) {
+                        throw new InvalidSaleV2Exception("dueDate no coincide con issueDate + creditDays.");
+                    }
+                }
+            }
+
+            // Validar elegibilidad de crédito contra customer_account (Regla #10)
+            customerAccountRepository.ensureExists(request.getCustomerId());
+            accountsReceivableRepository.markOverdueForCustomer(request.getCustomerId());
+            customerAccountRepository.recalculate(request.getCustomerId());
+
+            var account = customerAccountRepository.findByCustomerId(request.getCustomerId());
+            if (account == null) {
+                throw new InvalidSaleV2Exception("No se pudo obtener customer_account para customerId=" + request.getCustomerId());
+            }
+            if (!account.isCreditEnabled()) {
+                throw new InvalidSaleV2Exception("Cliente bloqueado para crédito (credit_enabled=false).");
+            }
+            if (nz(account.getOverdueDebt()).compareTo(BigDecimal.ZERO) > 0) {
+                throw new InvalidSaleV2Exception("Cliente con deuda vencida. No se permite crédito.");
+            }
+            if (nz(account.getCreditLimit()).compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal projected = nz(account.getCurrentDebt()).add(totals.total);
+                if (projected.compareTo(account.getCreditLimit()) > 0) {
+                    throw new InvalidSaleV2Exception("Límite de crédito excedido. Límite=" + account.getCreditLimit() + ", deudaActual=" + account.getCurrentDebt() + ", venta=" + totals.total);
+                }
+            }
+
+        } else {
+            // CONTADO: no debería registrar campos de crédito
+            creditDays = null;
+            dueDate = null;
+        }
+
         // 4) Insertar sale + items
         Long saleId = saleV2Repository.insertSale(
                 request.getStationId(),
@@ -211,8 +271,8 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                 request.getTaxReason(),
                 nz(request.getIgvRate(), new BigDecimal("18.00")),
                 request.getPaymentType().name(),
-                request.getCreditDays(),
-                request.getDueDate(),
+                creditDays,
+                dueDate,
                 request.getNotes()
         );
 
@@ -263,15 +323,30 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                 totals.giftCostTotal
         );
 
-        // 8) Pago contado único (Regla #9)
+        // 8) Pago / CxC (Regla #9 y #10)
+        Long arId = null;
         if (request.getPaymentType() == PaymentType.CONTADO) {
             if (request.getPayment() == null || request.getPayment().getMethod() == null) {
                 throw new InvalidSaleV2Exception("payment.method es obligatorio en CONTADO.");
             }
             salePaymentRepository.insert(saleId, request.getPayment().getMethod().name(), totals.total);
         } else {
-            // CREDITO se implementa en entregable posterior
-            throw new InvalidSaleV2Exception("CREDITO aún no implementado en v2. (Siguiente entregable)");
+            // CREDITO: crear CxC y actualizar customer_account
+            LocalDate finalDueDate = dueDate;
+            String arStatus = (finalDueDate != null && finalDueDate.isBefore(LocalDate.now())) ? "VENCIDO" : "PENDIENTE";
+            arId = accountsReceivableRepository.insert(
+                    saleId,
+                    request.getCustomerId(),
+                    issueDate,
+                    finalDueDate,
+                    totals.total,
+                    BigDecimal.ZERO,
+                    totals.total,
+                    arStatus
+            );
+            customerAccountRepository.touchLastSaleAt(request.getCustomerId());
+            accountsReceivableRepository.markOverdueForCustomer(request.getCustomerId());
+            customerAccountRepository.recalculate(request.getCustomerId());
         }
 
         // 9) Acumular en sesión (mantener sesión sin refactor)
@@ -293,7 +368,30 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                 .igvAmount(totals.igvAmount)
                 .total(totals.total)
                 .giftCostTotal(totals.giftCostTotal)
+                .paymentType(request.getPaymentType())
+                .dueDate(dueDate)
+                .accountsReceivableId(arId)
                 .build();
+    }
+
+    private void validateDocumentRules(SaleV2CreateRequest request, Totals totals) {
+        // FACTURA: exige RUC
+        if (request.getDocType() == DocType.FACTURA) {
+            if (request.getCustomerDocType() == null || !"RUC".equalsIgnoreCase(request.getCustomerDocType())) {
+                throw new InvalidSaleV2Exception("FACTURA requiere customerDocType=RUC.");
+            }
+            if (request.getCustomerDocNumber() == null || request.getCustomerDocNumber().trim().isEmpty()) {
+                throw new InvalidSaleV2Exception("FACTURA requiere customerDocNumber (RUC).");
+            }
+        }
+
+        // Regla interna por monto: total >= 700 exige documento de identidad
+        if (totals != null && totals.total != null && totals.total.compareTo(new BigDecimal("700")) >= 0) {
+            if (request.getCustomerDocType() == null || request.getCustomerDocType().trim().isEmpty()
+                    || request.getCustomerDocNumber() == null || request.getCustomerDocNumber().trim().isEmpty()) {
+                throw new InvalidSaleV2Exception("Ventas >= 700 requieren documento (customerDocType y customerDocNumber)." );
+            }
+        }
     }
 
     private void validateRequest(SaleV2CreateRequest request) {

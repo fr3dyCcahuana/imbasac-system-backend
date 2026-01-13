@@ -19,15 +19,18 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
     public List<SerialUnit> lockByIds(List<Long> serialUnitIds) {
         if (serialUnitIds == null || serialUnitIds.isEmpty()) return List.of();
 
-        String placeholders = serialUnitIds.stream().map(id -> "?").collect(Collectors.joining(","));
-        String sql = """
-            SELECT id,
-                   product_id AS productId,
-                   status
-              FROM product_serial_unit
-             WHERE id IN (""" + placeholders + """)
-             FOR UPDATE
-        """;
+        String placeholders = serialUnitIds.stream()
+                .map(id -> "?")
+                .collect(Collectors.joining(","));
+
+        String sql = String.format("""
+        SELECT id,
+               product_id AS productId,
+               status
+          FROM product_serial_unit
+         WHERE id IN (%s)
+         FOR UPDATE
+        """, placeholders);
 
         return jdbcClient.sql(sql)
                 .params(serialUnitIds.toArray())

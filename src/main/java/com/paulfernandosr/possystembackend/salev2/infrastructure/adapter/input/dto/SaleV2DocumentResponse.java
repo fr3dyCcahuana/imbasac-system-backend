@@ -6,6 +6,8 @@ import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
+import com.paulfernandosr.possystembackend.salev2.domain.model.PaymentType;
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -23,4 +25,9 @@ public class SaleV2DocumentResponse {
     private BigDecimal igvAmount;
     private BigDecimal total;
     private BigDecimal giftCostTotal;
+
+    // Crédito (si aplica)
+    private PaymentType paymentType;
+    private LocalDate dueDate;
+    private Long accountsReceivableId;
 }
