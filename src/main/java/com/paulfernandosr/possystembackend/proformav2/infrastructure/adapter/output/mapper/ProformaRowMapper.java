@@ -5,12 +5,16 @@ import com.paulfernandosr.possystembackend.proformav2.domain.model.ProformaStatu
 import org.springframework.jdbc.core.RowMapper;
 
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.util.HashSet;
+import java.util.Set;
 
 public class ProformaRowMapper implements RowMapper<Proforma> {
+
     @Override
     public Proforma mapRow(ResultSet rs, int rowNum) throws SQLException {
-        return Proforma.builder()
+        Proforma.ProformaBuilder builder = Proforma.builder()
                 .id(rs.getLong("id"))
                 .stationId(rs.getLong("station_id"))
                 .createdBy(rs.getLong("created_by"))
@@ -30,7 +34,29 @@ public class ProformaRowMapper implements RowMapper<Proforma> {
                 .total(rs.getBigDecimal("total"))
                 .status(ProformaStatus.valueOf(rs.getString("status")))
                 .createdAt(rs.getTimestamp("created_at").toLocalDateTime())
-                .updatedAt(rs.getTimestamp("updated_at").toLocalDateTime())
-                .build();
+                .updatedAt(rs.getTimestamp("updated_at").toLocalDateTime());
+
+        // ✅ columnas opcionales (cuando viene con JOIN users)
+        Set<String> cols = columns(rs);
+        if (cols.contains("cashier_username")) {
+            builder.cashierUsername(rs.getString("cashier_username"));
+        }
+        if (cols.contains("cashier_first_name")) {
+            builder.cashierFirstName(rs.getString("cashier_first_name"));
+        }
+        if (cols.contains("cashier_last_name")) {
+            builder.cashierLastName(rs.getString("cashier_last_name"));
+        }
+
+        return builder.build();
+    }
+
+    private static Set<String> columns(ResultSet rs) throws SQLException {
+        ResultSetMetaData md = rs.getMetaData();
+        Set<String> set = new HashSet<>();
+        for (int i = 1; i <= md.getColumnCount(); i++) {
+            set.add(md.getColumnLabel(i)); // usa alias (AS ...)
+        }
+        return set;
     }
 }

@@ -38,7 +38,9 @@ public class Proforma {
     private BigDecimal total;
 
     private ProformaStatus status;
-
+    private String cashierUsername;
+    private String cashierFirstName;
+    private String cashierLastName;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

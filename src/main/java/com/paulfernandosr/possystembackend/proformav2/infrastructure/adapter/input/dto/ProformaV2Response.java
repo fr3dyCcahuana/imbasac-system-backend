@@ -14,7 +14,9 @@ public class ProformaV2Response {
     private Long id;
     private Long stationId;
     private Long createdBy;
-
+    private String createdByUsername;
+    private String createdByFirstName;
+    private String createdByLastName;
     private String series;
     private Long number;
     private String issueDate;
