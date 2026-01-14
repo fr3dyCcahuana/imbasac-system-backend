@@ -3,9 +3,14 @@ package com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input;
 import com.paulfernandosr.possystembackend.common.infrastructure.response.SuccessResponse;
 import com.paulfernandosr.possystembackend.salev2.domain.model.VoidSaleV2Response;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.CreateSaleV2UseCase;
+import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetSaleV2UseCase;
+import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetSalesV2PageUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.VoidSaleV2UseCase;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.PageResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2CreateRequest;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2DetailResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2DocumentResponse;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2SummaryResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.VoidSaleV2Request;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -15,12 +20,14 @@ import java.net.URI;
 import java.security.Principal;
 
 @RestController
-@RequiredArgsConstructor
 @RequestMapping("/sales/v2")
+@RequiredArgsConstructor
 public class SaleV2RestController {
 
     private final CreateSaleV2UseCase createSaleV2UseCase;
     private final VoidSaleV2UseCase voidSaleV2UseCase;
+    private final GetSalesV2PageUseCase getSalesV2PageUseCase;
+    private final GetSaleV2UseCase getSaleV2UseCase;
 
     @PostMapping
     public ResponseEntity<SuccessResponse<SaleV2DocumentResponse>> create(@RequestBody SaleV2CreateRequest request,
@@ -41,5 +48,23 @@ public class SaleV2RestController {
         String reason = request == null ? null : request.getReason();
         VoidSaleV2Response response = voidSaleV2UseCase.voidSale(saleId, reason);
         return ResponseEntity.ok(SuccessResponse.ok(response));
+    }
+
+    // Entregable 7: listado paginado
+    @GetMapping
+    public ResponseEntity<SuccessResponse<PageResponse<SaleV2SummaryResponse>>> findPage(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String query
+    ) {
+        return ResponseEntity.ok(SuccessResponse.ok(
+                getSalesV2PageUseCase.findPage(query, page, size)
+        ));
+    }
+
+    // Entregable 7: detalle
+    @GetMapping("/{id}")
+    public ResponseEntity<SuccessResponse<SaleV2DetailResponse>> getById(@PathVariable("id") Long saleId) {
+        return ResponseEntity.ok(SuccessResponse.ok(getSaleV2UseCase.getById(saleId)));
     }
 }
