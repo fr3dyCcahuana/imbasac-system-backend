@@ -61,4 +61,20 @@ public class PostgresProductStockRepository implements ProductStockRepository {
             throw new InvalidSaleV2Exception("Stock insuficiente para productId=" + productId);
         }
     }
+
+    @Override
+    public void increaseOnHand(Long productId, BigDecimal quantity) {
+        // UPSERT para cubrir el caso en que aún no exista fila en product_stock.
+        String sql = """
+            INSERT INTO product_stock(product_id, quantity_on_hand, last_movement_at)
+            VALUES (?, ?, NOW())
+            ON CONFLICT (product_id)
+            DO UPDATE SET quantity_on_hand = product_stock.quantity_on_hand + EXCLUDED.quantity_on_hand,
+                          last_movement_at = NOW()
+        """;
+
+        jdbcClient.sql(sql)
+                .params(productId, quantity)
+                .update();
+    }
 }

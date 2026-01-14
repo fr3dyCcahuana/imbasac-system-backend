@@ -20,4 +20,12 @@ public class PostgresSalePaymentRepository implements SalePaymentRepository {
                 .params(saleId, method, amount)
                 .update();
     }
+
+    @Override
+    public void deleteBySaleId(Long saleId) {
+        String sql = "DELETE FROM sale_payment WHERE sale_id = ?";
+        jdbcClient.sql(sql)
+                .param(saleId)
+                .update();
+    }
 }

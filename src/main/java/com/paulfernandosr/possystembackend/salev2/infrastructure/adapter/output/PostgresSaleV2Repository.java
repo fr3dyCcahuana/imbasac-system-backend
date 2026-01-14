@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Repository
 @RequiredArgsConstructor
@@ -123,6 +124,87 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
 
         jdbcClient.sql(sql)
                 .params(subtotal, discountTotal, igvAmount, total, giftCostTotal, saleId)
+                .update();
+    }
+
+    @Override
+    public LockedSale lockById(Long saleId) {
+        String sql = """
+            SELECT
+              id,
+              sale_session_id,
+              customer_id,
+              doc_type,
+              status,
+              payment_type,
+              total,
+              discount_total
+            FROM sale
+            WHERE id = ?
+            FOR UPDATE
+        """;
+
+        return jdbcClient.sql(sql)
+                .param(saleId)
+                .query((rs, rowNum) -> LockedSale.builder()
+                        .id(rs.getLong("id"))
+                        .saleSessionId((Long) rs.getObject("sale_session_id"))
+                        .customerId((Long) rs.getObject("customer_id"))
+                        .docType(rs.getString("doc_type"))
+                        .status(rs.getString("status"))
+                        .paymentType(rs.getString("payment_type"))
+                        .total(rs.getBigDecimal("total"))
+                        .discountTotal(rs.getBigDecimal("discount_total"))
+                        .build())
+                .optional()
+                .orElse(null);
+    }
+
+    @Override
+    public List<SaleItemForVoid> findItemsBySaleId(Long saleId) {
+        String sql = """
+            SELECT
+              id,
+              product_id,
+              quantity,
+              affects_stock,
+              unit_cost_snapshot,
+              total_cost_snapshot
+            FROM sale_item
+            WHERE sale_id = ?
+            ORDER BY line_number
+        """;
+
+        return jdbcClient.sql(sql)
+                .param(saleId)
+                .query((rs, rowNum) -> SaleItemForVoid.builder()
+                        .id(rs.getLong("id"))
+                        .productId(rs.getLong("product_id"))
+                        .quantity(rs.getBigDecimal("quantity"))
+                        .affectsStock(rs.getBoolean("affects_stock"))
+                        .unitCostSnapshot(rs.getBigDecimal("unit_cost_snapshot"))
+                        .totalCostSnapshot(rs.getBigDecimal("total_cost_snapshot"))
+                        .build())
+                .list();
+    }
+
+    @Override
+    public void markAsVoided(Long saleId, String voidNote) {
+        // No existe columna void_reason; se deja trazabilidad en notes.
+        String sql = """
+            UPDATE sale
+               SET status = 'ANULADA',
+                   notes = CASE
+                             WHEN ? IS NULL OR ? = '' THEN notes
+                             WHEN notes IS NULL OR notes = '' THEN ?
+                             ELSE notes || E'\n' || ?
+                           END,
+                   updated_at = NOW()
+             WHERE id = ?
+        """;
+
+        jdbcClient.sql(sql)
+                .params(voidNote, voidNote, voidNote, voidNote, saleId)
                 .update();
     }
 }

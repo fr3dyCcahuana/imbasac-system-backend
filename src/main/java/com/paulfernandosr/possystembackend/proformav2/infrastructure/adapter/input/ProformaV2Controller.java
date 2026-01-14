@@ -3,10 +3,13 @@ package com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.in
 import com.paulfernandosr.possystembackend.proformav2.domain.port.input.CreateProformaV2UseCase;
 import com.paulfernandosr.possystembackend.proformav2.domain.port.input.ConvertProformaToSaleV2UseCase;
 import com.paulfernandosr.possystembackend.proformav2.domain.port.input.GetProformaV2UseCase;
+import com.paulfernandosr.possystembackend.proformav2.domain.port.input.VoidProformaV2UseCase;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.CreateProformaV2Request;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ConvertProformaV2Request;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ConvertProformaV2Response;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaV2Response;
+import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.VoidProformaV2Request;
+import com.paulfernandosr.possystembackend.proformav2.domain.model.VoidProformaV2Response;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +24,7 @@ public class ProformaV2Controller {
     private final CreateProformaV2UseCase createUseCase;
     private final GetProformaV2UseCase getUseCase;
     private final ConvertProformaToSaleV2UseCase convertUseCase;
+    private final VoidProformaV2UseCase voidUseCase;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -39,5 +43,12 @@ public class ProformaV2Controller {
                                              Principal principal) {
         String username = principal != null ? principal.getName() : null;
         return convertUseCase.convert(id, request, username);
+    }
+
+    @PostMapping("/{id}/void")
+    public VoidProformaV2Response voidProforma(@PathVariable("id") Long id,
+                                               @RequestBody(required = false) VoidProformaV2Request request) {
+        String reason = request == null ? null : request.getReason();
+        return voidUseCase.voidProforma(id, reason);
     }
 }

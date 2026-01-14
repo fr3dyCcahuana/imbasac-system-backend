@@ -68,6 +68,47 @@ public class PostgresAccountsReceivableRepository implements AccountsReceivableR
     }
 
     @Override
+    public LockedAr lockBySaleId(Long saleId) {
+        String sql = """
+            SELECT
+              id,
+              customer_id,
+              issue_date,
+              due_date,
+              total_amount,
+              paid_amount,
+              balance_amount,
+              status
+            FROM accounts_receivable
+            WHERE sale_id = ?
+            FOR UPDATE
+        """;
+
+        return jdbcClient.sql(sql)
+                .param(saleId)
+                .query((rs, rowNum) -> LockedAr.builder()
+                        .id(rs.getLong("id"))
+                        .customerId(rs.getLong("customer_id"))
+                        .issueDate(rs.getObject("issue_date", LocalDate.class))
+                        .dueDate(rs.getObject("due_date", LocalDate.class))
+                        .totalAmount(rs.getBigDecimal("total_amount"))
+                        .paidAmount(rs.getBigDecimal("paid_amount"))
+                        .balanceAmount(rs.getBigDecimal("balance_amount"))
+                        .status(rs.getString("status"))
+                        .build())
+                .optional()
+                .orElse(null);
+    }
+
+    @Override
+    public void deleteBySaleId(Long saleId) {
+        String sql = "DELETE FROM accounts_receivable WHERE sale_id = ?";
+        jdbcClient.sql(sql)
+                .param(saleId)
+                .update();
+    }
+
+    @Override
     public void updateAmountsAndStatus(Long arId, BigDecimal paidAmount, BigDecimal balanceAmount, String status) {
         String sql = """
             UPDATE accounts_receivable

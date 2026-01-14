@@ -6,5 +6,7 @@ import java.util.List;
 
 public interface ProductSerialUnitRepository {
     List<SerialUnit> lockByIds(List<Long> serialUnitIds);
+    List<SerialUnit> lockBySaleItemIds(List<Long> saleItemIds);
     void markAsSold(Long serialUnitId, Long saleItemId);
+    void markAsReturned(Long serialUnitId);
 }

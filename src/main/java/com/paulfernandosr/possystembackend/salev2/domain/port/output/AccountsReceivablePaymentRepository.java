@@ -5,4 +5,6 @@ import java.time.LocalDateTime;
 
 public interface AccountsReceivablePaymentRepository {
     void insert(Long arId, BigDecimal amount, String method, LocalDateTime paidAt, String note);
+
+    boolean existsByArId(Long arId);
 }

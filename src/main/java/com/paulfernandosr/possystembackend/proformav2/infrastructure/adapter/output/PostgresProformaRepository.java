@@ -93,6 +93,25 @@ public class PostgresProformaRepository implements ProformaRepository {
     }
 
     @Override
+    public void appendNotesAndSetStatus(Long proformaId, String noteToAppend, String status) {
+        String sql = """
+            UPDATE proforma
+               SET status = ?,
+                   notes = CASE
+                             WHEN ? IS NULL OR ? = '' THEN notes
+                             WHEN notes IS NULL OR notes = '' THEN ?
+                             ELSE notes || E'\n' || ?
+                           END,
+                   updated_at = NOW()
+             WHERE id = ?
+        """;
+
+        jdbcClient.sql(sql)
+                .params(status, noteToAppend, noteToAppend, noteToAppend, noteToAppend, proformaId)
+                .update();
+    }
+
+    @Override
     public void touchUpdatedAt(Long proformaId) {
         String sql = """
             UPDATE proforma

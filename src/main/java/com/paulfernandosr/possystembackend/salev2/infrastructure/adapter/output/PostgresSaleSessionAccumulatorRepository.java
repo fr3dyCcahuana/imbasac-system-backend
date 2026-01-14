@@ -29,4 +29,20 @@ public class PostgresSaleSessionAccumulatorRepository implements SaleSessionAccu
                 .params(saleTotal, discountTotal, saleSessionId)
                 .update();
     }
+
+    @Override
+    public void subtractSaleIncomeAndDiscount(Long saleSessionId, BigDecimal saleTotal, BigDecimal discountTotal) {
+        String sql = """
+            UPDATE sale_sessions
+               SET sales_income   = COALESCE(sales_income, 0) - ?,
+                   total_discount = COALESCE(total_discount, 0) - ?,
+                   updated_at = NOW()
+             WHERE id = ?
+               AND closed_at IS NULL
+        """;
+
+        jdbcClient.sql(sql)
+                .params(saleTotal, discountTotal, saleSessionId)
+                .update();
+    }
 }

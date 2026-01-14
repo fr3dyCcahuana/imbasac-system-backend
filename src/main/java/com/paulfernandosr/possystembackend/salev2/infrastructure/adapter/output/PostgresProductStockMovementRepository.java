@@ -31,4 +31,24 @@ public class PostgresProductStockMovementRepository implements ProductStockMovem
                 .params(productId, saleItemId, quantityOut)
                 .update();
     }
+
+    @Override
+    public void createInReturn(Long productId, BigDecimal quantityIn, Long saleItemId, BigDecimal unitCost, BigDecimal totalCost) {
+        String sql = """
+            INSERT INTO product_stock_movement(
+              product_id,
+              movement_type,
+              source_table,
+              source_id,
+              quantity_in,
+              unit_cost,
+              total_cost,
+              created_at
+            ) VALUES (?, 'IN_RETURN', 'sale_item', ?, ?, ?, ?, NOW())
+        """;
+
+        jdbcClient.sql(sql)
+                .params(productId, saleItemId, quantityIn, unitCost, totalCost)
+                .update();
+    }
 }

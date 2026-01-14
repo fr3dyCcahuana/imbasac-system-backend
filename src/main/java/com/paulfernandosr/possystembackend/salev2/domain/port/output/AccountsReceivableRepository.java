@@ -11,6 +11,10 @@ public interface AccountsReceivableRepository {
                 BigDecimal totalAmount, BigDecimal paidAmount, BigDecimal balanceAmount, String status);
 
     LockedAr lockById(Long arId);
+
+    LockedAr lockBySaleId(Long saleId);
+
+    void deleteBySaleId(Long saleId);
     void updateAmountsAndStatus(Long arId, BigDecimal paidAmount, BigDecimal balanceAmount, String status);
     void markOverdueForCustomer(Long customerId);
 

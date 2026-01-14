@@ -7,4 +7,9 @@ public interface ProductStockRepository {
     BigDecimal getAverageCost(Long productId);
     BigDecimal getLastUnitCost(Long productId);
     void decreaseOnHandOrFail(Long productId, BigDecimal quantity);
+
+    /**
+     * Reversa de stock (anulación/devolución). Si el registro no existe, lo crea en 0 + qty.
+     */
+    void increaseOnHand(Long productId, BigDecimal quantity);
 }

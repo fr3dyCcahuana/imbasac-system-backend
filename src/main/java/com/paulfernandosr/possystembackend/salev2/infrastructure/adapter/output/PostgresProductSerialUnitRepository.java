@@ -52,4 +52,42 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
                 .params(saleItemId, serialUnitId)
                 .update();
     }
+
+    @Override
+    public List<SerialUnit> lockBySaleItemIds(List<Long> saleItemIds) {
+        if (saleItemIds == null || saleItemIds.isEmpty()) return List.of();
+
+        String placeholders = saleItemIds.stream()
+                .map(id -> "?")
+                .collect(Collectors.joining(","));
+
+        String sql = String.format("""
+        SELECT id,
+               product_id AS productId,
+               status
+          FROM product_serial_unit
+         WHERE sale_item_id IN (%s)
+         FOR UPDATE
+        """, placeholders);
+
+        return jdbcClient.sql(sql)
+                .params(saleItemIds.toArray(new Object[0]))
+                .query(SerialUnit.class)
+                .list();
+    }
+
+    @Override
+    public void markAsReturned(Long serialUnitId) {
+        String sql = """
+        UPDATE product_serial_unit
+           SET status = 'DEVUELTO',
+               sale_item_id = NULL,
+               updated_at = NOW()
+         WHERE id = ?
+        """;
+
+        jdbcClient.sql(sql)
+                .param(serialUnitId)
+                .update();
+    }
 }

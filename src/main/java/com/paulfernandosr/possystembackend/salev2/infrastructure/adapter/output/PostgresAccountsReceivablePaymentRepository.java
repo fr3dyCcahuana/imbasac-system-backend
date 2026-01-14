@@ -30,4 +30,14 @@ public class PostgresAccountsReceivablePaymentRepository implements AccountsRece
                 .params(arId, amount, method, paidAt, note)
                 .update();
     }
+
+    @Override
+    public boolean existsByArId(Long arId) {
+        String sql = "SELECT 1 FROM accounts_receivable_payment WHERE ar_id = ? LIMIT 1";
+        return jdbcClient.sql(sql)
+                .param(arId)
+                .query(Integer.class)
+                .optional()
+                .isPresent();
+    }
 }

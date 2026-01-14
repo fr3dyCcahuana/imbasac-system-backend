@@ -2,6 +2,9 @@ package com.paulfernandosr.possystembackend.salev2.domain.port.output;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
+
+import lombok.*;
 
 public interface SaleV2Repository {
     Long insertSale(Long stationId,
@@ -53,4 +56,38 @@ public interface SaleV2Repository {
                       BigDecimal igvAmount,
                       BigDecimal total,
                       BigDecimal giftCostTotal);
+
+    LockedSale lockById(Long saleId);
+    List<SaleItemForVoid> findItemsBySaleId(Long saleId);
+    void markAsVoided(Long saleId, String voidNote);
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    class LockedSale {
+        private Long id;
+        private Long saleSessionId;
+        private Long customerId;
+        private String docType;
+        private String status;
+        private String paymentType;
+        private BigDecimal total;
+        private BigDecimal discountTotal;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    class SaleItemForVoid {
+        private Long id;
+        private Long productId;
+        private BigDecimal quantity;
+        private Boolean affectsStock;
+        private BigDecimal unitCostSnapshot;
+        private BigDecimal totalCostSnapshot;
+    }
 }

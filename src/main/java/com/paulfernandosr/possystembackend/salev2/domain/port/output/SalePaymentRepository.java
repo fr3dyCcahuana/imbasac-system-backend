@@ -4,4 +4,6 @@ import java.math.BigDecimal;
 
 public interface SalePaymentRepository {
     void insert(Long saleId, String method, BigDecimal amount);
+
+    void deleteBySaleId(Long saleId);
 }
