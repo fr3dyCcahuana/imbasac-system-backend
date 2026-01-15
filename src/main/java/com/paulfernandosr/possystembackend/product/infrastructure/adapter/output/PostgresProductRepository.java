@@ -35,27 +35,7 @@ public class PostgresProductRepository implements ProductRepository {
                 category,
                 presentation,
                 factor,
-                origin_type,
-                origin_country,
-                factory_code,
-                compatibility,
-                barcode,
-                warehouse_location,
-                price_a,
-                price_b,
-                price_c,
-                price_d,
-                cost_reference
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING
-                id          AS product_id,
-                sku,
-                name,
-                product_type,
-                category,
-                presentation,
-                factor,
+                manage_by_serial,
                 origin_type,
                 origin_country,
                 factory_code,
@@ -67,6 +47,34 @@ public class PostgresProductRepository implements ProductRepository {
                 price_c,
                 price_d,
                 cost_reference,
+                facturable_sunat,
+                affects_stock,
+                gift_allowed
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            RETURNING
+                id          AS product_id,
+                sku,
+                name,
+                product_type,
+                category,
+                presentation,
+                factor,
+                manage_by_serial,
+                origin_type,
+                origin_country,
+                factory_code,
+                compatibility,
+                barcode,
+                warehouse_location,
+                price_a,
+                price_b,
+                price_c,
+                price_d,
+                cost_reference,
+                facturable_sunat,
+                affects_stock,
+                gift_allowed,
                 created_at,
                 updated_at
             """;
@@ -80,6 +88,7 @@ public class PostgresProductRepository implements ProductRepository {
                             product.getCategory(),
                             product.getPresentation(),
                             product.getFactor(),
+                            product.getManageBySerial(),
                             product.getOriginType(),
                             product.getOriginCountry(),
                             product.getFactoryCode(),
@@ -90,16 +99,20 @@ public class PostgresProductRepository implements ProductRepository {
                             product.getPriceB(),
                             product.getPriceC(),
                             product.getPriceD(),
-                            product.getCostReference()
+                            product.getCostReference(),
+                            product.getFacturableSunat(),
+                            product.getAffectsStock(),
+                            product.getGiftAllowed()
                     )
                     .query(new ProductRowMapper())
-                    .single();   // ✅ devuelve el Product insertado
+                    .single();
         } catch (DataIntegrityViolationException ex) {
             String message = ex.getMostSpecificCause() != null
                     ? ex.getMostSpecificCause().getMessage()
                     : ex.getMessage();
 
-            if (message != null && message.contains("product_sku_key")) {
+            // Puede variar el nombre del constraint en Postgres; cubrimos ambos casos comunes.
+            if (message != null && (message.contains("product_sku_key") || message.contains("uq_product_sku") || message.contains("sku"))) {
                 throw new InvalidProductException(
                         "Ya existe un producto registrado con el SKU: " + product.getSku()
                 );
@@ -113,12 +126,12 @@ public class PostgresProductRepository implements ProductRepository {
         String likeParam = QueryMapper.formatAsLikeParam(query);
 
         String countSql = """
-                SELECT COUNT(1)
-                FROM product
-                WHERE sku ILIKE ?
-                   OR barcode ILIKE ?
-                   OR name ILIKE ?
-                """;
+            SELECT COUNT(1)
+              FROM product p
+             WHERE p.sku ILIKE ?
+                OR p.barcode ILIKE ?
+                OR p.name ILIKE ?
+            """;
 
         long totalElements = jdbcClient.sql(countSql)
                 .params(likeParam, likeParam, likeParam)
@@ -126,35 +139,39 @@ public class PostgresProductRepository implements ProductRepository {
                 .single();
 
         String selectSql = """
-                SELECT
-                    p.id          AS product_id,
-                    p.sku,
-                    p.name,
-                    p.product_type,
-                    p.category,
-                    p.presentation,
-                    p.factor,
-                    p.origin_type,
-                    p.origin_country,
-                    p.factory_code,
-                    p.compatibility,
-                    p.barcode,
-                    p.warehouse_location,
-                    p.price_a,
-                    p.price_b,
-                    p.price_c,
-                    p.price_d,
-                    p.cost_reference,
-                    p.created_at,
-                    p.updated_at
-                FROM product p
-                WHERE p.sku ILIKE ?
-                   OR p.barcode ILIKE ?
-                   OR p.name ILIKE ?
-                ORDER BY p.name ASC
-                LIMIT ?
-                OFFSET ?
-                """;
+            SELECT
+                p.id          AS product_id,
+                p.sku,
+                p.name,
+                p.product_type,
+                p.category,
+                p.presentation,
+                p.factor,
+                p.manage_by_serial,
+                p.origin_type,
+                p.origin_country,
+                p.factory_code,
+                p.compatibility,
+                p.barcode,
+                p.warehouse_location,
+                p.price_a,
+                p.price_b,
+                p.price_c,
+                p.price_d,
+                p.cost_reference,
+                p.facturable_sunat,
+                p.affects_stock,
+                p.gift_allowed,
+                p.created_at,
+                p.updated_at
+            FROM product p
+            WHERE p.sku ILIKE ?
+               OR p.barcode ILIKE ?
+               OR p.name ILIKE ?
+            ORDER BY p.name ASC
+            LIMIT ?
+            OFFSET ?
+            """;
 
         int pageSize = pageable.getSize();
         int pageNumber = pageable.getNumber();
@@ -186,30 +203,34 @@ public class PostgresProductRepository implements ProductRepository {
     @Override
     public Optional<Product> findById(Long productId) {
         String sql = """
-                SELECT
-                    p.id          AS product_id,
-                    p.sku,
-                    p.name,
-                    p.product_type,
-                    p.category,
-                    p.presentation,
-                    p.factor,
-                    p.origin_type,
-                    p.origin_country,
-                    p.factory_code,
-                    p.compatibility,
-                    p.barcode,
-                    p.warehouse_location,
-                    p.price_a,
-                    p.price_b,
-                    p.price_c,
-                    p.price_d,
-                    p.cost_reference,
-                    p.created_at,
-                    p.updated_at
-                FROM product p
-                WHERE p.id = ?
-                """;
+            SELECT
+                p.id          AS product_id,
+                p.sku,
+                p.name,
+                p.product_type,
+                p.category,
+                p.presentation,
+                p.factor,
+                p.manage_by_serial,
+                p.origin_type,
+                p.origin_country,
+                p.factory_code,
+                p.compatibility,
+                p.barcode,
+                p.warehouse_location,
+                p.price_a,
+                p.price_b,
+                p.price_c,
+                p.price_d,
+                p.cost_reference,
+                p.facturable_sunat,
+                p.affects_stock,
+                p.gift_allowed,
+                p.created_at,
+                p.updated_at
+            FROM product p
+            WHERE p.id = ?
+            """;
 
         return jdbcClient.sql(sql)
                 .param(productId)
@@ -228,29 +249,33 @@ public class PostgresProductRepository implements ProductRepository {
                 .collect(Collectors.joining(","));
 
         String sql = """
-                SELECT
-                    p.id          AS product_id,
-                    p.sku,
-                    p.name,
-                    p.product_type,
-                    p.category,
-                    p.presentation,
-                    p.factor,
-                    p.origin_type,
-                    p.origin_country,
-                    p.factory_code,
-                    p.compatibility,
-                    p.barcode,
-                    p.warehouse_location,
-                    p.price_a,
-                    p.price_b,
-                    p.price_c,
-                    p.price_d,
-                    p.cost_reference,
-                    p.created_at,
-                    p.updated_at
-                FROM product p
-                WHERE p.id IN (""" + placeholders + ")";
+            SELECT
+                p.id          AS product_id,
+                p.sku,
+                p.name,
+                p.product_type,
+                p.category,
+                p.presentation,
+                p.factor,
+                p.manage_by_serial,
+                p.origin_type,
+                p.origin_country,
+                p.factory_code,
+                p.compatibility,
+                p.barcode,
+                p.warehouse_location,
+                p.price_a,
+                p.price_b,
+                p.price_c,
+                p.price_d,
+                p.cost_reference,
+                p.facturable_sunat,
+                p.affects_stock,
+                p.gift_allowed,
+                p.created_at,
+                p.updated_at
+            FROM product p
+            WHERE p.id IN (""" + placeholders + ")";
 
         return jdbcClient.sql(sql)
                 .params(productIds.toArray())
@@ -261,27 +286,31 @@ public class PostgresProductRepository implements ProductRepository {
     @Override
     public void updateById(Long productId, Product product) {
         String sql = """
-                UPDATE product
-                   SET sku               = ?,
-                       name              = ?,
-                       product_type      = ?,
-                       category          = ?,
-                       presentation      = ?,
-                       factor            = ?,
-                       origin_type       = ?,
-                       origin_country    = ?,
-                       factory_code      = ?,
-                       compatibility     = ?,
-                       barcode           = ?,
-                       warehouse_location = ?,
-                       price_a           = ?,
-                       price_b           = ?,
-                       price_c           = ?,
-                       price_d           = ?,
-                       cost_reference    = ?,
-                       updated_at        = NOW()
-                 WHERE id = ?
-                """;
+            UPDATE product
+               SET sku                = ?,
+                   name               = ?,
+                   product_type       = ?,
+                   category           = ?,
+                   presentation       = ?,
+                   factor             = ?,
+                   manage_by_serial   = ?,
+                   origin_type        = ?,
+                   origin_country     = ?,
+                   factory_code       = ?,
+                   compatibility      = ?,
+                   barcode            = ?,
+                   warehouse_location = ?,
+                   price_a            = ?,
+                   price_b            = ?,
+                   price_c            = ?,
+                   price_d            = ?,
+                   cost_reference     = ?,
+                   facturable_sunat   = ?,
+                   affects_stock      = ?,
+                   gift_allowed       = ?,
+                   updated_at         = NOW()
+             WHERE id = ?
+            """;
 
         jdbcClient.sql(sql)
                 .params(
@@ -291,6 +320,7 @@ public class PostgresProductRepository implements ProductRepository {
                         product.getCategory(),
                         product.getPresentation(),
                         product.getFactor(),
+                        product.getManageBySerial(),
                         product.getOriginType(),
                         product.getOriginCountry(),
                         product.getFactoryCode(),
@@ -302,6 +332,9 @@ public class PostgresProductRepository implements ProductRepository {
                         product.getPriceC(),
                         product.getPriceD(),
                         product.getCostReference(),
+                        product.getFacturableSunat(),
+                        product.getAffectsStock(),
+                        product.getGiftAllowed(),
                         productId
                 )
                 .update();

@@ -21,6 +21,11 @@ public class ProformaV2Response {
     private Long number;
     private String issueDate;
 
+    private String taxStatus;
+    private BigDecimal igvRate;
+    private Boolean igvIncluded;
+    private BigDecimal igvAmount;
+
     private Character priceList;
     private String currency;
 

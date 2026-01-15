@@ -48,6 +48,18 @@ public class ProformaRowMapper implements RowMapper<Proforma> {
             builder.cashierLastName(rs.getString("cashier_last_name"));
         }
 
+        if (cols.contains("tax_status")) {
+            builder.taxStatus(rs.getString("tax_status"));
+        }
+        if (cols.contains("igv_rate")) {
+            builder.igvRate(rs.getBigDecimal("igv_rate"));
+        }
+        if (cols.contains("igv_amount")) {
+            builder.igvAmount(rs.getBigDecimal("igv_amount"));
+        }
+        if (cols.contains("igv_included")) {
+            builder.igvIncluded((Boolean) rs.getObject("igv_included"));
+        }
         return builder.build();
     }
 

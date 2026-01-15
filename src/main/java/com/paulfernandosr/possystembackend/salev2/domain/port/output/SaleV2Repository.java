@@ -25,6 +25,7 @@ public interface SaleV2Repository {
                     String taxStatus,
                     String taxReason,
                     BigDecimal igvRate,
+                    Boolean igvIncluded,
                     String paymentType,
                     Integer creditDays,
                     LocalDate dueDate,

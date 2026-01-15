@@ -13,6 +13,7 @@ import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.inp
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaV2Response;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.output.model.LockedDocumentSeries;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.output.model.ProductSnapshot;
+import com.paulfernandosr.possystembackend.salev2.domain.model.TaxStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,17 +47,34 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
         long number = series.getNextNumber();
         documentSeriesRepository.incrementNextNumber(series.getId());
 
-        LocalDate issueDate = request.getIssueDate() == null || request.getIssueDate().isBlank()
+        LocalDate issueDate = (request.getIssueDate() == null || request.getIssueDate().isBlank())
                 ? LocalDate.now()
                 : LocalDate.parse(request.getIssueDate());
 
+        // --- Config tributaria (persistida para impresión y coherencia convert->sale) ---
+        TaxStatus taxStatus = request.getTaxStatus() != null ? request.getTaxStatus() : TaxStatus.NO_GRAVADA;
+        BigDecimal igvRate = request.getIgvRate() != null ? request.getIgvRate() : new BigDecimal("18.00");
+
+        boolean igvIncluded = Boolean.TRUE.equals(request.getIgvIncluded());
+        if (taxStatus != TaxStatus.GRAVADA) {
+            igvIncluded = false;
+        }
+
         List<ProformaItem> items = new ArrayList<>();
-        BigDecimal subtotal = BigDecimal.ZERO;
-        BigDecimal discountTotal = BigDecimal.ZERO;
+
+        // Totales documento:
+        BigDecimal subtotalBase = BigDecimal.ZERO;     // BASE imponible
+        BigDecimal discountTotal = BigDecimal.ZERO;   // descuento aplicado (sobre gross si igvIncluded=true)
+        BigDecimal igvAmount = BigDecimal.ZERO;       // IGV total
+        BigDecimal total = BigDecimal.ZERO;           // TOTAL final
 
         int line = 1;
         for (CreateProformaV2Request.Item reqItem : request.getItems()) {
+
             ProductSnapshot p = productSnapshotRepository.getById(reqItem.getProductId());
+            if (p == null) {
+                throw new InvalidProformaV2Exception("Producto no encontrado: " + reqItem.getProductId());
+            }
 
             BigDecimal qty = new BigDecimal(reqItem.getQuantity());
             if (qty.compareTo(BigDecimal.ZERO) <= 0) {
@@ -73,34 +91,91 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
                 throw new InvalidProformaV2Exception("Descuento inválido en línea " + line);
             }
 
-            BigDecimal lineBase = unitPrice.multiply(qty);
-            BigDecimal discountAmount = lineBase.multiply(discountPercent)
+            // gross: depende de la semántica del precio
+            // - si igvIncluded=true y GRAVADA, unitPrice es FINAL (incluye IGV)
+            // - si igvIncluded=false (o NO_GRAVADA), unitPrice es BASE (sin IGV)
+            BigDecimal gross = qty.multiply(unitPrice).setScale(4, RoundingMode.HALF_UP);
+
+            // descuento: sobre el "precio mostrado"
+            // - si igvIncluded=true, descuento sobre precio final con IGV (cumple tu regla)
+            // - si igvIncluded=false, descuento sobre base
+            BigDecimal discountAmount = gross.multiply(discountPercent)
                     .divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
 
-            BigDecimal lineSubtotal = lineBase.subtract(discountAmount);
+            BigDecimal grossAfterDiscount = gross.subtract(discountAmount).setScale(4, RoundingMode.HALF_UP);
 
+            BigDecimal baseLine;
+            BigDecimal igvLine;
+
+            if (taxStatus == TaxStatus.GRAVADA && igvIncluded) {
+                // extraer base e IGV desde precio final
+                BigDecimal divisor = BigDecimal.ONE.add(
+                        igvRate.divide(new BigDecimal("100"), 10, RoundingMode.HALF_UP)
+                ); // 1.18 si rate=18
+
+                baseLine = grossAfterDiscount.divide(divisor, 4, RoundingMode.HALF_UP);
+                igvLine = grossAfterDiscount.subtract(baseLine).setScale(4, RoundingMode.HALF_UP);
+
+                subtotalBase = subtotalBase.add(baseLine);
+                igvAmount = igvAmount.add(igvLine);
+                total = total.add(grossAfterDiscount);
+            } else if (taxStatus == TaxStatus.GRAVADA) {
+                // precio sin IGV: grossAfterDiscount es BASE
+                baseLine = grossAfterDiscount;
+                igvLine = BigDecimal.ZERO; // se calcula a nivel documento al final
+
+                subtotalBase = subtotalBase.add(baseLine);
+            } else {
+                // NO_GRAVADA: no hay IGV
+                baseLine = grossAfterDiscount;
+                igvLine = BigDecimal.ZERO;
+
+                subtotalBase = subtotalBase.add(baseLine);
+            }
+
+            discountTotal = discountTotal.add(discountAmount);
+
+            // Persistimos unitPrice y lineSubtotal con la MISMA semántica:
+            // - si igvIncluded=true => unitPrice y lineSubtotal son "gross" (incluye IGV)
+            // - si igvIncluded=false => unitPrice y lineSubtotal son "base"
             ProformaItem item = ProformaItem.builder()
-                    .proformaId(null) // set luego
+                    .proformaId(null) // se setea luego
                     .lineNumber(line)
                     .productId(p.getId())
                     .sku(p.getSku())
-                    .description(p.getName())
-                    .presentation(p.getPresentation())
-                    .factor(p.getFactor())
+                    .description((reqItem.getDescription() != null && !reqItem.getDescription().isBlank()) ? reqItem.getDescription() : p.getName())
+                    .presentation((reqItem.getPresentation() != null && !reqItem.getPresentation().isBlank()) ? reqItem.getPresentation() : p.getPresentation())
+                    .factor((reqItem.getFactor() != null && !reqItem.getFactor().isBlank()) ? new BigDecimal(reqItem.getFactor()) : p.getFactor())
                     .quantity(qty)
-                    .unitPrice(unitPrice)
-                    .discountPercent(discountPercent)
-                    .discountAmount(discountAmount)
-                    .lineSubtotal(lineSubtotal)
+                    .unitPrice(money2(unitPrice))                      // snapshot (2 decimales)
+                    .discountPercent(discountPercent.setScale(4, RoundingMode.HALF_UP))
+                    .discountAmount(money2(discountAmount))            // 2 decimales
+                    .lineSubtotal(money2(grossAfterDiscount))          // 2 decimales, semántica = gross/base según igvIncluded
                     .facturableSunat(p.getFacturableSunat())
                     .affectsStock(p.getAffectsStock())
                     .build();
 
             items.add(item);
-
-            subtotal = subtotal.add(lineSubtotal);
-            discountTotal = discountTotal.add(discountAmount);
             line++;
+        }
+
+        // Normalizar totales
+        subtotalBase = subtotalBase.setScale(4, RoundingMode.HALF_UP);
+        discountTotal = discountTotal.setScale(4, RoundingMode.HALF_UP);
+        igvAmount = igvAmount.setScale(4, RoundingMode.HALF_UP);
+        total = total.setScale(4, RoundingMode.HALF_UP);
+
+        // Si es GRAVADA y NO incluye IGV, calcula IGV sobre subtotalBase
+        if (taxStatus == TaxStatus.GRAVADA && !igvIncluded) {
+            igvAmount = subtotalBase.multiply(igvRate)
+                    .divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
+            total = subtotalBase.add(igvAmount).setScale(4, RoundingMode.HALF_UP);
+        }
+
+        // Si NO_GRAVADA, igvAmount y total
+        if (taxStatus != TaxStatus.GRAVADA) {
+            igvAmount = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
+            total = subtotalBase.setScale(4, RoundingMode.HALF_UP);
         }
 
         Proforma proforma = Proforma.builder()
@@ -110,16 +185,23 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
                 .number(number)
                 .issueDate(issueDate)
                 .priceList(request.getPriceList())
-                .currency(request.getCurrency() == null || request.getCurrency().isBlank() ? "PEN" : request.getCurrency())
+                .currency((request.getCurrency() == null || request.getCurrency().isBlank()) ? "PEN" : request.getCurrency())
+                .taxStatus(taxStatus.name())
+                .igvRate(money2(igvRate))
+                .igvIncluded(igvIncluded)
+                .igvAmount(money2(igvAmount))
+
                 .customerId(request.getCustomerId())
                 .customerDocType(request.getCustomerDocType())
                 .customerDocNumber(request.getCustomerDocNumber())
                 .customerName(request.getCustomerName())
                 .customerAddress(request.getCustomerAddress())
                 .notes(request.getNotes())
-                .subtotal(subtotal)
-                .discountTotal(discountTotal)
-                .total(subtotal)
+
+                .subtotal(money2(subtotalBase))
+                .discountTotal(money2(discountTotal))
+                .total(money2(total))
+
                 .status(ProformaStatus.PENDIENTE)
                 .build();
 
@@ -140,6 +222,19 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
         if (request.getSeries() == null || request.getSeries().isBlank()) throw new InvalidProformaV2Exception("series requerido");
         if (request.getPriceList() == null) throw new InvalidProformaV2Exception("priceList requerido (A/B/C/D)");
         if (request.getItems() == null || request.getItems().isEmpty()) throw new InvalidProformaV2Exception("items requerido");
+
+        if (request.getIgvRate() != null && request.getIgvRate().compareTo(BigDecimal.ZERO) < 0) {
+            throw new InvalidProformaV2Exception("igvRate inválido");
+        }
+
+        // Normalización fiscal
+        TaxStatus taxStatus = request.getTaxStatus() != null ? request.getTaxStatus() : TaxStatus.NO_GRAVADA;
+        if (taxStatus != TaxStatus.GRAVADA && Boolean.TRUE.equals(request.getIgvIncluded())) {
+            // NO_GRAVADA no puede tener IGV incluido
+            // Puedes normalizar o rechazar; aquí rechazo para consistencia.
+            throw new InvalidProformaV2Exception("igvIncluded solo es válido cuando taxStatus=GRAVADA");
+        }
+
         for (CreateProformaV2Request.Item it : request.getItems()) {
             if (it.getProductId() == null) throw new InvalidProformaV2Exception("productId requerido en items");
             if (it.getQuantity() == null || it.getQuantity().isBlank()) throw new InvalidProformaV2Exception("quantity requerido en items");
@@ -160,5 +255,13 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
             case 'D' -> p.getPriceD();
             default -> null;
         };
+    }
+
+    /**
+     * Dinero para persistencia/impresión: 2 decimales
+     */
+    private BigDecimal money2(BigDecimal v) {
+        if (v == null) return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        return v.setScale(2, RoundingMode.HALF_UP);
     }
 }

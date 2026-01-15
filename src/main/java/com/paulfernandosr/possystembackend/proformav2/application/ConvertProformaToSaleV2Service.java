@@ -11,14 +11,15 @@ import com.paulfernandosr.possystembackend.proformav2.domain.port.output.SaleRef
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ConvertProformaV2Request;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ConvertProformaV2Response;
 import com.paulfernandosr.possystembackend.salev2.application.CreateSaleV2Service;
+import com.paulfernandosr.possystembackend.salev2.domain.model.*;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2CreateRequest;
-import com.paulfernandosr.possystembackend.salev2.domain.model.LineKind;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2DocumentResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.*;
 
@@ -29,18 +30,15 @@ public class ConvertProformaToSaleV2Service implements ConvertProformaToSaleV2Us
     private final ProformaRepository proformaRepository;
     private final ProformaItemRepository proformaItemRepository;
     private final SaleReferenceRepository saleReferenceRepository;
-
-    // Reutilizamos el flujo completo de venta v2 (stock, kardex, seriales, CxC, validaciones, etc.)
     private final CreateSaleV2Service createSaleV2Service;
 
     @Override
     @Transactional
     public ConvertProformaV2Response convert(Long proformaId, ConvertProformaV2Request request, String username) {
+
         if (request == null) throw new InvalidProformaV2Exception("Request requerido");
         if (request.getDocType() == null) throw new InvalidProformaV2Exception("docType requerido");
         if (request.getSeries() == null || request.getSeries().isBlank()) throw new InvalidProformaV2Exception("series requerido");
-        if (request.getTaxStatus() == null) throw new InvalidProformaV2Exception("taxStatus requerido");
-        if (request.getIgvRate() == null) request.setIgvRate(new BigDecimal("18.00"));
         if (request.getPaymentType() == null) throw new InvalidProformaV2Exception("paymentType requerido");
 
         Proforma p = proformaRepository.lockById(proformaId)
@@ -53,6 +51,23 @@ public class ConvertProformaToSaleV2Service implements ConvertProformaToSaleV2Us
         List<ProformaItem> items = proformaItemRepository.findByProformaId(proformaId);
         if (items.isEmpty()) {
             throw new InvalidProformaV2Exception("La proforma no tiene items");
+        }
+
+        // Heredar impuestos desde PROFORMA
+        TaxStatus taxStatus = (p.getTaxStatus() == null || p.getTaxStatus().isBlank())
+                ? TaxStatus.NO_GRAVADA
+                : TaxStatus.valueOf(p.getTaxStatus());
+
+        BigDecimal igvRate = (p.getIgvRate() == null) ? new BigDecimal("18.00") : p.getIgvRate();
+
+        boolean igvIncluded = Boolean.TRUE.equals(p.getIgvIncluded()) && taxStatus == TaxStatus.GRAVADA;
+
+        // Si el request manda algo distinto, lo rechazamos (coherencia)
+        if (request.getTaxStatus() != null && request.getTaxStatus() != taxStatus) {
+            throw new InvalidProformaV2Exception("La venta debe heredar taxStatus de la proforma. Proforma=" + taxStatus + ", request=" + request.getTaxStatus());
+        }
+        if (request.getIgvRate() != null && request.getIgvRate().compareTo(igvRate) != 0) {
+            throw new InvalidProformaV2Exception("La venta debe heredar igvRate de la proforma. Proforma=" + igvRate + ", request=" + request.getIgvRate());
         }
 
         Map<Integer, List<Long>> serialsByLine = new HashMap<>();
@@ -70,36 +85,33 @@ public class ConvertProformaToSaleV2Service implements ConvertProformaToSaleV2Us
                 .issueDate(LocalDate.now()) // emisión real de la venta
                 .currency(p.getCurrency())
                 .exchangeRate(null)
-                .priceList(com.paulfernandosr.possystembackend.salev2.domain.model.PriceList.valueOf(String.valueOf(p.getPriceList())))
+                .priceList(PriceList.valueOf(String.valueOf(p.getPriceList())))
                 .customerId(p.getCustomerId())
                 .customerDocType(p.getCustomerDocType())
                 .customerDocNumber(p.getCustomerDocNumber())
                 .customerName(p.getCustomerName())
                 .customerAddress(p.getCustomerAddress())
-                .taxStatus(request.getTaxStatus())
+                .taxStatus(taxStatus)
                 .taxReason(null)
-                .igvRate(request.getIgvRate())
+                .igvRate(igvRate)
+                .igvIncluded(igvIncluded)
                 .paymentType(request.getPaymentType())
                 .creditDays(request.getCreditDays())
                 .dueDate(request.getDueDate() != null && !request.getDueDate().isBlank() ? LocalDate.parse(request.getDueDate()) : null)
                 .notes(p.getNotes())
-                .items(mapItems(items, serialsByLine))
-                .payment(null) // CONTADO/CREDITO se maneja dentro de SaleV2; si CONTADO, controller ya manda payment.method
+                .items(mapItems(items, serialsByLine, request.getDocType()))
+                .payment(null)
                 .build();
 
-        // Si es CONTADO, el frontend debe enviar payment.method; pero para convertir, asumimos EFECTIVO si no viene
-        if (request.getPaymentType() == com.paulfernandosr.possystembackend.salev2.domain.model.PaymentType.CONTADO) {
-            saleReq.setPayment(SaleV2CreateRequest.Payment.builder()
-                    .method(com.paulfernandosr.possystembackend.salev2.domain.model.PaymentMethod.EFECTIVO)
-                    .build());
+        // Pago CONTADO: se requiere method
+        if (request.getPaymentType() == PaymentType.CONTADO) {
+            PaymentMethod method = request.getMethod() != null ? request.getMethod() : PaymentMethod.EFECTIVO;
+            saleReq.setPayment(SaleV2CreateRequest.Payment.builder().method(method).build());
         }
 
         SaleV2DocumentResponse createdSale = createSaleV2Service.create(saleReq, username);
 
-        // Guardar referencia
         saleReferenceRepository.create(createdSale.getSaleId(), p.getId());
-
-        // Marcar proforma convertida
         proformaRepository.updateStatus(p.getId(), ProformaStatus.CONVERTIDA.name());
 
         return ConvertProformaV2Response.builder()
@@ -112,13 +124,44 @@ public class ConvertProformaToSaleV2Service implements ConvertProformaToSaleV2Us
                 .build();
     }
 
-    private List<SaleV2CreateRequest.Item> mapItems(List<ProformaItem> items, Map<Integer, List<Long>> serialsByLine) {
+    private List<SaleV2CreateRequest.Item> mapItems(
+            List<ProformaItem> items,
+            Map<Integer, List<Long>> serialsByLine,
+            DocType targetDocType
+    ) {
         List<SaleV2CreateRequest.Item> result = new ArrayList<>();
+
+        boolean allowDiscount = (targetDocType == DocType.SIMPLE);
+
         for (ProformaItem it : items) {
+
+            BigDecimal qty = it.getQuantity() == null ? BigDecimal.ZERO : it.getQuantity();
+
+            BigDecimal unitPriceOverride;
+            BigDecimal discountPercent;
+
+            if (allowDiscount) {
+                // SIMPLE: conserva descuento y precio snapshot
+                unitPriceOverride = it.getUnitPrice();
+                discountPercent = it.getDiscountPercent();
+            } else {
+                // BOLETA/FACTURA: descuento debe ser 0.
+                discountPercent = BigDecimal.ZERO;
+
+                // Convertir descuento a precio ajustado para mantener coherencia:
+                // lineSubtotal es "grossAfterDiscount" en la semántica del unitPrice de la proforma.
+                if (qty.compareTo(BigDecimal.ZERO) > 0 && it.getLineSubtotal() != null) {
+                    unitPriceOverride = it.getLineSubtotal().divide(qty, 4, RoundingMode.HALF_UP);
+                } else {
+                    unitPriceOverride = it.getUnitPrice();
+                }
+            }
+
             result.add(SaleV2CreateRequest.Item.builder()
                     .productId(it.getProductId())
                     .quantity(it.getQuantity())
-                    .discountPercent(it.getDiscountPercent())
+                    .discountPercent(discountPercent)
+                    .unitPriceOverride(unitPriceOverride)
                     .lineKind(LineKind.VENDIDO)
                     .giftReason(null)
                     .serialUnitIds(serialsByLine.getOrDefault(it.getLineNumber(), null))

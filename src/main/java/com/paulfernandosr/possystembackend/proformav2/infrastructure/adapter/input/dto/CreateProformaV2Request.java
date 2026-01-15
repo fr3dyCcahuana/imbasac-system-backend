@@ -1,7 +1,9 @@
 package com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto;
 
+import com.paulfernandosr.possystembackend.salev2.domain.model.TaxStatus;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Getter
@@ -18,6 +20,10 @@ public class CreateProformaV2Request {
     private String currency;     // PEN/USD (default PEN)
     private String issueDate;    // yyyy-MM-dd (optional)
 
+    private TaxStatus taxStatus;     // GRAVADA | NO_GRAVADA
+    private BigDecimal igvRate;      // 18.00
+    private Boolean igvIncluded;     // true si el precio incluye IGV (solo GRAVADA)
+
     private Long customerId;
     private String customerDocType;
     private String customerDocNumber;
@@ -25,7 +31,6 @@ public class CreateProformaV2Request {
     private String customerAddress;
 
     private String notes;
-
     private List<Item> items;
 
     @Getter

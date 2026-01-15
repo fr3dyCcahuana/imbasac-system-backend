@@ -36,6 +36,13 @@ public class SaleV2CreateRequest {
     private String taxReason;
     private BigDecimal igvRate;       // 18.00
 
+    /**
+     * NUEVO:
+     * true  => unitPrice incluye IGV (solo válido si taxStatus=GRAVADA)
+     * false => unitPrice NO incluye IGV
+     */
+    private Boolean igvIncluded;
+
     private PaymentType paymentType;  // CONTADO/CREDITO
     private Integer creditDays;
     private LocalDate dueDate;
@@ -53,9 +60,21 @@ public class SaleV2CreateRequest {
     public static class Item {
         private Long productId;
         private BigDecimal quantity;
+
+        /**
+         * Descuento solo permitido si docType=SIMPLE.
+         * En BOLETA/FACTURA debe ser 0.
+         */
         private BigDecimal discountPercent;
+
         private LineKind lineKind;        // VENDIDO/OBSEQUIO
         private String giftReason;
+
+        /**
+         * NUEVO:
+         * Si viene, se usa tal cual (snapshot de proforma / override de precio)
+         */
+        private BigDecimal unitPriceOverride;
 
         // Para productos manage_by_serial=true:
         private List<Long> serialUnitIds;

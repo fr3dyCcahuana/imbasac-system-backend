@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto;
 
 import com.paulfernandosr.possystembackend.salev2.domain.model.DocType;
+import com.paulfernandosr.possystembackend.salev2.domain.model.PaymentMethod;
 import com.paulfernandosr.possystembackend.salev2.domain.model.PaymentType;
 import com.paulfernandosr.possystembackend.salev2.domain.model.TaxStatus;
 import lombok.*;
@@ -28,7 +29,8 @@ public class ConvertProformaV2Request {
     private Integer creditDays;       // requerido si CREDITO
     private String dueDate;           // opcional (yyyy-MM-dd)
 
-    // Para seriales: asignar unidades por línea (si aplica)
+    private PaymentMethod method; // EFECTIVO/YAPE/TRANSFERENCIA/OTRO
+
     private List<LineSerials> serials;
 
     @Getter

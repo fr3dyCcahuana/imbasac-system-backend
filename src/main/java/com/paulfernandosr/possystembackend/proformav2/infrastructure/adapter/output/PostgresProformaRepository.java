@@ -17,38 +17,69 @@ public class PostgresProformaRepository implements ProformaRepository {
 
     @Override
     public Proforma create(Proforma proforma) {
+
         String sql = """
-            INSERT INTO proforma(
-              station_id, created_by,
-              series, number, issue_date,
-              price_list, currency,
-              customer_id, customer_doc_type, customer_doc_number, customer_name, customer_address,
-              notes,
-              subtotal, discount_total, total,
-              status,
-              created_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, NOW(), NOW())
-            RETURNING *
-            """;
+        INSERT INTO proforma(
+          station_id, created_by,
+          series, number, issue_date,
+          price_list, currency,
+
+          tax_status, igv_rate, igv_included, igv_amount,
+
+          customer_id, customer_doc_type, customer_doc_number, customer_name, customer_address,
+          notes,
+
+          subtotal, discount_total, total,
+          status,
+
+          created_at, updated_at
+        ) VALUES (
+          ?, ?,            -- 1-2
+          ?, ?, ?,         -- 3-5
+          ?, ?,            -- 6-7
+
+          ?, ?, ?, ?,      -- 8-11
+
+          ?, ?, ?, ?, ?,   -- 12-16
+          ?,               -- 17
+
+          ?, ?, ?,         -- 18-20
+          ?,               -- 21
+
+          NOW(), NOW()
+        )
+        RETURNING *
+        """;
 
         return jdbcClient.sql(sql)
                 .params(
                         proforma.getStationId(),
                         proforma.getCreatedBy(),
+
                         proforma.getSeries(),
                         proforma.getNumber(),
                         java.sql.Date.valueOf(proforma.getIssueDate()),
+
                         String.valueOf(proforma.getPriceList()),
                         proforma.getCurrency(),
+
+                        proforma.getTaxStatus(),
+                        proforma.getIgvRate(),
+                        (proforma.getIgvIncluded() != null ? proforma.getIgvIncluded() : Boolean.FALSE),
+                        proforma.getIgvAmount(),
+
                         proforma.getCustomerId(),
                         proforma.getCustomerDocType(),
                         proforma.getCustomerDocNumber(),
                         proforma.getCustomerName(),
                         proforma.getCustomerAddress(),
+
                         proforma.getNotes(),
+
                         proforma.getSubtotal(),
                         proforma.getDiscountTotal(),
                         proforma.getTotal(),
+
                         proforma.getStatus().name()
                 )
                 .query(new ProformaRowMapper())

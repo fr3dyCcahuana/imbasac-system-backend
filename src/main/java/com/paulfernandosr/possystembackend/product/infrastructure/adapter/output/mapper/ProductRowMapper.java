@@ -18,6 +18,13 @@ public class ProductRowMapper implements RowMapper<Product> {
                 .category(rs.getString("category"))
                 .presentation(rs.getString("presentation"))
                 .factor(rs.getBigDecimal("factor"))
+
+                // ✅ nuevos
+                .manageBySerial(rs.getObject("manage_by_serial", Boolean.class))
+                .facturableSunat(rs.getObject("facturable_sunat", Boolean.class))
+                .affectsStock(rs.getObject("affects_stock", Boolean.class))
+                .giftAllowed(rs.getObject("gift_allowed", Boolean.class))
+
                 .originType(rs.getString("origin_type"))
                 .originCountry(rs.getString("origin_country"))
                 .factoryCode(rs.getString("factory_code"))

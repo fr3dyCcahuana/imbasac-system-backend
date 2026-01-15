@@ -22,6 +22,9 @@ public class Product {
     private String presentation;      // UNIDAD / PAR / SET / KIT
     private BigDecimal factor;        // Contenido (2 si es par, etc.)
 
+    // ✅ NUEVO: serial/VIN
+    private Boolean manageBySerial;
+
     // 2. Info opcional recomendada
     private String originType;        // NACIONAL / IMPORTADO / FABRICA
     private String originCountry;     // País
@@ -40,8 +43,12 @@ public class Product {
     private BigDecimal priceC;
     private BigDecimal priceD;
 
-    // Costo referencia
     private BigDecimal costReference;
+
+    // ✅ NUEVO: flags venta/SUNAT/stock
+    private Boolean facturableSunat;
+    private Boolean affectsStock;
+    private Boolean giftAllowed;
 
     // Auditoría
     private LocalDateTime createdAt;

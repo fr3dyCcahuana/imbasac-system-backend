@@ -58,6 +58,13 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
 
         LocalDate issueDate = request.getIssueDate() != null ? request.getIssueDate() : LocalDate.now();
 
+        boolean igvIncluded = Boolean.TRUE.equals(request.getIgvIncluded());
+        if (request.getTaxStatus() != TaxStatus.GRAVADA) {
+            igvIncluded = false;
+        }
+
+        BigDecimal igvRate = nz(request.getIgvRate(), new BigDecimal("18.00"));
+
         // 1) Reservar correlativo (FOR UPDATE) - Regla #2
         LockedDocumentSeries locked = documentSeriesRepository.lockSeries(
                 request.getStationId(),
@@ -97,7 +104,6 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
 
             // Seriales/VIN - Regla #6
             if (Boolean.TRUE.equals(product.getManageBySerial())) {
-                // Cantidad debe ser entera
                 int qtyInt;
                 try {
                     qtyInt = quantity.intValueExact();
@@ -110,7 +116,6 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                     throw new InvalidSaleV2Exception("Debe seleccionar exactamente " + qtyInt + " unidades (serialUnitIds) para productId=" + item.getProductId());
                 }
 
-                // Bloquear unidades y validar estado EN_ALMACEN
                 List<SerialUnit> units = productSerialUnitRepository.lockByIds(serialIds);
 
                 if (units.size() != serialIds.size()) {
@@ -126,7 +131,6 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                     }
                 }
 
-                // Si es serializado, típicamente afecta stock; si tu negocio define lo contrario, ajusta.
                 if (Boolean.FALSE.equals(product.getAffectsStock())) {
                     throw new InvalidSaleV2Exception("Producto serializado debe afectar stock. productId=" + product.getId());
                 }
@@ -137,26 +141,51 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                 }
             }
 
-            // Precio por lista (snapshot) - Regla #3
-            BigDecimal unitPrice = product.priceFor(request.getPriceList());
+            // Precio por lista (snapshot) con override
+            BigDecimal unitPrice = (item.getUnitPriceOverride() != null)
+                    ? item.getUnitPriceOverride()
+                    : product.priceFor(request.getPriceList());
+
             if (unitPrice == null) unitPrice = BigDecimal.ZERO;
 
             if (kind == LineKind.OBSEQUIO) {
                 unitPrice = BigDecimal.ZERO;
             }
 
+            // Descuento: SOLO SIMPLE (regla de negocio)
             BigDecimal discountPercent = nz(item.getDiscountPercent());
             if (discountPercent.compareTo(BigDecimal.ZERO) < 0) {
                 throw new InvalidSaleV2Exception("discountPercent no puede ser negativo. productId=" + item.getProductId());
             }
+            if (request.getDocType() != DocType.SIMPLE && discountPercent.compareTo(BigDecimal.ZERO) != 0) {
+                throw new InvalidSaleV2Exception("Descuentos solo permitidos para ventas SIMPLE. En BOLETA/FACTURA el descuento debe ser 0. productId=" + item.getProductId());
+            }
 
+            // Cálculo base por línea:
             BigDecimal gross = quantity.multiply(unitPrice);
-            BigDecimal discountAmount = gross.multiply(discountPercent)
+
+            // Si igvIncluded=true y taxStatus=GRAVADA, el descuento se aplica sobre el precio final (gross incluye IGV)
+            BigDecimal discountAmount = (kind == LineKind.OBSEQUIO)
+                    ? BigDecimal.ZERO
+                    : gross.multiply(discountPercent)
                     .divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
 
-            BigDecimal revenueTotal = (kind == LineKind.OBSEQUIO)
+            BigDecimal grossAfterDiscount = (kind == LineKind.OBSEQUIO)
                     ? BigDecimal.ZERO
-                    : gross.subtract(discountAmount);
+                    : gross.subtract(discountAmount).setScale(4, RoundingMode.HALF_UP);
+
+            // Base/IGV por línea (solo necesario si igvIncluded=true)
+            BigDecimal baseLine = grossAfterDiscount;
+            BigDecimal igvLine = BigDecimal.ZERO;
+
+            if (request.getTaxStatus() == TaxStatus.GRAVADA && igvIncluded && kind != LineKind.OBSEQUIO) {
+                BigDecimal divisor = BigDecimal.ONE.add(
+                        igvRate.divide(new BigDecimal("100"), 10, RoundingMode.HALF_UP)
+                ); // 1.18
+
+                baseLine = grossAfterDiscount.divide(divisor, 4, RoundingMode.HALF_UP);
+                igvLine = grossAfterDiscount.subtract(baseLine).setScale(4, RoundingMode.HALF_UP);
+            }
 
             // Regla visible_in_document (Regla #4)
             boolean visibleInDocument = request.getDocType() == DocType.SIMPLE
@@ -186,12 +215,16 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                     .visibleInDocument(visibleInDocument)
                     .unitCostSnapshot(unitCostSnapshot)
                     .totalCostSnapshot(totalCostSnapshot)
-                    .revenueTotal(revenueTotal.setScale(4, RoundingMode.HALF_UP))
+                    // revenueTotal siempre = BASE (subtotal)
+                    .revenueTotal(baseLine.setScale(4, RoundingMode.HALF_UP))
+                    // solo se usa si igvIncluded=true
+                    .igvLine(igvLine.setScale(4, RoundingMode.HALF_UP))
+                    .grossAfterDiscount(grossAfterDiscount) // total final por línea si igvIncluded=true
                     .serialUnitIds(item.getSerialUnitIds())
                     .build());
         }
 
-        // 3) Calcular totales cabecera (Regla #7/#8)
+        // 3) Calcular totales cabecera
         Totals totals = calculateTotals(request, computedLines);
 
         // 3.1) Validaciones por documento (Regla #11)
@@ -222,7 +255,6 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                 }
             }
 
-            // Validar elegibilidad de crédito contra customer_account (Regla #10)
             customerAccountRepository.ensureExists(request.getCustomerId());
             accountsReceivableRepository.markOverdueForCustomer(request.getCustomerId());
             customerAccountRepository.recalculate(request.getCustomerId());
@@ -245,10 +277,11 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
             }
 
         } else {
-            // CONTADO: no debería registrar campos de crédito
             creditDays = null;
             dueDate = null;
         }
+
+        boolean finalIgvIncluded = Boolean.TRUE.equals(request.getIgvIncluded()) && request.getTaxStatus() == TaxStatus.GRAVADA;
 
         // 4) Insertar sale + items
         Long saleId = saleV2Repository.insertSale(
@@ -270,6 +303,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                 request.getTaxStatus().name(),
                 request.getTaxReason(),
                 nz(request.getIgvRate(), new BigDecimal("18.00")),
+                finalIgvIncluded,
                 request.getPaymentType().name(),
                 creditDays,
                 dueDate,
@@ -299,13 +333,11 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                     line.getRevenueTotal()
             );
 
-            // 5) Stock + Kardex (Regla #5)
             if (Boolean.TRUE.equals(line.getProduct().getAffectsStock())) {
                 productStockRepository.decreaseOnHandOrFail(line.getProduct().getId(), line.getQuantity());
                 productStockMovementRepository.createOutSale(line.getProduct().getId(), line.getQuantity(), saleItemId);
             }
 
-            // 6) Seriales: asociar unidades a sale_item y marcar VENDIDO (Regla #6)
             if (Boolean.TRUE.equals(line.getProduct().getManageBySerial())) {
                 for (Long serialUnitId : line.getSerialUnitIds()) {
                     productSerialUnitRepository.markAsSold(serialUnitId, saleItemId);
@@ -323,7 +355,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                 totals.giftCostTotal
         );
 
-        // 8) Pago / CxC (Regla #9 y #10)
+        // 8) Pago / CxC
         Long arId = null;
         if (request.getPaymentType() == PaymentType.CONTADO) {
             if (request.getPayment() == null || request.getPayment().getMethod() == null) {
@@ -331,7 +363,6 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
             }
             salePaymentRepository.insert(saleId, request.getPayment().getMethod().name(), totals.total);
         } else {
-            // CREDITO: crear CxC y actualizar customer_account
             LocalDate finalDueDate = dueDate;
             String arStatus = (finalDueDate != null && finalDueDate.isBefore(LocalDate.now())) ? "VENCIDO" : "PENDIENTE";
             arId = accountsReceivableRepository.insert(
@@ -349,12 +380,10 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
             customerAccountRepository.recalculate(request.getCustomerId());
         }
 
-        // 9) Acumular en sesión (mantener sesión sin refactor)
         if (request.getSaleSessionId() != null) {
             saleSessionAccumulatorRepository.addSaleIncomeAndDiscount(request.getSaleSessionId(), totals.total, totals.discountTotal);
         }
 
-        // 10) Incrementar correlativo (Regla #2)
         documentSeriesRepository.incrementNextNumber(locked.getId());
 
         return SaleV2DocumentResponse.builder()
@@ -375,7 +404,6 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
     }
 
     private void validateDocumentRules(SaleV2CreateRequest request, Totals totals) {
-        // FACTURA: exige RUC
         if (request.getDocType() == DocType.FACTURA) {
             if (request.getCustomerDocType() == null || !"RUC".equalsIgnoreCase(request.getCustomerDocType())) {
                 throw new InvalidSaleV2Exception("FACTURA requiere customerDocType=RUC.");
@@ -385,7 +413,6 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
             }
         }
 
-        // Regla interna por monto: total >= 700 exige documento de identidad
         if (totals != null && totals.total != null && totals.total.compareTo(new BigDecimal("700")) >= 0) {
             if (request.getCustomerDocType() == null || request.getCustomerDocType().trim().isEmpty()
                     || request.getCustomerDocNumber() == null || request.getCustomerDocNumber().trim().isEmpty()) {
@@ -401,14 +428,23 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         if (request.getSeries() == null || request.getSeries().trim().isEmpty()) throw new InvalidSaleV2Exception("series es obligatorio.");
         if (request.getPriceList() == null) throw new InvalidSaleV2Exception("priceList es obligatorio.");
         if (request.getTaxStatus() == null) request.setTaxStatus(TaxStatus.NO_GRAVADA);
+        if (request.getIgvIncluded() == null) request.setIgvIncluded(Boolean.FALSE);
+        if (request.getTaxStatus() != TaxStatus.GRAVADA) request.setIgvIncluded(Boolean.FALSE);
         if (request.getPaymentType() == null) throw new InvalidSaleV2Exception("paymentType es obligatorio.");
         if (request.getItems() == null || request.getItems().isEmpty()) throw new InvalidSaleV2Exception("Debe enviar items.");
     }
 
     private Totals calculateTotals(SaleV2CreateRequest request, List<ComputedLine> lines) {
-        BigDecimal subtotal = BigDecimal.ZERO;
-        BigDecimal discountTotal = BigDecimal.ZERO;
+        boolean igvIncluded = Boolean.TRUE.equals(request.getIgvIncluded()) && request.getTaxStatus() == TaxStatus.GRAVADA;
+
+        BigDecimal subtotal = BigDecimal.ZERO;       // BASE
+        BigDecimal discountTotal = BigDecimal.ZERO;  // descuento aplicado sobre gross (si igvIncluded=true)
         BigDecimal giftCostTotal = BigDecimal.ZERO;
+
+        BigDecimal igvAmount = BigDecimal.ZERO;
+        BigDecimal total = BigDecimal.ZERO;
+
+        BigDecimal igvRate = nz(request.getIgvRate(), new BigDecimal("18.00"));
 
         for (ComputedLine l : lines) {
             subtotal = subtotal.add(l.getRevenueTotal());
@@ -417,19 +453,30 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
             if (l.getLineKind() == LineKind.OBSEQUIO && l.getTotalCostSnapshot() != null) {
                 giftCostTotal = giftCostTotal.add(l.getTotalCostSnapshot());
             }
+
+            if (igvIncluded) {
+                igvAmount = igvAmount.add(l.getIgvLine());
+                total = total.add(l.getGrossAfterDiscount());
+            } else {
+                total = total.add(l.getRevenueTotal());
+            }
         }
 
         subtotal = subtotal.setScale(4, RoundingMode.HALF_UP);
         discountTotal = discountTotal.setScale(4, RoundingMode.HALF_UP);
         giftCostTotal = giftCostTotal.setScale(4, RoundingMode.HALF_UP);
 
-        BigDecimal igvAmount = BigDecimal.ZERO;
-        if (request.getTaxStatus() == TaxStatus.GRAVADA) {
-            BigDecimal igvRate = nz(request.getIgvRate(), new BigDecimal("18.00"));
+        if (request.getTaxStatus() == TaxStatus.GRAVADA && !igvIncluded) {
             igvAmount = subtotal.multiply(igvRate).divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
+            total = subtotal.add(igvAmount).setScale(4, RoundingMode.HALF_UP);
+        } else if (request.getTaxStatus() != TaxStatus.GRAVADA) {
+            igvAmount = BigDecimal.ZERO;
+            total = subtotal.setScale(4, RoundingMode.HALF_UP);
+        } else {
+            // GRAVADA + igvIncluded=true
+            igvAmount = igvAmount.setScale(4, RoundingMode.HALF_UP);
+            total = total.setScale(4, RoundingMode.HALF_UP);
         }
-
-        BigDecimal total = subtotal.add(igvAmount).setScale(4, RoundingMode.HALF_UP);
 
         return new Totals(subtotal, discountTotal, igvAmount, total, giftCostTotal);
     }
@@ -464,7 +511,22 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         private Boolean visibleInDocument;
         private BigDecimal unitCostSnapshot;
         private BigDecimal totalCostSnapshot;
+
+        /**
+         * BASE de la línea (con descuento aplicado)
+         */
         private BigDecimal revenueTotal;
+
+        /**
+         * Si igvIncluded=true: IGV por línea
+         */
+        private BigDecimal igvLine;
+
+        /**
+         * Si igvIncluded=true: total final de línea (gross after discount)
+         */
+        private BigDecimal grossAfterDiscount;
+
         private List<Long> serialUnitIds;
     }
 
