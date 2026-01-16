@@ -5,13 +5,10 @@ import com.paulfernandosr.possystembackend.common.domain.Pageable;
 import com.paulfernandosr.possystembackend.common.infrastructure.mapper.PageMapper;
 import com.paulfernandosr.possystembackend.common.infrastructure.response.SuccessResponse;
 import com.paulfernandosr.possystembackend.product.domain.Product;
-import com.paulfernandosr.possystembackend.product.domain.port.input.CreateNewProductUseCase;
-import com.paulfernandosr.possystembackend.product.domain.port.input.GetPageOfProductsUseCase;
-import com.paulfernandosr.possystembackend.product.domain.port.input.GetProductInfoUseCase;
-import com.paulfernandosr.possystembackend.product.domain.port.input.UpdateProductInfoUseCase;
+import com.paulfernandosr.possystembackend.product.domain.ProductSalesDetail;
+import com.paulfernandosr.possystembackend.product.domain.port.input.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,7 +24,7 @@ public class ProductRestController {
     private final GetPageOfProductsUseCase getPageOfProductsUseCase;
     private final GetProductInfoUseCase getProductInfoUseCase;
     private final UpdateProductInfoUseCase updateProductInfoUseCase;
-
+    private final GetProductSalesDetailPageUseCase getProductSalesDetailPageUseCase;
     // POST /products
     @PostMapping
     public ResponseEntity<SuccessResponse<Product>> createNewProduct(
@@ -70,5 +67,24 @@ public class ProductRestController {
     ) {
         updateProductInfoUseCase.updateProductInfoById(productId, product);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/sales-detail")
+    public ResponseEntity<SuccessResponse<Collection<ProductSalesDetail>>> getSalesDetailPage(
+            @RequestParam(defaultValue = "") String query,
+            @RequestParam(defaultValue = "") String category,
+            @RequestParam(defaultValue = "false") boolean onlyWithStock,
+            @RequestParam(defaultValue = "A") String priceList,
+            @RequestParam(defaultValue = "PROFORMA") String context,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size
+    ) {
+        Page<ProductSalesDetail> result = getProductSalesDetailPageUseCase.getPage(
+                query, category, onlyWithStock, priceList, context,
+                new Pageable(page, size)
+        );
+
+        SuccessResponse.Metadata metadata = PageMapper.mapPage(result);
+        return ResponseEntity.ok(SuccessResponse.ok(result.getContent(), metadata));
     }
 }
