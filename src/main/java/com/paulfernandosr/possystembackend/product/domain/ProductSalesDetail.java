@@ -11,6 +11,7 @@ public class ProductSalesDetail {
 
     private Long id;
     private String sku;
+    private String barcode;
     private String name;
     private String category;
     private String presentation;

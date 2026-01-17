@@ -77,6 +77,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                   SELECT
                     p.id,
                     p.sku,
+                    p.barcode,
                     p.name,
                     p.category,
                     p.presentation,
@@ -114,7 +115,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                     AND (? <> 'SALE' OR p.facturable_sunat = TRUE)
                 )
                 SELECT
-                  id, sku, name, category, presentation, factor,
+                  id, sku, barcode, name, category, presentation, factor,
                   manage_by_serial, compatibility, gift_allowed,
                   affects_stock, facturable_sunat,
                   unit_price,
@@ -142,6 +143,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                 .query((rs, rowNum) -> ProductSalesDetail.builder()
                         .id(rs.getLong("id"))
                         .sku(rs.getString("sku"))
+                        .barcode(rs.getString("barcode"))
                         .name(rs.getString("name"))
                         .category(rs.getString("category"))
                         .presentation(rs.getString("presentation"))

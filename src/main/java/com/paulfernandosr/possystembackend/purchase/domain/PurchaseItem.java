@@ -5,6 +5,7 @@ import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Setter
@@ -38,4 +39,5 @@ public class PurchaseItem {
     private LocalDate expirationDate;
 
     private LocalDateTime createdAt;
+    private List<PurchaseSerialUnit> serialUnits;
 }
