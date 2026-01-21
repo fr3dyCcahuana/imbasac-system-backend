@@ -51,7 +51,7 @@ public class PostgresProductRepository implements ProductRepository {
                 affects_stock,
                 gift_allowed
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, FALSE), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), COALESCE(?, TRUE), COALESCE(?, FALSE))
             RETURNING
                 id          AS product_id,
                 sku,
@@ -293,7 +293,7 @@ public class PostgresProductRepository implements ProductRepository {
                    category           = ?,
                    presentation       = ?,
                    factor             = ?,
-                   manage_by_serial   = ?,
+                   manage_by_serial   = COALESCE(?, manage_by_serial),
                    origin_type        = ?,
                    origin_country     = ?,
                    factory_code       = ?,
@@ -305,9 +305,9 @@ public class PostgresProductRepository implements ProductRepository {
                    price_c            = ?,
                    price_d            = ?,
                    cost_reference     = ?,
-                   facturable_sunat   = ?,
-                   affects_stock      = ?,
-                   gift_allowed       = ?,
+                   facturable_sunat   = COALESCE(?, facturable_sunat),
+                   affects_stock      = COALESCE(?, affects_stock),
+                   gift_allowed       = COALESCE(?, gift_allowed),
                    updated_at         = NOW()
              WHERE id = ?
             """;

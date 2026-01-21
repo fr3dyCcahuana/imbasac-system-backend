@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.paulfernandosr</groupId>
 	<artifactId>pos-system-backend</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<version>1.0.0-SNAPSHOT</version>
 	<name>pos-system-backend</name>
 	<description>Backend service for POS systems</description>
 	<url/>

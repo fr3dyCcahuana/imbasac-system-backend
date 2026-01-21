@@ -50,6 +50,10 @@ public class Product {
     private Boolean affectsStock;
     private Boolean giftAllowed;
 
+    // ✅ NUEVO (2026): ficha técnica para categorías vehiculares (MOTOR / MOTOCICLETAS)
+    // NOTA: No se persiste en la tabla product; se guarda en product_vehicle_specs.
+    private ProductVehicleSpecs vehicleSpecs;
+
     // Auditoría
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
