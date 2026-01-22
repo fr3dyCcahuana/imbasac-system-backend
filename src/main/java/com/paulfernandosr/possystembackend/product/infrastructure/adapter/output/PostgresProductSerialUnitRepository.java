@@ -28,6 +28,7 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
             INSERT INTO product_serial_unit(
                 product_id,
                 purchase_item_id,
+                stock_adjustment_id,
                 vin,
                 serial_number,
                 engine_number,
@@ -38,12 +39,13 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
                 status,
                 location_code
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING
                 id AS serial_unit_id,
                 product_id,
                 purchase_item_id,
                 sale_item_id,
+                stock_adjustment_id,
                 vin,
                 serial_number,
                 engine_number,
@@ -62,6 +64,7 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
                     .params(
                             unit.getProductId(),
                             unit.getPurchaseItemId(),
+                            unit.getStockAdjustmentId(),
                             unit.getVin(),
                             unit.getSerialNumber(),
                             unit.getEngineNumber(),
@@ -115,6 +118,7 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
                 u.product_id,
                 u.purchase_item_id,
                 u.sale_item_id,
+                u.stock_adjustment_id,
                 u.vin,
                 u.serial_number,
                 u.engine_number,
@@ -160,5 +164,115 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
                 .totalPages(totalPages.intValue())
                 .totalElements(totalElements)
                 .build();
+    }
+
+    @Override
+    public java.util.Optional<ProductSerialUnit> findAvailableById(Long productId, Long serialUnitId) {
+        String sql = """
+            SELECT
+                u.id AS serial_unit_id,
+                u.product_id,
+                u.purchase_item_id,
+                u.sale_item_id,
+                u.stock_adjustment_id,
+                u.vin,
+                u.serial_number,
+                u.engine_number,
+                u.color,
+                u.year_make,
+                u.year_model,
+                u.vehicle_class,
+                u.status,
+                u.location_code,
+                u.created_at,
+                u.updated_at
+              FROM product_serial_unit u
+             WHERE u.product_id = ?
+               AND u.id = ?
+               AND u.status = 'EN_ALMACEN'
+            """;
+
+        return jdbcClient.sql(sql)
+                .params(productId, serialUnitId)
+                .query(new ProductSerialUnitRowMapper())
+                .optional();
+    }
+
+    @Override
+    public java.util.Optional<ProductSerialUnit> findAvailableByVin(Long productId, String vin) {
+        String sql = baseFindAvailableBy("vin");
+        return jdbcClient.sql(sql)
+                .params(productId, vin)
+                .query(new ProductSerialUnitRowMapper())
+                .optional();
+    }
+
+    @Override
+    public java.util.Optional<ProductSerialUnit> findAvailableByEngineNumber(Long productId, String engineNumber) {
+        String sql = baseFindAvailableBy("engine_number");
+        return jdbcClient.sql(sql)
+                .params(productId, engineNumber)
+                .query(new ProductSerialUnitRowMapper())
+                .optional();
+    }
+
+    @Override
+    public java.util.Optional<ProductSerialUnit> findAvailableBySerialNumber(Long productId, String serialNumber) {
+        // Puede haber duplicados si no hay índice único; por eso detectamos ambigüedad.
+        String sql = baseFindAvailableBy("serial_number") + " LIMIT 2";
+        List<ProductSerialUnit> list = jdbcClient.sql(sql)
+                .params(productId, serialNumber)
+                .query(new ProductSerialUnitRowMapper())
+                .list();
+
+        if (list.size() > 1) {
+            throw new InvalidProductSerialUnitException("serialNumber es ambiguo (existen múltiples unidades con ese valor). Use vin o engineNumber.");
+        }
+        return list.stream().findFirst();
+    }
+
+    @Override
+    public void markAsBaja(Long serialUnitId, Long stockAdjustmentId) {
+        String sql = """
+            UPDATE product_serial_unit
+               SET status = 'BAJA',
+                   stock_adjustment_id = ?,
+                   updated_at = NOW()
+             WHERE id = ?
+            """;
+
+        jdbcClient.sql(sql)
+                .params(stockAdjustmentId, serialUnitId)
+                .update();
+    }
+
+    private String baseFindAvailableBy(String column) {
+        return """
+            SELECT
+                u.id AS serial_unit_id,
+                u.product_id,
+                u.purchase_item_id,
+                u.sale_item_id,
+                u.stock_adjustment_id,
+                u.vin,
+                u.serial_number,
+                u.engine_number,
+                u.color,
+                u.year_make,
+                u.year_model,
+                u.vehicle_class,
+                u.status,
+                u.location_code,
+                u.created_at,
+                u.updated_at
+              FROM product_serial_unit u
+             WHERE u.product_id = ?
+               AND u.status = 'EN_ALMACEN'
+               AND u."""
+                + column +
+             """ 
+             = ?
+             LIMIT 1
+            """;
     }
 }

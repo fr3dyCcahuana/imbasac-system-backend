@@ -23,6 +23,7 @@ public class ProductSerialUnitRowMapper implements RowMapper<ProductSerialUnit> 
                 .productId(rs.getLong("product_id"))
                 .purchaseItemId(rs.getObject("purchase_item_id", Long.class))
                 .saleItemId(rs.getObject("sale_item_id", Long.class))
+                .stockAdjustmentId(rs.getObject("stock_adjustment_id", Long.class))
                 .vin(rs.getString("vin"))
                 .serialNumber(rs.getString("serial_number"))
                 .engineNumber(rs.getString("engine_number"))

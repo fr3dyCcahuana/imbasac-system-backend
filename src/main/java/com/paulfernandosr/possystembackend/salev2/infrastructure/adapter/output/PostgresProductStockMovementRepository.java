@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 
-@Repository
+@Repository("salev2PostgresProductStockMovementRepository")
 @RequiredArgsConstructor
 public class PostgresProductStockMovementRepository implements ProductStockMovementRepository {
 

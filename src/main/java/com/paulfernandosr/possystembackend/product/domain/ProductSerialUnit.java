@@ -17,6 +17,9 @@ public class ProductSerialUnit {
     private Long purchaseItemId;
     private Long saleItemId;
 
+    // ✅ NUEVO (2026): vínculo a ajuste manual de stock (facturableSunat=false)
+    private Long stockAdjustmentId;
+
     private String vin;
     private String serialNumber;
     private String engineNumber;
