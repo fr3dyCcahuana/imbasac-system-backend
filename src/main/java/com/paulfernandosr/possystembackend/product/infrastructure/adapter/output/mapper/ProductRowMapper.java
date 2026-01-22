@@ -36,6 +36,9 @@ public class ProductRowMapper implements RowMapper<Product> {
                 .priceC(rs.getBigDecimal("price_c"))
                 .priceD(rs.getBigDecimal("price_d"))
                 .costReference(rs.getBigDecimal("cost_reference"))
+
+                // ✅ stock real (on hand)
+                .stockOnHand(rs.getBigDecimal("stock_on_hand"))
                 .createdAt(rs.getTimestamp("created_at").toLocalDateTime())
                 .updatedAt(rs.getTimestamp("updated_at").toLocalDateTime())
                 .build();

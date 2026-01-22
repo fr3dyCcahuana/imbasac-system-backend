@@ -46,6 +46,10 @@ public class Product {
 
     private BigDecimal costReference;
 
+    // ✅ NUEVO (2026): stock real (on hand) para listados/detalle.
+    // Se calcula desde product_stock (no serial) o desde conteo de seriales EN_ALMACEN (serial).
+    private BigDecimal stockOnHand;
+
     // ✅ NUEVO: flags venta/SUNAT/stock
     private Boolean facturableSunat;
     private Boolean affectsStock;

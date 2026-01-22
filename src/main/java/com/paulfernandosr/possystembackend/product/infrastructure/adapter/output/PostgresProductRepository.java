@@ -75,6 +75,22 @@ public class PostgresProductRepository implements ProductRepository {
                 facturable_sunat,
                 affects_stock,
                 gift_allowed,
+                -- ✅ stock real (on hand)
+                CASE
+                  WHEN manage_by_serial = TRUE THEN
+                    COALESCE((
+                      SELECT COUNT(*)::numeric(14,3)
+                      FROM product_serial_unit su
+                      WHERE su.product_id = id
+                        AND su.status = 'EN_ALMACEN'
+                    ), 0)
+                  ELSE
+                    COALESCE((
+                      SELECT ps.quantity_on_hand
+                      FROM product_stock ps
+                      WHERE ps.product_id = id
+                    ), 0)
+                END AS stock_on_hand,
                 created_at,
                 updated_at
             """;
@@ -162,9 +178,25 @@ public class PostgresProductRepository implements ProductRepository {
                 p.facturable_sunat,
                 p.affects_stock,
                 p.gift_allowed,
+                -- ✅ stock real (on hand)
+                CASE
+                  WHEN p.manage_by_serial = TRUE THEN COALESCE(su_agg.serial_qty, 0)
+                  ELSE COALESCE(ps.quantity_on_hand, 0)
+                END AS stock_on_hand,
                 p.created_at,
                 p.updated_at
             FROM product p
+            LEFT JOIN product_stock ps
+                   ON ps.product_id = p.id
+            LEFT JOIN (
+              SELECT
+                product_id,
+                COUNT(*)::numeric(14,3) AS serial_qty
+              FROM product_serial_unit
+              WHERE status = 'EN_ALMACEN'
+              GROUP BY product_id
+            ) su_agg
+                   ON su_agg.product_id = p.id
             WHERE p.sku ILIKE ?
                OR p.barcode ILIKE ?
                OR p.name ILIKE ?
@@ -226,9 +258,25 @@ public class PostgresProductRepository implements ProductRepository {
                 p.facturable_sunat,
                 p.affects_stock,
                 p.gift_allowed,
+                -- ✅ stock real (on hand)
+                CASE
+                  WHEN p.manage_by_serial = TRUE THEN COALESCE(su_agg.serial_qty, 0)
+                  ELSE COALESCE(ps.quantity_on_hand, 0)
+                END AS stock_on_hand,
                 p.created_at,
                 p.updated_at
             FROM product p
+            LEFT JOIN product_stock ps
+                   ON ps.product_id = p.id
+            LEFT JOIN (
+              SELECT
+                product_id,
+                COUNT(*)::numeric(14,3) AS serial_qty
+              FROM product_serial_unit
+              WHERE status = 'EN_ALMACEN'
+              GROUP BY product_id
+            ) su_agg
+                   ON su_agg.product_id = p.id
             WHERE p.id = ?
             """;
 
@@ -272,9 +320,25 @@ public class PostgresProductRepository implements ProductRepository {
                 p.facturable_sunat,
                 p.affects_stock,
                 p.gift_allowed,
+                -- ✅ stock real (on hand)
+                CASE
+                  WHEN p.manage_by_serial = TRUE THEN COALESCE(su_agg.serial_qty, 0)
+                  ELSE COALESCE(ps.quantity_on_hand, 0)
+                END AS stock_on_hand,
                 p.created_at,
                 p.updated_at
             FROM product p
+            LEFT JOIN product_stock ps
+                   ON ps.product_id = p.id
+            LEFT JOIN (
+              SELECT
+                product_id,
+                COUNT(*)::numeric(14,3) AS serial_qty
+              FROM product_serial_unit
+              WHERE status = 'EN_ALMACEN'
+              GROUP BY product_id
+            ) su_agg
+                   ON su_agg.product_id = p.id
             WHERE p.id IN (""" + placeholders + ")";
 
         return jdbcClient.sql(sql)

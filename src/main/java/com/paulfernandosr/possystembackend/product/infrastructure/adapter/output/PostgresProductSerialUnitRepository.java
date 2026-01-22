@@ -268,8 +268,7 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
               FROM product_serial_unit u
              WHERE u.product_id = ?
                AND u.status = 'EN_ALMACEN'
-               AND u."""
-                + column +
+               AND u.""" + column +
              """ 
              = ?
              LIMIT 1
