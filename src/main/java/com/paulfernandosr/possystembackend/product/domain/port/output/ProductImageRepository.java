@@ -11,6 +11,12 @@ public interface ProductImageRepository {
 
     Collection<ProductImage> findByProductId(Long productId);
 
+    /**
+     * Recupera todas las imágenes asociadas a múltiples productos.
+     * Útil para evitar N+1 en el paginado.
+     */
+    Collection<ProductImage> findByProductIds(Collection<Long> productIds);
+
     Optional<ProductImage> findByIdAndProductId(Long imageId, Long productId);
 
     void update(ProductImage image);

@@ -3,6 +3,8 @@ package com.paulfernandosr.possystembackend.customer.infrastructure.adapter.outp
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
+import java.util.List;
+
 @Getter
 @Setter
 @Builder
@@ -49,8 +51,16 @@ public class JuridicalPerson {
     private String province;
     @JsonProperty("departamento")
     private String department;
+
     @JsonProperty("EsAgenteRetencion")
     private boolean isRetentionAgent;
+
+    @JsonProperty("EsBuenContribuyente")
+    private boolean isGoodContributor;
+
+    @JsonProperty("localesAnexos")
+    private List<JuridicalPersonLocal> annexLocations;
+
     @JsonProperty("tipo")
     private String type;
     @JsonProperty("actividadEconomica")

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.StringJoiner;
 import java.util.Optional;
 
 @Repository
@@ -64,6 +65,36 @@ public class PostgresProductImageRepository implements ProductImageRepository {
 
         return jdbcClient.sql(sql)
                 .param(productId)
+                .query(new ProductImageRowMapper())
+                .list();
+    }
+
+    @Override
+    public Collection<ProductImage> findByProductIds(Collection<Long> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return List.of();
+        }
+
+        // Construimos placeholders dinámicos para evitar problemas con arrays/ANY en JdbcClient.
+        StringJoiner joiner = new StringJoiner(",");
+        for (int i = 0; i < productIds.size(); i++) {
+            joiner.add("?");
+        }
+
+        String sql = """
+                SELECT
+                    id,
+                    product_id,
+                    image_url,
+                    position,
+                    is_main,
+                    created_at
+                FROM product_image
+                WHERE product_id IN (""" + joiner + ")\n" +
+                "ORDER BY product_id ASC, position ASC, created_at ASC";
+
+        return jdbcClient.sql(sql)
+                .params(productIds.toArray())
                 .query(new ProductImageRowMapper())
                 .list();
     }
