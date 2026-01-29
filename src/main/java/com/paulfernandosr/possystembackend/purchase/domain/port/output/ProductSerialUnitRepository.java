@@ -11,7 +11,7 @@ public interface ProductSerialUnitRepository {
     List<SerialIdentifierConflict> findExistingIdentifiers(
             Set<String> vins,
             Set<String> engineNumbers,
-            Set<String> serialNumbers
+            Set<String> chassisNumbers
     );
 
     void insertInboundSerialUnits(

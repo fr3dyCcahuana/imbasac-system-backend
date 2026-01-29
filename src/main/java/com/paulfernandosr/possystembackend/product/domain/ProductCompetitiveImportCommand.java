@@ -13,8 +13,11 @@ public class ProductCompetitiveImportCommand {
     private byte[] fileBytes;
     private String originalFilename;
 
-    private BigDecimal montoRestaPublico;
-    private BigDecimal montoRestaMayorista;
+    // porcentajes
+    private BigDecimal pctPublicA;
+    private BigDecimal pctPublicB;
+    private BigDecimal pctWholesaleC;
+    private BigDecimal pctWholesaleD;
 
     private Boolean dryRun;
     private Boolean atomic;

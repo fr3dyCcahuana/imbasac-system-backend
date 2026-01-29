@@ -76,6 +76,17 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
                 throw new InvalidProformaV2Exception("Producto no encontrado: " + reqItem.getProductId());
             }
 
+            // ✅ Guardrail: solo MOTOR/MOTOCICLETAS pueden ser manage_by_serial=true
+            if (Boolean.TRUE.equals(p.getManageBySerial())) {
+                String cat = p.getCategory();
+                if (cat == null || (!cat.equalsIgnoreCase("MOTOR") && !cat.equalsIgnoreCase("MOTOCICLETAS"))) {
+                    throw new InvalidProformaV2Exception(
+                            "Producto inválido: manage_by_serial=true solo aplica a categoría MOTOR/MOTOCICLETAS. " +
+                                    "SKU=" + p.getSku() + ", category=" + cat
+                    );
+                }
+            }
+
             BigDecimal qty = new BigDecimal(reqItem.getQuantity());
             if (qty.compareTo(BigDecimal.ZERO) <= 0) {
                 throw new InvalidProformaV2Exception("Cantidad inválida en línea " + line);

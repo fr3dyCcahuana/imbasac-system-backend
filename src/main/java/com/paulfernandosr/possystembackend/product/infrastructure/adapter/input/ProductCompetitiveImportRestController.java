@@ -31,20 +31,23 @@ public class ProductCompetitiveImportRestController {
     )
     public ResponseEntity<?> importCompetitive(
             @RequestPart("file") MultipartFile file,
-            @RequestParam BigDecimal montoRestaPublico,
-            @RequestParam BigDecimal montoRestaMayorista,
+
+            @RequestParam BigDecimal pctPublicA,
+            @RequestParam BigDecimal pctPublicB,
+            @RequestParam BigDecimal pctWholesaleC,
+            @RequestParam BigDecimal pctWholesaleD,
+
             @RequestParam(defaultValue = "false") boolean dryRun,
             @RequestParam(defaultValue = "true") boolean atomic
     ) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(BAD_REQUEST, "Debe enviar el archivo Excel en 'file'.");
         }
-        if (montoRestaPublico == null || montoRestaPublico.compareTo(BigDecimal.ZERO) < 0) {
-            throw new ResponseStatusException(BAD_REQUEST, "montoRestaPublico debe ser >= 0.");
-        }
-        if (montoRestaMayorista == null || montoRestaMayorista.compareTo(BigDecimal.ZERO) < 0) {
-            throw new ResponseStatusException(BAD_REQUEST, "montoRestaMayorista debe ser >= 0.");
-        }
+
+        validatePct("pctPublicA", pctPublicA);
+        validatePct("pctPublicB", pctPublicB);
+        validatePct("pctWholesaleC", pctWholesaleC);
+        validatePct("pctWholesaleD", pctWholesaleD);
 
         byte[] bytes;
         try {
@@ -56,8 +59,12 @@ public class ProductCompetitiveImportRestController {
         ProductCompetitiveImportCommand command = ProductCompetitiveImportCommand.builder()
                 .fileBytes(bytes)
                 .originalFilename(file.getOriginalFilename())
-                .montoRestaPublico(montoRestaPublico)
-                .montoRestaMayorista(montoRestaMayorista)
+
+                .pctPublicA(pctPublicA)
+                .pctPublicB(pctPublicB)
+                .pctWholesaleC(pctWholesaleC)
+                .pctWholesaleD(pctWholesaleD)
+
                 .dryRun(dryRun)
                 .atomic(atomic)
                 .build();
@@ -70,5 +77,17 @@ public class ProductCompetitiveImportRestController {
         }
 
         return ResponseEntity.ok(SuccessResponse.ok(result));
+    }
+
+    private void validatePct(String name, BigDecimal pct) {
+        if (pct == null) {
+            throw new ResponseStatusException(BAD_REQUEST, name + " es obligatorio.");
+        }
+        if (pct.compareTo(BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(BAD_REQUEST, name + " debe ser >= 0.");
+        }
+        if (pct.compareTo(new BigDecimal("100")) >= 0) {
+            throw new ResponseStatusException(BAD_REQUEST, name + " debe ser < 100.");
+        }
     }
 }

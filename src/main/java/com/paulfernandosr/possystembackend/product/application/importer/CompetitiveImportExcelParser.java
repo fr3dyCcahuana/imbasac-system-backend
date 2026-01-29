@@ -25,7 +25,7 @@ public class CompetitiveImportExcelParser {
             "País de origen",
             "Compatibilidad",
             "Ubicación en almacén",
-            "CROLANDO PUBLICO",
+            "CROSLAND PUBLICO",
             "Precio A",
             "Precio B",
             "CROSLAND MAYORISTA",
@@ -42,7 +42,7 @@ public class CompetitiveImportExcelParser {
 
             if (products == null || lists == null) {
                 result.addError(ProductCompetitiveImportError.builder()
-                        .row(0).sku(null)
+                        .row(0)
                         .field("Plantilla")
                         .code("INVALID_TEMPLATE")
                         .value(command.getOriginalFilename())
@@ -54,7 +54,7 @@ public class CompetitiveImportExcelParser {
             validateHeader(products, result);
             if (result.hasErrors()) return null;
 
-            CompetitiveImportWorkbook workbook = CompetitiveImportWorkbook.builder()
+            return CompetitiveImportWorkbook.builder()
                     .allowedCategories(readListColumn(lists, 0))
                     .allowedPresentations(readListColumn(lists, 1))
                     .allowedOriginTypes(readListColumn(lists, 2))
@@ -62,11 +62,11 @@ public class CompetitiveImportExcelParser {
                     .rows(readProductRows(products))
                     .build();
 
-            return workbook;
-
         } catch (Exception e) {
             result.addError(ProductCompetitiveImportError.builder()
-                    .row(0).field("Archivo").code("INVALID_FILE")
+                    .row(0)
+                    .field("Archivo")
+                    .code("INVALID_FILE")
                     .message("El archivo no es un Excel válido (.xlsx) o está dañado.")
                     .build());
             return null;
@@ -82,13 +82,23 @@ public class CompetitiveImportExcelParser {
                     .build());
             return;
         }
+
         for (int i = 0; i < EXPECTED_HEADERS.size(); i++) {
             String expected = EXPECTED_HEADERS.get(i);
             String got = getString(header.getCell(i));
-            if (!expected.equalsIgnoreCase(got == null ? "" : got.trim())) {
+            String gotTrim = got == null ? "" : got.trim();
+
+            // ✅ compatibilidad opcional: acepta "CROLANDO PUBLICO" si viene un excel viejo
+            if ("CROSLAND PUBLICO".equalsIgnoreCase(expected)) {
+                if ("CROSLAND PUBLICO".equalsIgnoreCase(gotTrim) || "CROLANDO PUBLICO".equalsIgnoreCase(gotTrim)) {
+                    continue;
+                }
+            }
+
+            if (!expected.equalsIgnoreCase(gotTrim)) {
                 result.addError(ProductCompetitiveImportError.builder()
                         .row(1).field("Cabecera").code("INVALID_TEMPLATE")
-                        .value(got)
+                        .value(gotTrim)
                         .message("Cabecera inválida. Se esperaba '" + expected + "' en la columna " + (i + 1) + ".")
                         .build());
             }
@@ -101,7 +111,7 @@ public class CompetitiveImportExcelParser {
         for (int r = 1; r <= last; r++) { // desde fila 2 (1-based) => índice 1
             Row row = lists.getRow(r);
             if (row == null) continue;
-            String val = normalize(getString(row.getCell(colIndex)));
+            String val = normalizeUpper(getString(row.getCell(colIndex)));
             if (val != null && !val.isBlank()) out.add(val);
         }
         return out;
@@ -110,38 +120,38 @@ public class CompetitiveImportExcelParser {
     private static List<CompetitiveImportRow> readProductRows(Sheet products) {
         List<CompetitiveImportRow> rows = new ArrayList<>();
         int last = products.getLastRowNum();
+
         for (int r = 1; r <= last; r++) {
             Row row = products.getRow(r);
             if (row == null) continue;
 
-            // si la fila está totalmente vacía, se ignora
             boolean allEmpty = true;
             for (int c = 0; c < EXPECTED_HEADERS.size(); c++) {
                 Cell cell = row.getCell(c);
-                if (cell != null && cell.getCellType() != CellType.BLANK && getString(cell) != null) {
-                    String s = getString(cell);
-                    if (s != null && !s.trim().isBlank()) { allEmpty = false; break; }
-                }
                 if (cell != null && cell.getCellType() == CellType.NUMERIC) { allEmpty = false; break; }
+                String s = getString(cell);
+                if (s != null && !s.trim().isBlank()) { allEmpty = false; break; }
             }
             if (allEmpty) continue;
 
             CompetitiveImportRow item = CompetitiveImportRow.builder()
-                    .rowNumber(r + 1) // excel 1-based
-                    .sku(normalize(getString(row.getCell(0))))
+                    .rowNumber(r + 1)
+                    .sku(trimOrNull(getString(row.getCell(0))))
                     .name(trimOrNull(getString(row.getCell(1))))
 
-                    .category(normalize(getString(row.getCell(2))))
-                    .presentation(normalize(getString(row.getCell(3))))
+                    .category(normalizeUpper(getString(row.getCell(2))))
+                    .presentation(normalizeUpper(getString(row.getCell(3))))
                     .factor(getDecimal(row.getCell(4)))
 
-                    .originType(normalize(getString(row.getCell(5))))
-                    .originCountry(normalize(getString(row.getCell(6))))
+                    .originType(normalizeUpper(getString(row.getCell(5))))
+                    .originCountry(normalizeUpper(getString(row.getCell(6))))
 
                     .compatibility(trimOrNull(getString(row.getCell(7))))
                     .warehouseLocation(trimOrNull(getString(row.getCell(8))))
 
+                    // ✅ columna corregida
                     .competPublic(getDecimal(row.getCell(9)))
+
                     .priceA(getDecimal(row.getCell(10)))
                     .priceB(getDecimal(row.getCell(11)))
 
@@ -154,13 +164,15 @@ public class CompetitiveImportExcelParser {
 
             rows.add(item);
         }
+
         return rows;
     }
 
-    private static String normalize(String s) {
+    private static String normalizeUpper(String s) {
         if (s == null) return null;
         String t = s.trim().replaceAll("\\s+", " ");
-        return t.isBlank() ? null : t.toUpperCase(Locale.ROOT);
+        if (t.isBlank()) return null;
+        return t.toUpperCase(Locale.ROOT);
     }
 
     private static String trimOrNull(String s) {
@@ -174,16 +186,14 @@ public class CompetitiveImportExcelParser {
         return switch (cell.getCellType()) {
             case STRING -> cell.getStringCellValue();
             case NUMERIC -> {
-                // para SKU u otros, si meten número, lo convertimos sin decimales si aplica
                 double v = cell.getNumericCellValue();
                 if (Math.floor(v) == v) yield String.valueOf((long) v);
                 yield String.valueOf(v);
             }
             case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
             case FORMULA -> {
-                try {
-                    yield cell.getStringCellValue();
-                } catch (Exception e) {
+                try { yield cell.getStringCellValue(); }
+                catch (Exception e) {
                     try {
                         double v = cell.getNumericCellValue();
                         if (Math.floor(v) == v) yield String.valueOf((long) v);
@@ -204,18 +214,16 @@ public class CompetitiveImportExcelParser {
                 return BigDecimal.valueOf(cell.getNumericCellValue());
             }
             if (cell.getCellType() == CellType.STRING) {
-                String raw = cell.getStringCellValue();
-                if (raw == null) return null;
-                String t = raw.trim();
+                String t = cell.getStringCellValue();
+                if (t == null) return null;
+                t = t.trim();
                 if (t.isBlank()) return null;
-                // soporta coma decimal
                 t = t.replace(",", ".");
                 return new BigDecimal(t);
             }
             if (cell.getCellType() == CellType.FORMULA) {
-                try {
-                    return BigDecimal.valueOf(cell.getNumericCellValue());
-                } catch (Exception e) {
+                try { return BigDecimal.valueOf(cell.getNumericCellValue()); }
+                catch (Exception e) {
                     String t = cell.getStringCellValue();
                     if (t == null || t.trim().isBlank()) return null;
                     t = t.trim().replace(",", ".");

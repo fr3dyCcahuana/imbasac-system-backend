@@ -13,6 +13,7 @@ public class ProductSnapshot {
     private Long id;
     private String sku;
     private String name;
+    private String category;
     private String presentation;
     private BigDecimal factor;
 

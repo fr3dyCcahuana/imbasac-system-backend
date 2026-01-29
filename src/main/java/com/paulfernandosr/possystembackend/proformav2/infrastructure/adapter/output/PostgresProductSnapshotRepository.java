@@ -21,6 +21,7 @@ public class PostgresProductSnapshotRepository implements ProductSnapshotReposit
               p.id AS product_id,
               p.sku,
               p.name,
+              p.category,
               p.presentation,
               p.factor,
               p.manage_by_serial,

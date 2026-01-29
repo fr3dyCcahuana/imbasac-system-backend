@@ -35,27 +35,11 @@ public class PostgresProductBulkUpsertRepository implements ProductBulkUpsertRep
     public void upsertBySku(Product p) {
         String sql = """
             INSERT INTO product(
-                sku,
-                name,
-                product_type,
-                category,
-                presentation,
-                factor,
-                manage_by_serial,
-                origin_type,
-                origin_country,
-                factory_code,
-                compatibility,
-                barcode,
-                warehouse_location,
-                price_a,
-                price_b,
-                price_c,
-                price_d,
-                cost_reference,
-                facturable_sunat,
-                affects_stock,
-                gift_allowed
+                sku, name, product_type, category, presentation, factor,
+                manage_by_serial, origin_type, origin_country,
+                factory_code, compatibility, barcode, warehouse_location,
+                price_a, price_b, price_c, price_d, cost_reference,
+                facturable_sunat, affects_stock, gift_allowed
             )
             VALUES (?, ?, 'BIEN', ?, ?, ?, FALSE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, TRUE, FALSE)
             ON CONFLICT (sku) DO UPDATE SET

@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CompetitiveImportRow {
-    private int rowNumber; // número de fila real en Excel (1-based)
+    private int rowNumber;
     private String sku;
     private String name;
 
@@ -24,7 +24,8 @@ public class CompetitiveImportRow {
     private String compatibility;
     private String warehouseLocation;
 
-    private BigDecimal competPublic;      // CROLANDO PUBLICO
+    private BigDecimal competPublic;      // CROSLAND PUBLICO
+
     private BigDecimal priceA;
     private BigDecimal priceB;
 

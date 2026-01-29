@@ -1,4 +1,4 @@
-/*
+package com.paulfernandosr.possystembackend.purchase.application;/*
 package com.paulfernandosr.possystembackend.purchase.application;
 
 import com.paulfernandosr.possystembackend.purchase.domain.Purchase;

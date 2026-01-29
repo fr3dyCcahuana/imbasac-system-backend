@@ -37,8 +37,8 @@ public class Proforma {
     private BigDecimal discountTotal;
     private BigDecimal total;
     private String taxStatus;      // GRAVADA | NO_GRAVADA
-    private java.math.BigDecimal igvRate;   // 18.00
-    private java.math.BigDecimal igvAmount; // taxTotal
+    private BigDecimal igvRate;   // 18.00
+    private BigDecimal igvAmount; // taxTotal
     private Boolean igvIncluded;
     private ProformaStatus status;
     private String cashierUsername;

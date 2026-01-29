@@ -19,12 +19,12 @@ public class PostgresPurchaseProductSerialUnitRepository implements ProductSeria
     @Override
     public List<SerialIdentifierConflict> findExistingIdentifiers(Set<String> vins,
                                                                   Set<String> engineNumbers,
-                                                                  Set<String> serialNumbers) {
+                                                                  Set<String> chassisNumbers) {
         Set<String> v = vins == null ? Set.of() : vins;
         Set<String> e = engineNumbers == null ? Set.of() : engineNumbers;
-        Set<String> s = serialNumbers == null ? Set.of() : serialNumbers;
+        Set<String> c = chassisNumbers == null ? Set.of() : chassisNumbers;
 
-        if (v.isEmpty() && e.isEmpty() && s.isEmpty()) return List.of();
+        if (v.isEmpty() && e.isEmpty() && c.isEmpty()) return List.of();
 
         List<Object> params = new ArrayList<>();
         List<String> clauses = new ArrayList<>();
@@ -37,13 +37,13 @@ public class PostgresPurchaseProductSerialUnitRepository implements ProductSeria
             clauses.add("(engine_number IS NOT NULL AND engine_number IN (" + placeholders(e.size()) + "))");
             params.addAll(e);
         }
-        if (!s.isEmpty()) {
-            clauses.add("(serial_number IS NOT NULL AND serial_number IN (" + placeholders(s.size()) + "))");
-            params.addAll(s);
+        if (!c.isEmpty()) {
+            clauses.add("(chassis_number IS NOT NULL AND chassis_number IN (" + placeholders(c.size()) + "))");
+            params.addAll(c);
         }
 
         String sql = """
-            SELECT id, product_id, vin, engine_number, serial_number
+            SELECT id, product_id, vin, engine_number, chassis_number
             FROM product_serial_unit
             WHERE """ + String.join(" OR ", clauses);
 
@@ -57,7 +57,7 @@ public class PostgresPurchaseProductSerialUnitRepository implements ProductSeria
                                 .productId(rs.getLong("product_id"))
                                 .vin(rs.getString("vin"))
                                 .engineNumber(rs.getString("engine_number"))
-                                .serialNumber(rs.getString("serial_number"))
+                                .chassisNumber(rs.getString("chassis_number"))
                                 .build());
                     }
                     return out;
@@ -74,18 +74,17 @@ public class PostgresPurchaseProductSerialUnitRepository implements ProductSeria
             INSERT INTO product_serial_unit(
               product_id,
               vin,
-              serial_number,
+              chassis_number,
               engine_number,
               color,
               year_make,
-              year_model,
-              vehicle_class,
+              dua_number,
+              dua_item,
               status,
-              location_code,
               purchase_item_id,
               created_at,
               updated_at
-            ) VALUES (?,?,?,?,?,?,?,?, 'EN_ALMACEN',?,?, NOW(), NOW())
+            ) VALUES (?,?,?,?,?,?,?,?, 'EN_ALMACEN',?, NOW(), NOW())
             """;
 
         for (PurchaseSerialUnit u : serialUnits) {
@@ -93,13 +92,12 @@ public class PostgresPurchaseProductSerialUnitRepository implements ProductSeria
                     .params(
                             productId,
                             emptyToNull(u.getVin()),
-                            emptyToNull(u.getSerialNumber()),
+                            emptyToNull(u.getChassisNumber()),
                             emptyToNull(u.getEngineNumber()),
                             emptyToNull(u.getColor()),
                             u.getYearMake(),
-                            u.getYearModel(),
-                            emptyToNull(u.getVehicleClass()),
-                            emptyToNull(u.getLocationCode()),
+                            emptyToNull(u.getDuaNumber()),
+                            u.getDuaItem(),
                             purchaseItemId
                     )
                     .update();

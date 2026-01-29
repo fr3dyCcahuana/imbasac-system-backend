@@ -13,6 +13,7 @@ public class ProductSnapshotRowMapper implements RowMapper<ProductSnapshot> {
                 .id(rs.getLong("product_id"))
                 .sku(rs.getString("sku"))
                 .name(rs.getString("name"))
+                .category(rs.getString("category"))
                 .presentation(rs.getString("presentation"))
                 .factor(rs.getBigDecimal("factor"))
                 .manageBySerial(rs.getBoolean("manage_by_serial"))

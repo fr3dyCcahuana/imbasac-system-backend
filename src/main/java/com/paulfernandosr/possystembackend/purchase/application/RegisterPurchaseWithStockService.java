@@ -12,436 +12,519 @@ import com.paulfernandosr.possystembackend.purchase.domain.port.output.ProductFl
 import com.paulfernandosr.possystembackend.purchase.domain.port.output.ProductSerialUnitRepository;
 import com.paulfernandosr.possystembackend.purchase.domain.port.output.PurchaseRepository;
 import com.paulfernandosr.possystembackend.stock.domain.port.input.StockService;
-import org.springframework.dao.DuplicateKeyException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Year;
 import java.util.*;
 import java.util.regex.Pattern;
 
 @Service
+@RequiredArgsConstructor
 public class RegisterPurchaseWithStockService implements CreatePurchaseUseCase {
 
     private static final Pattern ID_PATTERN = Pattern.compile("^[A-Z0-9-]+$");
 
     private final PurchaseRepository purchaseRepository;
-    private final StockService stockService;
     private final ProductFlagsRepository productFlagsRepository;
     private final ProductSerialUnitRepository productSerialUnitRepository;
-
-    public RegisterPurchaseWithStockService(PurchaseRepository purchaseRepository,
-                                            StockService stockService,
-                                            ProductFlagsRepository productFlagsRepository,
-                                            ProductSerialUnitRepository productSerialUnitRepository) {
-        this.purchaseRepository = purchaseRepository;
-        this.stockService = stockService;
-        this.productFlagsRepository = productFlagsRepository;
-        this.productSerialUnitRepository = productSerialUnitRepository;
-    }
+    private final StockService stockService;
 
     @Override
     @Transactional
     public Purchase createPurchase(Purchase purchase) {
+        if (purchase == null) {
+            throw new PurchaseApiException(422, "INVALID_PURCHASE", "La compra es obligatoria.");
+        }
+        if (purchase.getItems() == null || purchase.getItems().isEmpty()) {
+            throw new PurchaseApiException(422, "INVALID_PURCHASE_ITEMS", "La compra debe tener al menos un ítem.");
+        }
 
-        validateDeliveryGuide(purchase);
+        ValidationContext ctx = new ValidationContext();
+        validateItemsAndSerialRules(purchase, ctx);
 
-        ValidationContext ctx = validateItemsAndSerialRules(purchase);
-
-        // 1.3 Validación de unicidad en BD (por lote)
+        // 1) Validar contra base de datos antes de insertar (evita 500 por índices UNIQUE)
         List<SerialIdentifierConflict> conflicts = productSerialUnitRepository.findExistingIdentifiers(
-                ctx.allVins, ctx.allEngineNumbers, ctx.allSerialNumbers
+                ctx.allVins,
+                ctx.allEngineNumbers,
+                ctx.allChassisNumbers
         );
-
         if (!conflicts.isEmpty()) {
             throw buildDbConflictException(conflicts, ctx);
         }
 
-        // Insert cabecera + items (items ya vuelven con ID por RETURNING)
+        // 2) Insertar compra + detalle (debe retornar IDs de purchase_item)
         Purchase created = purchaseRepository.create(purchase);
 
-        // Insert serial units + stock
-        if (created.getItems() != null) {
-            for (int i = 0; i < created.getItems().size(); i++) {
-                PurchaseItem item = created.getItems().get(i);
-                ProductFlags flags = ctx.flagsByIndex.get(i);
+        // 3) Registrar stock + seriales (si aplica)
+        for (PurchaseItem item : created.getItems()) {
+            ProductFlags flags = ctx.flagsByProductId.get(item.getProductId());
+            if (flags == null) continue;
 
-                boolean affectsStock = Boolean.TRUE.equals(flags.getAffectsStock());
-                boolean manageBySerial = Boolean.TRUE.equals(flags.getManageBySerial());
+            boolean affectsStock = Boolean.TRUE.equals(flags.getAffectsStock());
+            boolean manageBySerial = Boolean.TRUE.equals(flags.getManageBySerial());
 
-                if (manageBySerial) {
-                    // Insert serial units vinculadas al purchase_item
-                    try {
-                        productSerialUnitRepository.insertInboundSerialUnits(
-                                item.getId(),
-                                item.getProductId(),
-                                item.getSerialUnits()
-                        );
-                    } catch (DuplicateKeyException ex) {
-                        // Race condition: índice único saltó entre la validación y el insert
-                        throw new PurchaseApiException(
-                                409,
-                                "DUPLICATE_SERIAL_IDENTIFIER",
-                                "Ya existe una unidad serializada con alguno de los identificadores ingresados."
-                        );
-                    }
-                }
+            if (!affectsStock) {
+                continue; // servicios u otros que no afectan stock
+            }
 
-                // Stock/kardex solo si affectsStock=true
-                if (affectsStock) {
-                    BigDecimal qty = item.getQuantity();
-                    BigDecimal unitCost = item.getTotalCost() != null && item.getQuantity() != null
-                            && item.getQuantity().compareTo(BigDecimal.ZERO) > 0
-                            ? item.getTotalCost().divide(item.getQuantity(), 6, RoundingMode.HALF_UP)
-                            : item.getUnitCost();
+            // Movimiento IN del kardex (para todos los que afectan stock)
+            stockService.registerInbound(
+                    item.getProductId(),
+                    item.getQuantity(),
+                    item.getUnitCost(),
+                    "IN_PURCHASE",
+                    "purchase_item",
+                    item.getId()
+            );
 
-                    stockService.registerInbound(
-                            item.getProductId(),
-                            qty,
-                            unitCost,
-                            "IN_PURCHASE",
-                            "purchase_item",
-                            item.getId()
-                    );
-                }
+            // Seriales: insertar unidades físicas por item
+            if (manageBySerial) {
+                productSerialUnitRepository.insertInboundSerialUnits(
+                        item.getId(),
+                        item.getProductId(),
+                        item.getSerialUnits()
+                );
             }
         }
 
         return created;
     }
 
-    private void validateDeliveryGuide(Purchase purchase) {
-        boolean hasAny =
-                notBlank(purchase.getDeliveryGuideSeries()) ||
-                        notBlank(purchase.getDeliveryGuideNumber()) ||
-                        notBlank(purchase.getDeliveryGuideCompany());
+    // ---------------------------------------------------------------------
+    // VALIDACIONES
+    // ---------------------------------------------------------------------
 
-        if (hasAny) {
-            if (isBlank(purchase.getDeliveryGuideSeries()) ||
-                    isBlank(purchase.getDeliveryGuideNumber()) ||
-                    isBlank(purchase.getDeliveryGuideCompany())) {
-                throw new PurchaseApiException(
-                        422,
-                        "INVALID_DELIVERY_GUIDE",
-                        "La guía de remisión debe incluir serie, número y empresa.",
-                        List.of(
-                                PurchaseFieldError.builder().path("deliveryGuideSeries").message("Requerido").build(),
-                                PurchaseFieldError.builder().path("deliveryGuideNumber").message("Requerido").build(),
-                                PurchaseFieldError.builder().path("deliveryGuideCompany").message("Requerido").build()
-                        )
-                );
-            }
-        }
-    }
-
-    private ValidationContext validateItemsAndSerialRules(Purchase purchase) {
-        if (purchase.getItems() == null || purchase.getItems().isEmpty()) {
-            throw new PurchaseApiException(422, "ITEMS_REQUIRED", "La compra debe incluir items.",
-                    List.of(PurchaseFieldError.builder().path("items").message("Requerido").build()));
-        }
-
-        ValidationContext ctx = new ValidationContext(purchase.getItems().size());
+    private void validateItemsAndSerialRules(Purchase purchase, ValidationContext ctx) {
 
         for (int i = 0; i < purchase.getItems().size(); i++) {
-            final int idx = i;
-            final PurchaseItem item = purchase.getItems().get(i);
-
-            if (item.getProductId() == null) {
-                throw new PurchaseApiException(422, "PRODUCT_ID_REQUIRED", "Cada item debe incluir productId.",
-                        List.of(PurchaseFieldError.builder().path(path(i, "productId")).message("Requerido").build()));
+            PurchaseItem item = purchase.getItems().get(i);
+            if (item == null) {
+                throw new PurchaseApiException(422, "INVALID_ITEM", "Ítem inválido.",
+                        List.of(PurchaseFieldError.builder()
+                                .path(path(i, "item"))
+                                .message("El ítem no puede ser null")
+                                .build()));
             }
 
+            if (item.getProductId() == null) {
+                throw new PurchaseApiException(422, "INVALID_PRODUCT_ID", "productId es obligatorio.",
+                        List.of(PurchaseFieldError.builder()
+                                .path(path(i, "productId"))
+                                .message("productId es obligatorio")
+                                .build()));
+            }
+
+            int finalI = i;
             ProductFlags flags = productFlagsRepository.findById(item.getProductId())
                     .orElseThrow(() -> new PurchaseApiException(
-                            422, "PRODUCT_NOT_FOUND", "No existe el producto indicado.",
+                            422,
+                            "PRODUCT_NOT_FOUND",
+                            "No existe producto con id=" + item.getProductId(),
                             List.of(PurchaseFieldError.builder()
-                                    .path(path(idx, "productId"))
+                                    .path(path(finalI, "productId"))
                                     .message("Producto no encontrado")
                                     .value(item.getProductId())
                                     .build())
                     ));
 
-            ctx.flagsByIndex.put(i, flags);
+            ctx.flagsByProductId.put(item.getProductId(), flags);
 
+            String category = normalizeCategory(flags.getCategory());
             boolean manageBySerial = Boolean.TRUE.equals(flags.getManageBySerial());
-            boolean affectsStock = Boolean.TRUE.equals(flags.getAffectsStock());
 
-            // Seguridad de negocio: no se admite serializable que no afecte stock
-            if (manageBySerial && !affectsStock) {
-                throw new PurchaseApiException(422, "SERIAL_PRODUCT_MUST_AFFECT_STOCK",
-                        "Un producto con manageBySerial=true debe afectar stock (affectsStock=true).",
-                        List.of(PurchaseFieldError.builder().path(path(i, "productId")).value(item.getProductId()).build()));
+            if (manageBySerial && !isMotorOrMoto(category)) {
+                throw new PurchaseApiException(
+                        422,
+                        "SERIAL_PRODUCT_INVALID_CATEGORY",
+                        "Solo productos con categoría MOTOR o MOTOCICLETAS pueden tener manage_by_serial=true.",
+                        List.of(PurchaseFieldError.builder()
+                                .path(path(i, "productId"))
+                                .message("Producto serializado con categoría inválida: " + flags.getCategory())
+                                .value(flags.getCategory())
+                                .expected("MOTOR/MOTOCICLETAS")
+                                .build())
+                );
             }
 
             if (!manageBySerial) {
+                // No seriales: no debe traer serialUnits
                 if (item.getSerialUnits() != null && !item.getSerialUnits().isEmpty()) {
-                    throw new PurchaseApiException(422, "SERIAL_UNITS_NOT_ALLOWED_FOR_NON_SERIAL_PRODUCT",
-                            "No se permiten serialUnits para productos sin control por serie.",
+                    throw new PurchaseApiException(
+                            422,
+                            "SERIAL_UNITS_NOT_ALLOWED",
+                            "Este producto no se controla por serie/VIN.",
                             List.of(PurchaseFieldError.builder()
                                     .path(path(i, "serialUnits"))
-                                    .message("No permitido")
-                                    .build()));
+                                    .message("serialUnits no permitido cuando manage_by_serial=false")
+                                    .build())
+                    );
                 }
                 continue;
             }
 
-            int qtyInt = parseQuantityAsInt(item.getQuantity(), i);
+            // Serializables: quantity debe ser entero (n unidades físicas)
+            if (item.getQuantity() == null || item.getQuantity().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new PurchaseApiException(422, "INVALID_QUANTITY", "quantity inválido.",
+                        List.of(PurchaseFieldError.builder()
+                                .path(path(i, "quantity"))
+                                .message("quantity debe ser > 0")
+                                .value(item.getQuantity())
+                                .build()));
+            }
+            if (!isWholeNumber(item.getQuantity())) {
+                throw new PurchaseApiException(422, "SERIAL_QUANTITY_MUST_BE_INTEGER",
+                        "Cuando el producto se controla por serie/VIN, quantity debe ser un entero.",
+                        List.of(PurchaseFieldError.builder()
+                                .path(path(i, "quantity"))
+                                .message("quantity debe ser entero para productos serializados")
+                                .value(item.getQuantity())
+                                .expected("Entero")
+                                .build()));
+            }
+
+            int expectedUnits = item.getQuantity().intValueExact();
 
             if (item.getSerialUnits() == null || item.getSerialUnits().isEmpty()) {
                 throw new PurchaseApiException(422, "SERIAL_UNITS_REQUIRED",
-                        "Producto requiere detalle por unidad (manageBySerial=true).",
-                        List.of(PurchaseFieldError.builder().path(path(i, "serialUnits")).message("Requerido").build()));
+                        "Debe enviar serialUnits para productos serializados.",
+                        List.of(PurchaseFieldError.builder()
+                                .path(path(i, "serialUnits"))
+                                .message("serialUnits es obligatorio")
+                                .expected("Tamaño=" + expectedUnits)
+                                .build()));
             }
 
-            if (item.getSerialUnits().size() != qtyInt) {
+            if (item.getSerialUnits().size() != expectedUnits) {
                 throw new PurchaseApiException(422, "SERIAL_UNITS_COUNT_MISMATCH",
                         "La cantidad de serialUnits debe coincidir con quantity.",
                         List.of(PurchaseFieldError.builder()
                                 .path(path(i, "serialUnits"))
-                                .message("quantity debe ser igual a serialUnits.length")
-                                .expected(qtyInt)
+                                .message("serialUnits.size() debe ser igual a quantity")
                                 .value(item.getSerialUnits().size())
+                                .expected(expectedUnits)
                                 .build()));
             }
 
-            normalizeAndValidateSerialUnits(item, i, ctx);
-            validateNoDuplicatesInsideRequest(item, i);
-        }
-
-        return ctx;
-    }
-
-    private int parseQuantityAsInt(BigDecimal quantity, int itemIndex) {
-        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new PurchaseApiException(422, "QUANTITY_REQUIRED",
-                    "quantity debe ser mayor a 0.",
-                    List.of(PurchaseFieldError.builder().path(path(itemIndex, "quantity")).message("Inválido").build()));
-        }
-        try {
-            return quantity.stripTrailingZeros().intValueExact();
-        } catch (ArithmeticException ex) {
-            throw new PurchaseApiException(422, "QUANTITY_MUST_BE_INTEGER_FOR_SERIAL",
-                    "Para productos serializados, quantity debe ser entero.",
-                    List.of(PurchaseFieldError.builder().path(path(itemIndex, "quantity")).message("Debe ser entero").build()));
+            normalizeAndValidateSerialUnits(item, i, category, ctx);
+            validateNoDuplicatesInsideRequest(item, i, ctx);
         }
     }
 
-    private void normalizeAndValidateSerialUnits(PurchaseItem item, int itemIndex, ValidationContext ctx) {
-        int currentYearPlus1 = Year.now().getValue() + 1;
+    private void normalizeAndValidateSerialUnits(PurchaseItem item,
+                                                 int itemIndex,
+                                                 String category,
+                                                 ValidationContext ctx) {
+        int currentYear = Year.now().getValue();
 
         for (int j = 0; j < item.getSerialUnits().size(); j++) {
             PurchaseSerialUnit u = item.getSerialUnits().get(j);
-
-            u.setVin(normId(u.getVin()));
-            u.setEngineNumber(normId(u.getEngineNumber()));
-            u.setSerialNumber(normId(u.getSerialNumber()));
-            u.setColor(normText(u.getColor()));
-            u.setVehicleClass(normText(u.getVehicleClass()));
-            u.setLocationCode(normText(u.getLocationCode()));
-
-            // Requeridos mínimos
-            if (isBlank(u.getEngineNumber())) {
-                throw new PurchaseApiException(422, "ENGINE_NUMBER_REQUIRED",
-                        "engineNumber es requerido.",
+            if (u == null) {
+                throw new PurchaseApiException(422, "INVALID_SERIAL_UNIT", "Unidad serial inválida.",
                         List.of(PurchaseFieldError.builder()
-                                .path(path(itemIndex, "serialUnits[" + j + "].engineNumber"))
-                                .message("Requerido")
-                                .build()));
-            }
-            if (isBlank(u.getLocationCode())) {
-                throw new PurchaseApiException(422, "LOCATION_CODE_REQUIRED",
-                        "locationCode es requerido.",
-                        List.of(PurchaseFieldError.builder()
-                                .path(path(itemIndex, "serialUnits[" + j + "].locationCode"))
-                                .message("Requerido")
+                                .path(path(itemIndex, "serialUnits[" + j + "]"))
+                                .message("La unidad no puede ser null")
                                 .build()));
             }
 
-            // Regex y longitudes
-            validateIdField(u.getVin(), 8, 32, itemIndex, j, "vin");
-            validateIdField(u.getEngineNumber(), 4, 40, itemIndex, j, "engineNumber");
-            validateIdField(u.getSerialNumber(), 1, 40, itemIndex, j, "serialNumber");
+            // Normaliza
+            u.setVin(normalizeId(u.getVin()));
+            u.setChassisNumber(normalizeId(u.getChassisNumber()));
+            u.setEngineNumber(normalizeId(u.getEngineNumber()));
+            u.setDuaNumber(normalizeId(u.getDuaNumber()));
+            u.setColor(normalizeText(u.getColor()));
 
-            validateTextField(u.getColor(), 1, 30, itemIndex, j, "color");
-            validateTextField(u.getLocationCode(), 1, 30, itemIndex, j, "locationCode");
+            // Comunes obligatorios
+            requireText(u.getColor(), itemIndex, j, "color");
+            requireText(u.getEngineNumber(), itemIndex, j, "engineNumber");
+            requireText(u.getDuaNumber(), itemIndex, j, "duaNumber");
+            requirePositiveInteger(u.getDuaItem(), itemIndex, j, "duaItem");
 
-            if (u.getYearMake() != null && (u.getYearMake() < 1980 || u.getYearMake() > currentYearPlus1)) {
+            if (u.getYearMake() == null || u.getYearMake() < 1900 || u.getYearMake() > currentYear + 1) {
                 throw new PurchaseApiException(422, "INVALID_YEAR_MAKE", "yearMake inválido.",
                         List.of(PurchaseFieldError.builder()
                                 .path(path(itemIndex, "serialUnits[" + j + "].yearMake"))
+                                .message("yearMake debe ser válido")
                                 .value(u.getYearMake())
-                                .expected("1980.." + currentYearPlus1)
-                                .build()));
-            }
-            if (u.getYearModel() != null && (u.getYearModel() < 1980 || u.getYearModel() > currentYearPlus1)) {
-                throw new PurchaseApiException(422, "INVALID_YEAR_MODEL", "yearModel inválido.",
-                        List.of(PurchaseFieldError.builder()
-                                .path(path(itemIndex, "serialUnits[" + j + "].yearModel"))
-                                .value(u.getYearModel())
-                                .expected("1980.." + currentYearPlus1)
+                                .expected("1900.." + (currentYear + 1))
                                 .build()));
             }
 
-            // Registrar para validación BD (por lote) + paths para detalle de conflictos
+            // Por categoría
+            if ("MOTOR".equals(category)) {
+                if (notBlank(u.getVin())) {
+                    throw new PurchaseApiException(422, "VIN_NOT_ALLOWED_FOR_MOTOR",
+                            "MOTOR no debe registrar VIN.",
+                            List.of(PurchaseFieldError.builder()
+                                    .path(path(itemIndex, "serialUnits[" + j + "].vin"))
+                                    .message("vin no permitido para categoría MOTOR")
+                                    .value(u.getVin())
+                                    .expected(null)
+                                    .build()));
+                }
+                if (notBlank(u.getChassisNumber())) {
+                    throw new PurchaseApiException(422, "CHASSIS_NOT_ALLOWED_FOR_MOTOR",
+                            "MOTOR no debe registrar número de chasis.",
+                            List.of(PurchaseFieldError.builder()
+                                    .path(path(itemIndex, "serialUnits[" + j + "].chassisNumber"))
+                                    .message("chassisNumber no permitido para categoría MOTOR")
+                                    .value(u.getChassisNumber())
+                                    .expected(null)
+                                    .build()));
+                }
+            } else {
+                // MOTOCICLETAS
+                requireText(u.getVin(), itemIndex, j, "vin");
+                requireText(u.getChassisNumber(), itemIndex, j, "chassisNumber");
+            }
+
+            // Validación de formatos
+            validateIdField(u.getEngineNumber(), 4, 40, itemIndex, j, "engineNumber");
+            validateIdField(u.getDuaNumber(), 1, 30, itemIndex, j, "duaNumber");
+
+            if (notBlank(u.getVin())) {
+                validateIdField(u.getVin(), 8, 40, itemIndex, j, "vin");
+            }
+            if (notBlank(u.getChassisNumber())) {
+                validateIdField(u.getChassisNumber(), 1, 40, itemIndex, j, "chassisNumber");
+            }
+
+            // Acumula para validación de duplicados en BD
+            ctx.allEngineNumbers.add(u.getEngineNumber());
+            ctx.enginePaths.computeIfAbsent(u.getEngineNumber(), k -> new ArrayList<>())
+                    .add(path(itemIndex, "serialUnits[" + j + "].engineNumber"));
+
             if (notBlank(u.getVin())) {
                 ctx.allVins.add(u.getVin());
                 ctx.vinPaths.computeIfAbsent(u.getVin(), k -> new ArrayList<>())
                         .add(path(itemIndex, "serialUnits[" + j + "].vin"));
             }
-            if (notBlank(u.getEngineNumber())) {
-                ctx.allEngineNumbers.add(u.getEngineNumber());
-                ctx.enginePaths.computeIfAbsent(u.getEngineNumber(), k -> new ArrayList<>())
-                        .add(path(itemIndex, "serialUnits[" + j + "].engineNumber"));
-            }
-            if (notBlank(u.getSerialNumber())) {
-                ctx.allSerialNumbers.add(u.getSerialNumber());
-                ctx.serialPaths.computeIfAbsent(u.getSerialNumber(), k -> new ArrayList<>())
-                        .add(path(itemIndex, "serialUnits[" + j + "].serialNumber"));
+            if (notBlank(u.getChassisNumber())) {
+                ctx.allChassisNumbers.add(u.getChassisNumber());
+                ctx.chassisPaths.computeIfAbsent(u.getChassisNumber(), k -> new ArrayList<>())
+                        .add(path(itemIndex, "serialUnits[" + j + "].chassisNumber"));
             }
         }
     }
 
-    private void validateNoDuplicatesInsideRequest(PurchaseItem item, int itemIndex) {
-        Set<String> vins = new HashSet<>();
-        Set<String> engines = new HashSet<>();
-        Set<String> serials = new HashSet<>();
+    private void validateNoDuplicatesInsideRequest(PurchaseItem item, int itemIndex, ValidationContext ctx) {
 
-        List<PurchaseFieldError> errors = new ArrayList<>();
+        Map<String, Integer> engineCount = new HashMap<>();
+        Map<String, Integer> vinCount = new HashMap<>();
+        Map<String, Integer> chassisCount = new HashMap<>();
 
         for (int j = 0; j < item.getSerialUnits().size(); j++) {
             PurchaseSerialUnit u = item.getSerialUnits().get(j);
+            if (u == null) continue;
 
-            if (notBlank(u.getVin()) && !vins.add(u.getVin())) {
-                errors.add(PurchaseFieldError.builder()
-                        .path(path(itemIndex, "serialUnits[" + j + "].vin"))
-                        .message("VIN duplicado en el request")
-                        .value(u.getVin())
-                        .build());
+            if (notBlank(u.getEngineNumber())) {
+                engineCount.merge(u.getEngineNumber(), 1, Integer::sum);
             }
-            if (notBlank(u.getEngineNumber()) && !engines.add(u.getEngineNumber())) {
-                errors.add(PurchaseFieldError.builder()
-                        .path(path(itemIndex, "serialUnits[" + j + "].engineNumber"))
-                        .message("Engine number duplicado en el request")
-                        .value(u.getEngineNumber())
-                        .build());
+            if (notBlank(u.getVin())) {
+                vinCount.merge(u.getVin(), 1, Integer::sum);
             }
-            if (notBlank(u.getSerialNumber()) && !serials.add(u.getSerialNumber())) {
-                errors.add(PurchaseFieldError.builder()
-                        .path(path(itemIndex, "serialUnits[" + j + "].serialNumber"))
-                        .message("Serial number duplicado en el request")
-                        .value(u.getSerialNumber())
-                        .build());
+            if (notBlank(u.getChassisNumber())) {
+                chassisCount.merge(u.getChassisNumber(), 1, Integer::sum);
             }
         }
 
+        List<PurchaseFieldError> errors = new ArrayList<>();
+
+        engineCount.forEach((k, v) -> {
+            if (v > 1) {
+                List<String> paths = ctx.enginePaths.getOrDefault(k, List.of(path(itemIndex, "serialUnits.engineNumber")));
+                for (String p : paths) {
+                    errors.add(PurchaseFieldError.builder()
+                            .path(p)
+                            .message("engineNumber duplicado en el request")
+                            .value(k)
+                            .build());
+                }
+            }
+        });
+
+        vinCount.forEach((k, v) -> {
+            if (v > 1) {
+                List<String> paths = ctx.vinPaths.getOrDefault(k, List.of(path(itemIndex, "serialUnits.vin")));
+                for (String p : paths) {
+                    errors.add(PurchaseFieldError.builder()
+                            .path(p)
+                            .message("vin duplicado en el request")
+                            .value(k)
+                            .build());
+                }
+            }
+        });
+
+        chassisCount.forEach((k, v) -> {
+            if (v > 1) {
+                List<String> paths = ctx.chassisPaths.getOrDefault(k, List.of(path(itemIndex, "serialUnits.chassisNumber")));
+                for (String p : paths) {
+                    errors.add(PurchaseFieldError.builder()
+                            .path(p)
+                            .message("chassisNumber duplicado en el request")
+                            .value(k)
+                            .build());
+                }
+            }
+        });
+
         if (!errors.isEmpty()) {
-            throw new PurchaseApiException(422, "SERIAL_UNITS_DUPLICATED_IN_REQUEST",
-                    "Existen seriales duplicados dentro del request.", errors);
+            throw new PurchaseApiException(422, "DUPLICATE_SERIAL_IDENTIFIERS",
+                    "Existen identificadores duplicados dentro del request.",
+                    errors);
         }
     }
 
     private PurchaseApiException buildDbConflictException(List<SerialIdentifierConflict> conflicts, ValidationContext ctx) {
         List<PurchaseFieldError> errors = new ArrayList<>();
-        boolean hasEngine = false;
-        boolean hasVin = false;
-        boolean hasSerial = false;
 
         for (SerialIdentifierConflict c : conflicts) {
             if (notBlank(c.getEngineNumber()) && ctx.enginePaths.containsKey(c.getEngineNumber())) {
-                hasEngine = true;
                 for (String p : ctx.enginePaths.get(c.getEngineNumber())) {
                     errors.add(PurchaseFieldError.builder()
-                            .path(p).message("Engine number ya existe en BD").value(c.getEngineNumber()).build());
+                            .path(p)
+                            .message("Ya existe un engineNumber registrado.")
+                            .value(c.getEngineNumber())
+                            .build());
                 }
             }
+
             if (notBlank(c.getVin()) && ctx.vinPaths.containsKey(c.getVin())) {
-                hasVin = true;
                 for (String p : ctx.vinPaths.get(c.getVin())) {
                     errors.add(PurchaseFieldError.builder()
-                            .path(p).message("VIN ya existe en BD").value(c.getVin()).build());
+                            .path(p)
+                            .message("Ya existe un VIN registrado.")
+                            .value(c.getVin())
+                            .build());
                 }
             }
-            if (notBlank(c.getSerialNumber()) && ctx.serialPaths.containsKey(c.getSerialNumber())) {
-                hasSerial = true;
-                for (String p : ctx.serialPaths.get(c.getSerialNumber())) {
+
+            if (notBlank(c.getChassisNumber()) && ctx.chassisPaths.containsKey(c.getChassisNumber())) {
+                for (String p : ctx.chassisPaths.get(c.getChassisNumber())) {
                     errors.add(PurchaseFieldError.builder()
-                            .path(p).message("Serial number ya existe en BD").value(c.getSerialNumber()).build());
+                            .path(p)
+                            .message("Ya existe un chassisNumber registrado.")
+                            .value(c.getChassisNumber())
+                            .build());
                 }
             }
         }
 
-        String code;
-        String msg;
-        if (hasEngine) { code = "DUPLICATE_ENGINE_NUMBER"; msg = "Ya existe un engineNumber registrado."; }
-        else if (hasVin) { code = "DUPLICATE_VIN"; msg = "Ya existe un VIN registrado."; }
-        else if (hasSerial) { code = "DUPLICATE_SERIAL_NUMBER"; msg = "Ya existe un serialNumber registrado."; }
-        else { code = "DUPLICATE_SERIAL_IDENTIFIER"; msg = "Ya existe un identificador serializado registrado."; }
+        // Selecciona un code “principal” para el error global
+        String code = "DUPLICATE_IN_DB";
+        String msg = "Ya existen identificadores seriales registrados en el sistema.";
+        if (errors.stream().anyMatch(e -> e.getMessage().contains("engineNumber"))) {
+            code = "DUPLICATE_ENGINE_NUMBER";
+        } else if (errors.stream().anyMatch(e -> e.getMessage().contains("VIN"))) {
+            code = "DUPLICATE_VIN";
+        } else if (errors.stream().anyMatch(e -> e.getMessage().contains("chassisNumber"))) {
+            code = "DUPLICATE_CHASSIS_NUMBER";
+        }
 
-        return new PurchaseApiException(409, code, msg, errors);
+        return new PurchaseApiException(422, code, msg, errors);
     }
 
-    private void validateIdField(String value, int min, int max, int itemIndex, int unitIndex, String field) {
-        if (isBlank(value)) return;
-        if (value.length() < min || value.length() > max) {
-            throw new PurchaseApiException(422, "INVALID_" + field.toUpperCase(), field + " longitud inválida.",
+    // ---------------------------------------------------------------------
+    // HELPERS
+    // ---------------------------------------------------------------------
+
+    private static String path(int itemIndex, String field) {
+        return "items[" + itemIndex + "]." + field;
+    }
+
+    private static boolean isWholeNumber(BigDecimal value) {
+        if (value == null) return false;
+        return value.stripTrailingZeros().scale() <= 0;
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.trim().isEmpty();
+    }
+
+    private static String normalizeId(String s) {
+        if (s == null) return null;
+        String t = s.trim();
+        if (t.isEmpty()) return null;
+        return t.toUpperCase(Locale.ROOT);
+    }
+
+    private static String normalizeText(String s) {
+        if (s == null) return null;
+        String t = s.trim();
+        return t.isEmpty() ? null : t;
+    }
+
+    private static String normalizeCategory(String s) {
+        if (s == null) return null;
+        String t = s.trim().toUpperCase(Locale.ROOT);
+        return t.isEmpty() ? null : t;
+    }
+
+    private static boolean isMotorOrMoto(String category) {
+        return "MOTOR".equals(category) || "MOTOCICLETAS".equals(category);
+    }
+
+    private static void requireText(String value, int itemIndex, int serialIndex, String field) {
+        if (!notBlank(value)) {
+            throw new PurchaseApiException(422, "REQUIRED_FIELD", field + " es obligatorio.",
                     List.of(PurchaseFieldError.builder()
-                            .path(path(itemIndex, "serialUnits[" + unitIndex + "]." + field))
+                            .path(path(itemIndex, "serialUnits[" + serialIndex + "]." + field))
+                            .message(field + " es obligatorio")
+                            .build()));
+        }
+    }
+
+    private static void requirePositiveInteger(Integer value, int itemIndex, int serialIndex, String field) {
+        if (value == null || value <= 0) {
+            throw new PurchaseApiException(422, "REQUIRED_FIELD", field + " es obligatorio y debe ser > 0.",
+                    List.of(PurchaseFieldError.builder()
+                            .path(path(itemIndex, "serialUnits[" + serialIndex + "]." + field))
+                            .message(field + " es obligatorio y debe ser > 0")
+                            .value(value)
+                            .expected("> 0")
+                            .build()));
+        }
+    }
+
+    private static void validateIdField(String value,
+                                        int min,
+                                        int max,
+                                        int itemIndex,
+                                        int serialIndex,
+                                        String field) {
+        if (!notBlank(value)) return;
+        if (value.length() < min || value.length() > max) {
+            throw new PurchaseApiException(422, "INVALID_FIELD_LENGTH", field + " inválido.",
+                    List.of(PurchaseFieldError.builder()
+                            .path(path(itemIndex, "serialUnits[" + serialIndex + "]." + field))
+                            .message(field + " debe tener longitud entre " + min + " y " + max)
                             .value(value)
                             .expected(min + ".." + max)
                             .build()));
         }
         if (!ID_PATTERN.matcher(value).matches()) {
-            throw new PurchaseApiException(422, "INVALID_" + field.toUpperCase(), field + " formato inválido.",
+            throw new PurchaseApiException(422, "INVALID_FIELD_FORMAT", field + " inválido.",
                     List.of(PurchaseFieldError.builder()
-                            .path(path(itemIndex, "serialUnits[" + unitIndex + "]." + field))
+                            .path(path(itemIndex, "serialUnits[" + serialIndex + "]." + field))
+                            .message(field + " solo puede contener A-Z, 0-9 y guión (-)")
                             .value(value)
                             .expected("A-Z0-9-")
                             .build()));
         }
     }
 
-    private void validateTextField(String value, int min, int max, int itemIndex, int unitIndex, String field) {
-        if (isBlank(value)) return;
-        if (value.length() < min || value.length() > max) {
-            throw new PurchaseApiException(422, "INVALID_" + field.toUpperCase(), field + " longitud inválida.",
-                    List.of(PurchaseFieldError.builder()
-                            .path(path(itemIndex, "serialUnits[" + unitIndex + "]." + field))
-                            .value(value)
-                            .expected(min + ".." + max)
-                            .build()));
-        }
-    }
-
-    private static String path(int itemIndex, String tail) {
-        return "items[" + itemIndex + "]." + tail;
-    }
-
-    private static String normId(String s) {
-        if (s == null) return null;
-        String t = s.trim();
-        if (t.isEmpty()) return null;
-        return t.toUpperCase();
-    }
-
-    private static String normText(String s) {
-        if (s == null) return null;
-        String t = s.trim();
-        return t.isEmpty() ? null : t;
-    }
-
-    private static boolean isBlank(String s) { return s == null || s.trim().isEmpty(); }
-    private static boolean notBlank(String s) { return !isBlank(s); }
-
     private static class ValidationContext {
-        final Map<Integer, ProductFlags> flagsByIndex = new HashMap<>();
-        final Set<String> allVins = new HashSet<>();
-        final Set<String> allEngineNumbers = new HashSet<>();
-        final Set<String> allSerialNumbers = new HashSet<>();
-        final Map<String, List<String>> vinPaths = new HashMap<>();
-        final Map<String, List<String>> enginePaths = new HashMap<>();
-        final Map<String, List<String>> serialPaths = new HashMap<>();
-        ValidationContext(int itemCount) {}
+        private final Map<Long, ProductFlags> flagsByProductId = new HashMap<>();
+
+        private final Set<String> allVins = new HashSet<>();
+        private final Set<String> allEngineNumbers = new HashSet<>();
+        private final Set<String> allChassisNumbers = new HashSet<>();
+
+        private final Map<String, List<String>> vinPaths = new HashMap<>();
+        private final Map<String, List<String>> enginePaths = new HashMap<>();
+        private final Map<String, List<String>> chassisPaths = new HashMap<>();
     }
 }

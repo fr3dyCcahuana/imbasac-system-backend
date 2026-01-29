@@ -124,10 +124,11 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                         expiration_date
                     )
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    RETURNING id
                     """;
 
             for (PurchaseItem item : purchase.getItems()) {
-                jdbcClient.sql(insertItemSql)
+                Long itemId = jdbcClient.sql(insertItemSql)
                         .params(
                                 purchaseId,
                                 item.getLineNumber(),
@@ -145,7 +146,11 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                                 item.getLotCode(),
                                 item.getExpirationDate()
                         )
-                        .update();
+                        .query(Long.class)
+                        .single();
+
+                item.setId(itemId);
+                item.setPurchaseId(purchaseId);
             }
         }
 
