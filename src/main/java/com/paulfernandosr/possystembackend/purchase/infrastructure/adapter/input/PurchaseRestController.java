@@ -15,6 +15,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
+
 @RestController
 @RequestMapping("/purchases")
 @RequiredArgsConstructor
@@ -28,9 +30,11 @@ public class PurchaseRestController {
     // POST /purchases
     @PostMapping
     public ResponseEntity<SuccessResponse<Purchase>> createPurchase(
-            @Valid @RequestBody Purchase purchase
+            @Valid @RequestBody Purchase purchase,
+            Principal principal
     ) {
-        Purchase created = createPurchaseUseCase.createPurchase(purchase);
+        String username = principal != null ? principal.getName() : null;
+        Purchase created = createPurchaseUseCase.createPurchase(purchase, username);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(SuccessResponse.created(created));
     }
@@ -58,9 +62,11 @@ public class PurchaseRestController {
     // PUT /purchases/{purchaseId}/cancel
     @PutMapping("/{purchaseId}/cancel")
     public ResponseEntity<Void> cancelPurchase(
-            @PathVariable Long purchaseId
+            @PathVariable Long purchaseId,
+            Principal principal
     ) {
-        cancelPurchaseUseCase.cancelPurchaseById(purchaseId);
+        String username = principal != null ? principal.getName() : null;
+        cancelPurchaseUseCase.cancelPurchaseById(purchaseId, username);
         return ResponseEntity.noContent().build();
     }
 }

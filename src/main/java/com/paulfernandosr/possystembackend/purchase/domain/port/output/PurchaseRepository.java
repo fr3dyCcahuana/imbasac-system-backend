@@ -8,11 +8,11 @@ import java.util.Optional;
 
 public interface PurchaseRepository {
 
-    Purchase create(Purchase purchase);                   // inserta cabecera + items
+    Purchase create(Purchase purchase, String username);                   // inserta cabecera + items
 
     Page<Purchase> findPage(String query, Pageable pageable); // solo cabecera
 
     Optional<Purchase> findByIdWithItems(Long purchaseId);    // cabecera + items
 
-    void updateStatus(Long purchaseId, String status);        // REGISTRADA / ANULADA
+    void updateStatus(Long purchaseId, String status, String username);        // REGISTRADA / ANULADA
 }

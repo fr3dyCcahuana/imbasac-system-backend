@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Repository
@@ -29,7 +30,7 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
 
     @Override
     @Transactional
-    public Purchase create(Purchase purchase) {
+    public Purchase create(Purchase purchase, String username) {
 
         // 1) Insertar cabecera
         String insertPurchaseSql = """
@@ -62,10 +63,12 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
       delivery_guide_series,
       delivery_guide_number,
       delivery_guide_company,
+      created_by,
+      updated_by,
       created_at,
       updated_at
     )
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, NOW(), NOW())
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, ?, ?, NOW(), NOW())
     RETURNING id
 """;
         try {
@@ -98,7 +101,9 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                             purchase.getNotes(),
                             purchase.getDeliveryGuideSeries(),
                             purchase.getDeliveryGuideNumber(),
-                            purchase.getDeliveryGuideCompany()
+                            purchase.getDeliveryGuideCompany(),
+                            username,
+                            username
                     )
                     .query(Long.class)
                     .single();
@@ -220,6 +225,8 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                     p.igv_amount,
                     p.total,
                     p.status,
+                    p.created_by,
+                    p.updated_by,
                     p.created_at,
                     p.updated_at
                 FROM purchase p
@@ -279,8 +286,13 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                     p.total,
                     p.status,
                     p.notes,
+                    p.created_by,
+                    p.updated_by,
                     p.created_at,
-                    p.updated_at
+                    p.updated_at,
+                    p.delivery_guide_series,
+                    p.delivery_guide_number,
+                    p.delivery_guide_company
                 FROM purchase p
                 WHERE p.id = ?
                 """;
@@ -302,7 +314,8 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                             .currency(rs.getString("currency"))
                             .exchangeRate(rs.getBigDecimal("exchange_rate"))
                             .paymentType(rs.getString("payment_type"))
-                            .creditDays(rs.getInt("credit_days"))
+                            // creditDays: conservar NULL y, si es CONTADO, siempre devolver NULL
+                            .creditDays(resolveCreditDays(rs.getString("payment_type"), rs.getObject("credit_days", Integer.class)))
                             .supplierRuc(rs.getString("supplier_ruc"))
                             .supplierBusinessName(rs.getString("supplier_business_name"))
                             .supplierAddress(rs.getString("supplier_address"))
@@ -318,8 +331,13 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                             .total(rs.getBigDecimal("total"))
                             .status(rs.getString("status"))
                             .notes(rs.getString("notes"))
-                            .createdAt(rs.getTimestamp("created_at").toLocalDateTime())
-                            .updatedAt(rs.getTimestamp("updated_at").toLocalDateTime())
+                            .createdBy(rs.getString("created_by"))
+                            .updatedBy(rs.getString("updated_by"))
+                            .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null)
+                            .updatedAt(rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toLocalDateTime() : null)
+                            .deliveryGuideSeries(rs.getString("delivery_guide_series"))
+                            .deliveryGuideNumber(rs.getString("delivery_guide_number"))
+                            .deliveryGuideCompany(rs.getString("delivery_guide_company"))
                             .build();
 
                     return List.of(purchase);
@@ -348,8 +366,7 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                     pi.freight_allocated,
                     pi.total_cost,
                     pi.lot_code,
-                    pi.expiration_date,
-                    pi.created_at
+                    pi.expiration_date
                 FROM purchase_item pi
                 WHERE pi.purchase_id = ?
                 ORDER BY pi.line_number
@@ -360,21 +377,80 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                 .query(new PurchaseItemRowMapper())
                 .list();
 
+        // Cargar serialUnits (solo si existen) y asociarlos por purchase_item_id.
+        // Esto permite respuesta combinada: items normales -> serialUnits = null; items serializados -> lista.
+        attachSerialUnits(items);
+
         purchase.setItems(items);
 
         return Optional.of(purchase);
     }
 
+    private static Integer resolveCreditDays(String paymentType, Integer creditDays) {
+        if (paymentType == null) return creditDays;
+        return "CONTADO".equalsIgnoreCase(paymentType) ? null : creditDays;
+    }
+
+    private void attachSerialUnits(List<PurchaseItem> items) {
+        if (items == null || items.isEmpty()) return;
+
+        List<Long> itemIds = items.stream()
+                .map(PurchaseItem::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (itemIds.isEmpty()) return;
+
+        String in = itemIds.stream().map(id -> "?").collect(java.util.stream.Collectors.joining(","));
+        String sql = """
+                SELECT
+                    psu.purchase_item_id,
+                    psu.vin,
+                    psu.chassis_number,
+                    psu.engine_number,
+                    psu.color,
+                    psu.year_make,
+                    psu.dua_number,
+                    psu.dua_item
+                FROM product_serial_unit psu
+                WHERE psu.purchase_item_id IN (""" + in + ")\n" +
+                "ORDER BY psu.purchase_item_id, psu.dua_item";
+
+        var map = jdbcClient.sql(sql)
+                .params(itemIds.toArray())
+                .query(rs -> {
+                    java.util.Map<Long, List<com.paulfernandosr.possystembackend.purchase.domain.PurchaseSerialUnit>> out = new java.util.HashMap<>();
+                    while (rs.next()) {
+                        Long purchaseItemId = rs.getLong("purchase_item_id");
+                        com.paulfernandosr.possystembackend.purchase.domain.PurchaseSerialUnit u = com.paulfernandosr.possystembackend.purchase.domain.PurchaseSerialUnit.builder()
+                                .vin(rs.getString("vin"))
+                                .chassisNumber(rs.getString("chassis_number"))
+                                .engineNumber(rs.getString("engine_number"))
+                                .color(rs.getString("color"))
+                                .yearMake(rs.getObject("year_make", Integer.class))
+                                .duaNumber(rs.getString("dua_number"))
+                                .duaItem(rs.getObject("dua_item", Integer.class))
+                                .build();
+                        out.computeIfAbsent(purchaseItemId, k -> new java.util.ArrayList<>()).add(u);
+                    }
+                    return out;
+                });
+
+        for (PurchaseItem item : items) {
+            var serials = map.get(item.getId());
+            item.setSerialUnits((serials == null || serials.isEmpty()) ? null : serials);
+        }
+    }
+
     @Override
-    public void updateStatus(Long purchaseId, String status) {
+    public void updateStatus(Long purchaseId, String status, String username) {
         String sql = """
                 UPDATE purchase
-                SET status = ?, updated_at = NOW()
+                SET status = ?, updated_by = ?, updated_at = NOW()
                 WHERE id = ?
                 """;
 
         jdbcClient.sql(sql)
-                .params(status, purchaseId)
+                .params(status, username, purchaseId)
                 .update();
     }
 }

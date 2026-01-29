@@ -29,7 +29,8 @@ public class PurchaseItemRowMapper implements RowMapper<PurchaseItem> {
                 .expirationDate(rs.getDate("expiration_date") != null
                         ? rs.getDate("expiration_date").toLocalDate()
                         : null)
-                .createdAt(rs.getTimestamp("created_at").toLocalDateTime())
+                // En el detalle no necesitamos exponer createdAt del ítem.
+                .createdAt(null)
                 .build();
     }
 }

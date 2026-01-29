@@ -1,5 +1,5 @@
 package com.paulfernandosr.possystembackend.purchase.domain.port.input;
 
 public interface CancelPurchaseUseCase {
-    void cancelPurchaseById(Long purchaseId);
+    void cancelPurchaseById(Long purchaseId, String username);
 }

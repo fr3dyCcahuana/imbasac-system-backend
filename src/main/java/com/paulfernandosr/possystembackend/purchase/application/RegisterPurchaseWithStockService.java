@@ -32,9 +32,14 @@ public class RegisterPurchaseWithStockService implements CreatePurchaseUseCase {
     private final ProductSerialUnitRepository productSerialUnitRepository;
     private final StockService stockService;
 
+    private static String resolveActor(String username) {
+        return (username == null || username.isBlank()) ? "SYSTEM" : username.trim();
+    }
+
     @Override
     @Transactional
-    public Purchase createPurchase(Purchase purchase) {
+    public Purchase createPurchase(Purchase purchase, String username) {
+        String actor = resolveActor(username);
         if (purchase == null) {
             throw new PurchaseApiException(422, "INVALID_PURCHASE", "La compra es obligatoria.");
         }
@@ -56,7 +61,13 @@ public class RegisterPurchaseWithStockService implements CreatePurchaseUseCase {
         }
 
         // 2) Insertar compra + detalle (debe retornar IDs de purchase_item)
-        Purchase created = purchaseRepository.create(purchase);
+        purchase.setCreatedBy(actor);
+        purchase.setUpdatedBy(actor);
+        Purchase created = purchaseRepository.create(purchase, actor);
+
+        // Completa valores de respuesta (repositorio solo retorna id)
+        created.setCreatedBy(actor);
+        created.setUpdatedBy(actor);
 
         // 3) Registrar stock + seriales (si aplica)
         for (PurchaseItem item : created.getItems()) {

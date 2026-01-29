@@ -18,7 +18,9 @@ public class CancelPurchaseService implements CancelPurchaseUseCase {
 
     @Override
     @Transactional
-    public void cancelPurchaseById(Long purchaseId) {
+    public void cancelPurchaseById(Long purchaseId, String username) {
+
+        String actor = (username == null || username.isBlank()) ? "SYSTEM" : username.trim();
 
         Purchase purchase = purchaseRepository.findByIdWithItems(purchaseId)
                 .orElseThrow(() -> new IllegalArgumentException("Compra no encontrada"));
@@ -43,6 +45,6 @@ public class CancelPurchaseService implements CancelPurchaseUseCase {
         }
 
         // Cambiar estado
-        purchaseRepository.updateStatus(purchaseId, "ANULADA");
+        purchaseRepository.updateStatus(purchaseId, "ANULADA", actor);
     }
 }

@@ -58,6 +58,11 @@ public class Purchase {
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    // Auditoría (usuario)
+    private String createdBy;
+    private String updatedBy;
+
     private String deliveryGuideSeries;
     private String deliveryGuideNumber;
     private String deliveryGuideCompany;

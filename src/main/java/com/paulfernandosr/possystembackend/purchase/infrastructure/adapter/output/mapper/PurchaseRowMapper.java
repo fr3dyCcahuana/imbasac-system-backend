@@ -28,6 +28,8 @@ public class PurchaseRowMapper implements RowMapper<Purchase> {
                 .igvAmount(rs.getBigDecimal("igv_amount"))
                 .total(rs.getBigDecimal("total"))
                 .status(rs.getString("status"))
+                .createdBy(rs.getString("created_by"))
+                .updatedBy(rs.getString("updated_by"))
                 .createdAt(rs.getTimestamp("created_at").toLocalDateTime())
                 .updatedAt(rs.getTimestamp("updated_at").toLocalDateTime())
                 .build();
