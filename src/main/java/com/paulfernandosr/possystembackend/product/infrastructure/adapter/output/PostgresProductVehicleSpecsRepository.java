@@ -21,8 +21,6 @@ public class PostgresProductVehicleSpecsRepository implements ProductVehicleSpec
                 SELECT
                     product_id,
                     vehicle_type,
-                    brand,
-                    model,
                     bodywork,
                     engine_capacity,
                     engine_power,
@@ -66,8 +64,6 @@ public class PostgresProductVehicleSpecsRepository implements ProductVehicleSpec
                 INSERT INTO product_vehicle_specs(
                     product_id,
                     vehicle_type,
-                    brand,
-                    model,
                     bodywork,
                     engine_capacity,
                     engine_power,
@@ -85,16 +81,14 @@ public class PostgresProductVehicleSpecsRepository implements ProductVehicleSpec
                     net_weight,
                     payload,
                     gross_weight
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """;
 
         jdbcClient.sql(sql)
                 .params(
                         specs.getProductId(),
                         specs.getVehicleType(),
-                        specs.getBrand(),
-                        specs.getModel(),
-                        specs.getBodywork(),
+                                                specs.getBodywork(),
                         specs.getEngineCapacity(),
                         specs.getEnginePower(),
                         specs.getFuel(),
@@ -120,8 +114,6 @@ public class PostgresProductVehicleSpecsRepository implements ProductVehicleSpec
         String sql = """
                 UPDATE product_vehicle_specs
                    SET vehicle_type    = ?,
-                       brand           = ?,
-                       model           = ?,
                        bodywork        = ?,
                        engine_capacity = ?,
                        engine_power    = ?,
@@ -146,9 +138,7 @@ public class PostgresProductVehicleSpecsRepository implements ProductVehicleSpec
         jdbcClient.sql(sql)
                 .params(
                         specs.getVehicleType(),
-                        specs.getBrand(),
-                        specs.getModel(),
-                        specs.getBodywork(),
+                                                specs.getBodywork(),
                         specs.getEngineCapacity(),
                         specs.getEnginePower(),
                         specs.getFuel(),

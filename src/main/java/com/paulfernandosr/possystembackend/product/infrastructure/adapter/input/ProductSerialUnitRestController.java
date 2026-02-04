@@ -32,14 +32,13 @@ public class ProductSerialUnitRestController {
     ) {
         ProductSerialUnit unit = ProductSerialUnit.builder()
                 .vin(body.getVin())
-                .serialNumber(body.getSerialNumber())
+                .chassisNumber(body.getChassisNumber())
                 .engineNumber(body.getEngineNumber())
                 .color(body.getColor())
                 .yearMake(body.getYearMake())
-                .yearModel(body.getYearModel())
-                .vehicleClass(body.getVehicleClass())
+                .duaNumber(body.getDuaNumber())
+                .duaItem(body.getDuaItem())
                 .status(body.getStatus())
-                .locationCode(body.getLocationCode())
                 .purchaseItemId(body.getPurchaseItemId())
                 .build();
 
@@ -73,15 +72,14 @@ public class ProductSerialUnitRestController {
         private Long purchaseItemId;
 
         private String vin;
-        private String serialNumber;
+        private String chassisNumber;
         private String engineNumber;
 
         private String color;
         private Short yearMake;
-        private Short yearModel;
-        private String vehicleClass;
+        private String duaNumber;
+        private Integer duaItem;
 
         private String status;       // opcional (default EN_ALMACEN)
-        private String locationCode; // opcional
     }
 }

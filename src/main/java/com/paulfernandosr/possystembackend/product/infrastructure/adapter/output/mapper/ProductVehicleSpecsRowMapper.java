@@ -14,25 +14,23 @@ public class ProductVehicleSpecsRowMapper implements RowMapper<ProductVehicleSpe
                 .productId(rs.getLong("product_id"))
                 .vehicleType(rs.getString("vehicle_type"))
 
-                // comunes
-                .brand(rs.getString("brand"))
-                .model(rs.getString("model"))
+                // Comunes
                 .bodywork(rs.getString("bodywork"))
                 .engineCapacity(rs.getBigDecimal("engine_capacity"))
                 .fuel(rs.getString("fuel"))
-                .cylinders(rs.getObject("cylinders") == null ? null : rs.getInt("cylinders"))
+                .cylinders(rs.getObject("cylinders", Integer.class))
                 .netWeight(rs.getBigDecimal("net_weight"))
                 .payload(rs.getBigDecimal("payload"))
                 .grossWeight(rs.getBigDecimal("gross_weight"))
 
-                // moto
+                // Solo MOTOCICLETA
                 .vehicleClass(rs.getString("vehicle_class"))
                 .enginePower(rs.getBigDecimal("engine_power"))
                 .rollingForm(rs.getString("rolling_form"))
-                .seats(rs.getObject("seats") == null ? null : rs.getInt("seats"))
-                .passengers(rs.getObject("passengers") == null ? null : rs.getInt("passengers"))
-                .axles(rs.getObject("axles") == null ? null : rs.getInt("axles"))
-                .wheels(rs.getObject("wheels") == null ? null : rs.getInt("wheels"))
+                .seats(rs.getObject("seats", Integer.class))
+                .passengers(rs.getObject("passengers", Integer.class))
+                .axles(rs.getObject("axles", Integer.class))
+                .wheels(rs.getObject("wheels", Integer.class))
                 .length(rs.getBigDecimal("length"))
                 .width(rs.getBigDecimal("width"))
                 .height(rs.getBigDecimal("height"))

@@ -7,9 +7,11 @@ import com.paulfernandosr.possystembackend.proformav2.domain.model.ProformaStatu
 import com.paulfernandosr.possystembackend.proformav2.domain.port.input.ConvertProformaToSaleV2UseCase;
 import com.paulfernandosr.possystembackend.proformav2.domain.port.output.ProformaItemRepository;
 import com.paulfernandosr.possystembackend.proformav2.domain.port.output.ProformaRepository;
+import com.paulfernandosr.possystembackend.proformav2.domain.port.output.ProductSnapshotRepository;
 import com.paulfernandosr.possystembackend.proformav2.domain.port.output.SaleReferenceRepository;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ConvertProformaV2Request;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ConvertProformaV2Response;
+import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.output.model.ProductSnapshot;
 import com.paulfernandosr.possystembackend.salev2.application.CreateSaleV2Service;
 import com.paulfernandosr.possystembackend.salev2.domain.model.*;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2CreateRequest;
@@ -30,6 +32,7 @@ public class ConvertProformaToSaleV2Service implements ConvertProformaToSaleV2Us
     private final ProformaRepository proformaRepository;
     private final ProformaItemRepository proformaItemRepository;
     private final SaleReferenceRepository saleReferenceRepository;
+    private final ProductSnapshotRepository productSnapshotRepository;
     private final CreateSaleV2Service createSaleV2Service;
 
     @Override
@@ -77,6 +80,9 @@ public class ConvertProformaToSaleV2Service implements ConvertProformaToSaleV2Us
                 serialsByLine.put(ls.getLineNumber(), ls.getSerialUnitIds() == null ? List.of() : ls.getSerialUnitIds());
             }
         }
+
+        // ✅ Validación de seriales: solo MOTOR/MOTOCICLETAS con manage_by_serial=true requieren IDs
+        validateSerials(items, serialsByLine);
 
         SaleV2CreateRequest saleReq = SaleV2CreateRequest.builder()
                 .stationId(p.getStationId())
@@ -168,5 +174,79 @@ public class ConvertProformaToSaleV2Service implements ConvertProformaToSaleV2Us
                     .build());
         }
         return result;
+    }
+
+    private void validateSerials(List<ProformaItem> items, Map<Integer, List<Long>> serialsByLine) {
+        for (ProformaItem it : items) {
+
+            ProductSnapshot p = productSnapshotRepository.getById(it.getProductId());
+            if (p == null) {
+                throw new InvalidProformaV2Exception("Producto no encontrado: " + it.getProductId());
+            }
+            boolean serializable = Boolean.TRUE.equals(p.getManageBySerial());
+
+            List<Long> serialIds = serialsByLine.get(it.getLineNumber());
+
+            // Si NO es serializable, no debe venir serialUnitIds
+            if (!serializable) {
+                if (serialIds != null && !serialIds.isEmpty()) {
+                    throw new InvalidProformaV2Exception(
+                            "No se pueden asignar seriales a un producto no serializado. " +
+                                    "SKU=" + p.getSku() + ", line=" + it.getLineNumber()
+                    );
+                }
+                continue;
+            }
+
+            // Guardrail: solo MOTOR/MOTOCICLETAS pueden ser serializados
+            String cat = p.getCategory();
+            if (cat == null || (!cat.equalsIgnoreCase("MOTOR") && !cat.equalsIgnoreCase("MOTOCICLETAS"))) {
+                throw new InvalidProformaV2Exception(
+                        "Producto inválido: manage_by_serial=true solo aplica a categoría MOTOR/MOTOCICLETAS. " +
+                                "SKU=" + p.getSku() + ", category=" + cat
+                );
+            }
+
+            // Cantidad debe ser entera y debe coincidir con la cantidad de seriales
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new InvalidProformaV2Exception("Cantidad inválida en línea " + it.getLineNumber());
+            }
+            if (it.getQuantity().stripTrailingZeros().scale() > 0) {
+                throw new InvalidProformaV2Exception(
+                        "Cantidad debe ser entera para productos serializados. SKU=" + p.getSku() + ", line=" + it.getLineNumber()
+                );
+            }
+
+            int expected;
+            try {
+                expected = it.getQuantity().intValueExact();
+            } catch (ArithmeticException ex) {
+                throw new InvalidProformaV2Exception(
+                        "Cantidad inválida para producto serializado. SKU=" + p.getSku() + ", line=" + it.getLineNumber()
+                );
+            }
+
+            if (serialIds == null || serialIds.isEmpty()) {
+                throw new InvalidProformaV2Exception(
+                        "Debe enviar serialUnitIds para producto serializado. " +
+                                "SKU=" + p.getSku() + ", line=" + it.getLineNumber()
+                );
+            }
+
+            // Duplicados
+            Set<Long> uniq = new HashSet<>(serialIds);
+            if (uniq.size() != serialIds.size()) {
+                throw new InvalidProformaV2Exception(
+                        "serialUnitIds contiene duplicados. SKU=" + p.getSku() + ", line=" + it.getLineNumber()
+                );
+            }
+
+            if (serialIds.size() != expected) {
+                throw new InvalidProformaV2Exception(
+                        "La cantidad de serialUnitIds no coincide con quantity. " +
+                                "SKU=" + p.getSku() + ", line=" + it.getLineNumber() + ", quantity=" + expected + ", serials=" + serialIds.size()
+                );
+            }
+        }
     }
 }

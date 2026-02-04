@@ -14,6 +14,12 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class UpdateProductInfoService implements UpdateProductInfoUseCase {
 
+    private void requireText(String val, String field) {
+        if (val == null || val.trim().isEmpty()) {
+            throw new InvalidProductException(field + " es obligatorio para category MOTOR/MOTOCICLETAS.");
+        }
+    }
+
     private final ProductRepository productRepository;
     private final ProductVehicleSpecsRepository specsRepository;
 
@@ -26,6 +32,9 @@ public class UpdateProductInfoService implements UpdateProductInfoUseCase {
         ProductVehicleSpecs specs = product.getVehicleSpecs();
 
         if (requiresSpecs) {
+            // brand/model ahora viven en product (no en specs)
+            requireText(product.getBrand(), "brand");
+            requireText(product.getModel(), "model");
             boolean alreadyHasSpecs = specsRepository.existsByProductId(productId);
 
             if (specs == null && !alreadyHasSpecs) {

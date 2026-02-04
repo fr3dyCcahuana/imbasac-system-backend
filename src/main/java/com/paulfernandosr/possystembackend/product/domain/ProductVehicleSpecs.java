@@ -29,8 +29,6 @@ public class ProductVehicleSpecs {
     // --------------------
     // Comunes (MOTOR y MOTOCICLETA)
     // --------------------
-    private String brand;            // marca
-    private String model;            // modelo
     private String bodywork;         // carrocería
 
     private BigDecimal engineCapacity; // capacidad motor

@@ -1,16 +1,30 @@
 package com.paulfernandosr.possystembackend.product.application;
 
-import com.paulfernandosr.possystembackend.product.domain.*;
+import com.paulfernandosr.possystembackend.product.domain.Product;
+import com.paulfernandosr.possystembackend.product.domain.ProductSerialUnit;
+import com.paulfernandosr.possystembackend.product.domain.ProductStock;
+import com.paulfernandosr.possystembackend.product.domain.ProductStockAdjustment;
+import com.paulfernandosr.possystembackend.product.domain.ProductStockAdjustmentCommand;
+import com.paulfernandosr.possystembackend.product.domain.ProductStockAdjustmentResult;
+import com.paulfernandosr.possystembackend.product.domain.ProductStockMovement;
 import com.paulfernandosr.possystembackend.product.domain.exception.InvalidProductException;
 import com.paulfernandosr.possystembackend.product.domain.port.input.AdjustProductStockUseCase;
-import com.paulfernandosr.possystembackend.product.domain.port.output.*;
+import com.paulfernandosr.possystembackend.product.domain.port.output.ProductRepository;
+import com.paulfernandosr.possystembackend.product.domain.port.output.ProductSerialUnitRepository;
+import com.paulfernandosr.possystembackend.product.domain.port.output.ProductStockAdjustmentRepository;
+import com.paulfernandosr.possystembackend.product.domain.port.output.ProductStockMovementRepository;
+import com.paulfernandosr.possystembackend.product.domain.port.output.ProductStockRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.*;
+import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -48,9 +62,11 @@ public class AdjustProductStockService implements AdjustProductStockUseCase {
         BigDecimal qty = requirePositive(command.getQuantity(), "quantity");
 
         boolean isSerial = Boolean.TRUE.equals(product.getManageBySerial());
+        String category = product.getCategory() == null ? null : product.getCategory().trim().toUpperCase(Locale.ROOT);
+
         if (isSerial) {
             validateSerialQuantity(qty);
-            validateSerialUnitsRequired(type, command.getSerialUnits(), qty, command.getLocationCode());
+            validateSerialUnitsRequired(type, category, command.getSerialUnits(), qty);
         }
 
         // Lock de stock (si existe)
@@ -108,7 +124,7 @@ public class AdjustProductStockService implements AdjustProductStockUseCase {
             if ("IN_ADJUST".equals(type)) {
                 createSerialUnitsFromAdjustment(productId, adjustmentId, command);
             } else {
-                bajaSerialUnitsFromAdjustment(productId, adjustmentId, command);
+                bajaSerialUnitsFromAdjustment(productId, adjustmentId, command, category);
             }
         }
 
@@ -130,7 +146,7 @@ public class AdjustProductStockService implements AdjustProductStockUseCase {
                 .quantityOnHand(newQty)
                 .averageCost(newAvg)
                 .lastUnitCost(newLast)
-                .lastMovementAt(java.time.LocalDateTime.now())
+                .lastMovementAt(LocalDateTime.now())
                 .build();
         stockRepository.upsert(newStock);
 
@@ -162,37 +178,80 @@ public class AdjustProductStockService implements AdjustProductStockUseCase {
                 .build();
     }
 
-    private void validateSerialUnitsRequired(String type, List<ProductSerialUnit> units, BigDecimal qty, String locationCode) {
+    private void validateSerialUnitsRequired(String type, String category, java.util.List<ProductSerialUnit> units, BigDecimal qty) {
         if (units == null || units.isEmpty()) {
             throw new InvalidProductException("serialUnits es obligatorio para productos serializados.");
         }
+
+        if (category == null || (!"MOTOR".equals(category) && !"MOTOCICLETAS".equals(category))) {
+            throw new InvalidProductException("Producto serializado debe pertenecer a categoría MOTOR o MOTOCICLETAS.");
+        }
+
         int expected = qty.intValueExact();
         if (units.size() != expected) {
             throw new InvalidProductException("serialUnits debe tener exactamente " + expected + " elemento(s) para quantity=" + qty + ".");
         }
+
         // Unicidad interna en el request
         Set<String> vins = new HashSet<>();
         Set<String> engines = new HashSet<>();
-        Set<String> serials = new HashSet<>();
+        Set<String> chassis = new HashSet<>();
 
         for (ProductSerialUnit u : units) {
             String vin = normalize(u.getVin());
             String eng = normalize(u.getEngineNumber());
-            String ser = normalize(u.getSerialNumber());
+            String chs = normalize(u.getChassisNumber());
+            String color = normalize(u.getColor());
+            Short year = u.getYearMake();
 
             if ("IN_ADJUST".equals(type)) {
-                // para ingreso, al menos uno de los identificadores debe existir
-                if (vin == null && eng == null && ser == null) {
-                    throw new InvalidProductException("Cada serialUnit debe tener al menos vin o engineNumber o serialNumber.");
+                // comunes
+                if (color == null) {
+                    throw new InvalidProductException("color es obligatorio en serialUnits.");
                 }
-                // set location default si no viene
-                if ((u.getLocationCode() == null || u.getLocationCode().isBlank()) && locationCode != null && !locationCode.isBlank()) {
-                    u.setLocationCode(locationCode);
+                if (eng == null) {
+                    throw new InvalidProductException("engineNumber es obligatorio en serialUnits.");
                 }
+                if (year == null || year <= 0) {
+                    throw new InvalidProductException("yearMake es obligatorio y debe ser > 0 en serialUnits.");
+                }
+
+                // DUA opcional (pero consistente)
+                String dua = normalize(u.getDuaNumber());
+                Integer duaItem = u.getDuaItem();
+                if (dua != null || duaItem != null) {
+                    if (dua == null) {
+                        throw new InvalidProductException("duaNumber no puede ser vacío si se envía duaItem.");
+                    }
+                    if (duaItem == null || duaItem <= 0) {
+                        throw new InvalidProductException("duaItem debe ser > 0 si se envía duaNumber.");
+                    }
+                }
+
+                if ("MOTOR".equals(category)) {
+                    if (vin != null) {
+                        throw new InvalidProductException("Para MOTOR no se debe enviar vin.");
+                    }
+                    if (chs != null) {
+                        throw new InvalidProductException("Para MOTOR no se debe enviar chassisNumber.");
+                    }
+                } else {
+                    // MOTOCICLETAS
+                    if (vin == null) {
+                        throw new InvalidProductException("Para MOTOCICLETAS vin es obligatorio.");
+                    }
+                    if (chs == null) {
+                        throw new InvalidProductException("Para MOTOCICLETAS chassisNumber es obligatorio.");
+                    }
+                }
+
             } else {
-                // salida: identificador obligatorio
-                if (u.getId() == null && vin == null && eng == null && ser == null) {
-                    throw new InvalidProductException("En OUT_ADJUST cada serialUnit debe tener id o vin o engineNumber o serialNumber.");
+                // OUT_ADJUST
+                if (u.getId() == null && vin == null && eng == null && chs == null) {
+                    throw new InvalidProductException("En OUT_ADJUST cada serialUnit debe tener id o vin o engineNumber o chassisNumber.");
+                }
+                if ("MOTOR".equals(category) && u.getId() == null && eng == null) {
+                    throw new InvalidProductException("En OUT_ADJUST para MOTOR debes indicar id o engineNumber.");
                 }
             }
 
@@ -202,8 +261,8 @@ public class AdjustProductStockService implements AdjustProductStockUseCase {
             if (eng != null && !engines.add(eng)) {
                 throw new InvalidProductException("engineNumber duplicado en el request: " + eng);
             }
-            if (ser != null && !serials.add(ser)) {
-                throw new InvalidProductException("serialNumber duplicado en el request: " + ser);
+            if (chs != null && !chassis.add(chs)) {
+                throw new InvalidProductException("chassisNumber duplicado en el request: " + chs);
             }
         }
     }
@@ -216,37 +275,40 @@ public class AdjustProductStockService implements AdjustProductStockUseCase {
                     .saleItemId(null)
                     .stockAdjustmentId(adjustmentId)
                     .vin(u.getVin())
-                    .serialNumber(u.getSerialNumber())
+                    .chassisNumber(u.getChassisNumber())
                     .engineNumber(u.getEngineNumber())
                     .color(u.getColor())
                     .yearMake(u.getYearMake())
-                    .yearModel(u.getYearModel())
-                    .vehicleClass(u.getVehicleClass())
+                    .duaNumber(u.getDuaNumber())
+                    .duaItem(u.getDuaItem())
                     .status("EN_ALMACEN")
-                    .locationCode(u.getLocationCode() != null ? u.getLocationCode() : command.getLocationCode())
                     .build();
             serialUnitRepository.create(toCreate);
         }
     }
 
-    private void bajaSerialUnitsFromAdjustment(Long productId, Long adjustmentId, ProductStockAdjustmentCommand command) {
+    private void bajaSerialUnitsFromAdjustment(Long productId, Long adjustmentId, ProductStockAdjustmentCommand command, String category) {
         Set<Long> touched = new HashSet<>();
 
         for (ProductSerialUnit u : command.getSerialUnits()) {
-            ProductSerialUnit found = null;
+            ProductSerialUnit found;
 
             if (u.getId() != null) {
                 found = serialUnitRepository.findAvailableById(productId, u.getId())
                         .orElseThrow(() -> new InvalidProductException("No existe unidad en EN_ALMACEN con id=" + u.getId() + "."));
-            } else if (normalize(u.getVin()) != null) {
-                found = serialUnitRepository.findAvailableByVin(productId, u.getVin())
-                        .orElseThrow(() -> new InvalidProductException("No existe unidad en EN_ALMACEN con vin=" + u.getVin() + "."));
+
             } else if (normalize(u.getEngineNumber()) != null) {
                 found = serialUnitRepository.findAvailableByEngineNumber(productId, u.getEngineNumber())
                         .orElseThrow(() -> new InvalidProductException("No existe unidad en EN_ALMACEN con engineNumber=" + u.getEngineNumber() + "."));
+
+            } else if (normalize(u.getVin()) != null) {
+                found = serialUnitRepository.findAvailableByVin(productId, u.getVin())
+                        .orElseThrow(() -> new InvalidProductException("No existe unidad en EN_ALMACEN con vin=" + u.getVin() + "."));
+
             } else {
-                found = serialUnitRepository.findAvailableBySerialNumber(productId, u.getSerialNumber())
-                        .orElseThrow(() -> new InvalidProductException("No existe unidad en EN_ALMACEN con serialNumber=" + u.getSerialNumber() + "."));
+                // chassis (solo MOTOCICLETAS en la BD)
+                found = serialUnitRepository.findAvailableBySerialNumber(productId, u.getChassisNumber())
+                        .orElseThrow(() -> new InvalidProductException("No existe unidad en EN_ALMACEN con chassisNumber=" + u.getChassisNumber() + "."));
             }
 
             if (!touched.add(found.getId())) {

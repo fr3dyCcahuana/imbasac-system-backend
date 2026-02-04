@@ -17,20 +17,31 @@ public class ProductSerialUnit {
     private Long purchaseItemId;
     private Long saleItemId;
 
-    // ✅ NUEVO (2026): vínculo a ajuste manual de stock (facturableSunat=false)
+    // ✅ vínculo a ajuste manual de stock (facturableSunat=false)
     private Long stockAdjustmentId;
 
+    // -------------------------
+    // Identificadores
+    // -------------------------
+    // MOTOCICLETAS: suele venir VIN + CHASIS + MOTOR
+    // MOTOR: suele venir solo MOTOR (engineNumber)
     private String vin;
-    private String serialNumber;
+    private String chassisNumber;
     private String engineNumber;
 
+    // -------------------------
+    // Atributos
+    // -------------------------
     private String color;
     private Short yearMake;
-    private Short yearModel;
-    private String vehicleClass;
+
+    // -------------------------
+    // Importación (DUA)
+    // -------------------------
+    private String duaNumber;
+    private Integer duaItem;
 
     private String status;       // EN_ALMACEN / RESERVADO / VENDIDO / DEVUELTO / BAJA
-    private String locationCode;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

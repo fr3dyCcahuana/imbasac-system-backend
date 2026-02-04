@@ -14,6 +14,12 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class CreateNewProductService implements CreateNewProductUseCase {
 
+    private void requireText(String val, String field) {
+        if (val == null || val.trim().isEmpty()) {
+            throw new InvalidProductException(field + " es obligatorio para category MOTOR/MOTOCICLETAS.");
+        }
+    }
+
     private final ProductRepository productRepository;
     private final ProductVehicleSpecsRepository specsRepository;
 
@@ -25,6 +31,9 @@ public class CreateNewProductService implements CreateNewProductUseCase {
                 && ProductVehicleSpecsRules.isVehicleCategory(product.getCategory());
 
         if (requiresSpecs) {
+            // brand/model ahora viven en product (no en specs)
+            requireText(product.getBrand(), "brand");
+            requireText(product.getModel(), "model");
             ProductVehicleSpecs specs = product.getVehicleSpecs();
             if (specs == null) {
                 throw new InvalidProductException("Debe registrar vehicleSpecs para productos serializados en category MOTOR o MOTOCICLETAS.");
@@ -36,6 +45,9 @@ public class CreateNewProductService implements CreateNewProductUseCase {
         Product created = productRepository.create(product);
 
         if (requiresSpecs) {
+            // brand/model ahora viven en product (no en specs)
+            requireText(product.getBrand(), "brand");
+            requireText(product.getModel(), "model");
             ProductVehicleSpecs specs = product.getVehicleSpecs();
             specs.setProductId(created.getId());
             specsRepository.create(specs);

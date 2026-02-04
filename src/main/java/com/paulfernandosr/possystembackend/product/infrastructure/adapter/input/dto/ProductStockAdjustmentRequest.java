@@ -23,7 +23,6 @@ public class ProductStockAdjustmentRequest {
 
     private String reason;
     private String note;
-    private String locationCode;
 
     private List<SerialUnitAdjustmentRequest> serialUnits;
 
@@ -34,12 +33,11 @@ public class ProductStockAdjustmentRequest {
     public static class SerialUnitAdjustmentRequest {
         private Long id;
         private String vin;
-        private String serialNumber;
+        private String chassisNumber;
         private String engineNumber;
         private String color;
         private Integer yearMake;
-        private Integer yearModel;
-        private String vehicleClass;
-        private String locationCode;
-    }
+        private String duaNumber;
+        private Integer duaItem;
+        }
 }

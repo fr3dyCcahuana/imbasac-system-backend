@@ -92,6 +92,15 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
                 throw new InvalidProformaV2Exception("Cantidad inválida en línea " + line);
             }
 
+            // ✅ Serializados (MOTOR/MOTOCICLETAS): la cantidad debe ser entera (cada unidad es única)
+            if (Boolean.TRUE.equals(p.getManageBySerial())) {
+                if (qty.stripTrailingZeros().scale() > 0) {
+                    throw new InvalidProformaV2Exception(
+                            "Cantidad debe ser entera para productos serializados (MOTOR/MOTOCICLETAS). SKU=" + p.getSku()
+                    );
+                }
+            }
+
             BigDecimal unitPrice = resolvePriceByList(p, request.getPriceList());
             if (unitPrice == null) {
                 throw new InvalidProformaV2Exception("El producto " + p.getSku() + " no tiene precio para lista " + request.getPriceList());

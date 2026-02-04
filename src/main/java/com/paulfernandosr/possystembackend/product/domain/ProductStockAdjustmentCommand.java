@@ -18,7 +18,6 @@ public class ProductStockAdjustmentCommand {
 
     private String reason;
     private String note;
-    private String locationCode;
 
     // Si el producto es serializado, se deben enviar unidades.
     private List<ProductSerialUnit> serialUnits;

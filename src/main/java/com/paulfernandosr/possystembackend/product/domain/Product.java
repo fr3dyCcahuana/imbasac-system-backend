@@ -18,6 +18,10 @@ public class Product {
     // 1. Datos esenciales
     private String sku;               // Código interno
     private String name;              // Descripción
+
+    // ✅ NUEVO: marca/modelo (aplica a vehículos y accesorios)
+    private String brand;             // Marca
+    private String model;             // Modelo
     private String productType;       // BIEN / SERVICIO
     private String category;          // Categoría / familia
     private String presentation;      // UNIDAD / PAR / SET / KIT

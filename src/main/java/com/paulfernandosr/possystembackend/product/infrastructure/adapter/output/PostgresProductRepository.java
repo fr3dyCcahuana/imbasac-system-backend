@@ -28,9 +28,11 @@ public class PostgresProductRepository implements ProductRepository {
     @Override
     public Product create(Product product) {
         String sql = """
-            INSERT INTO product(
+            INSERT INTO product (
                 sku,
                 name,
+                brand,
+                model,
                 product_type,
                 category,
                 presentation,
@@ -51,11 +53,13 @@ public class PostgresProductRepository implements ProductRepository {
                 affects_stock,
                 gift_allowed
             )
-            VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, FALSE), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), COALESCE(?, TRUE), COALESCE(?, FALSE))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, FALSE), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), COALESCE(?, TRUE), COALESCE(?, FALSE))
             RETURNING
                 id          AS product_id,
                 sku,
                 name,
+                brand,
+                model,
                 product_type,
                 category,
                 presentation,
@@ -75,15 +79,12 @@ public class PostgresProductRepository implements ProductRepository {
                 facturable_sunat,
                 affects_stock,
                 gift_allowed,
-                -- ✅ stock real (on hand)
                 CASE
-                  WHEN manage_by_serial = TRUE THEN
-                    COALESCE((
-                      SELECT COUNT(*)::numeric(14,3)
-                      FROM product_serial_unit su
-                      WHERE su.product_id = id
-                        AND su.status = 'EN_ALMACEN'
-                    ), 0)
+                  WHEN manage_by_serial = TRUE THEN COALESCE((
+                    SELECT COUNT(*)::numeric(14,3)
+                    FROM product_serial_unit su
+                    WHERE su.product_id = id AND su.status = 'EN_ALMACEN'
+                  ), 0)
                   ELSE
                     COALESCE((
                       SELECT ps.quantity_on_hand
@@ -100,6 +101,8 @@ public class PostgresProductRepository implements ProductRepository {
                     .params(
                             product.getSku(),
                             product.getName(),
+                            product.getBrand(),
+                            product.getModel(),
                             product.getProductType(),
                             product.getCategory(),
                             product.getPresentation(),
@@ -127,7 +130,6 @@ public class PostgresProductRepository implements ProductRepository {
                     ? ex.getMostSpecificCause().getMessage()
                     : ex.getMessage();
 
-            // Puede variar el nombre del constraint en Postgres; cubrimos ambos casos comunes.
             if (message != null && (message.contains("product_sku_key") || message.contains("uq_product_sku") || message.contains("sku"))) {
                 throw new InvalidProductException(
                         "Ya existe un producto registrado con el SKU: " + product.getSku()
@@ -159,6 +161,8 @@ public class PostgresProductRepository implements ProductRepository {
                 p.id          AS product_id,
                 p.sku,
                 p.name,
+        p.brand,
+        p.model,
                 p.product_type,
                 p.category,
                 p.presentation,
@@ -239,6 +243,8 @@ public class PostgresProductRepository implements ProductRepository {
                 p.id          AS product_id,
                 p.sku,
                 p.name,
+        p.brand,
+        p.model,
                 p.product_type,
                 p.category,
                 p.presentation,
@@ -301,6 +307,8 @@ public class PostgresProductRepository implements ProductRepository {
                 p.id          AS product_id,
                 p.sku,
                 p.name,
+        p.brand,
+        p.model,
                 p.product_type,
                 p.category,
                 p.presentation,
@@ -353,6 +361,8 @@ public class PostgresProductRepository implements ProductRepository {
             UPDATE product
                SET sku                = ?,
                    name               = ?,
+                   brand              = ?,
+                   model              = ?,
                    product_type       = ?,
                    category           = ?,
                    presentation       = ?,
@@ -380,6 +390,8 @@ public class PostgresProductRepository implements ProductRepository {
                 .params(
                         product.getSku(),
                         product.getName(),
+                        product.getBrand(),
+                        product.getModel(),
                         product.getProductType(),
                         product.getCategory(),
                         product.getPresentation(),
@@ -403,4 +415,5 @@ public class PostgresProductRepository implements ProductRepository {
                 )
                 .update();
     }
+
 }

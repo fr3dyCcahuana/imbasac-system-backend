@@ -37,7 +37,6 @@ public class ProductStockAdjustmentRestController {
                 .unitCost(request.getUnitCost())
                 .reason(request.getReason())
                 .note(request.getNote())
-                .locationCode(request.getLocationCode())
                 .serialUnits(serialUnits)
                 .build();
 
@@ -54,13 +53,12 @@ public class ProductStockAdjustmentRestController {
                 .map(u -> ProductSerialUnit.builder()
                         .id(u.getId())
                         .vin(u.getVin())
-                        .serialNumber(u.getSerialNumber())
+                        .chassisNumber(u.getChassisNumber())
                         .engineNumber(u.getEngineNumber())
                         .color(u.getColor())
-                        .yearMake(u.getYearMake().shortValue())
-                        .yearModel(u.getYearModel().shortValue())
-                        .vehicleClass(u.getVehicleClass())
-                        .locationCode(u.getLocationCode())
+                        .yearMake(u.getYearMake() != null ? u.getYearMake().shortValue() : null)
+                        .duaNumber(u.getDuaNumber())
+                        .duaItem(u.getDuaItem())
                         .build())
                 .collect(Collectors.toList());
     }

@@ -41,9 +41,14 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                   SELECT
                     p.id,
                     p.affects_stock,
-                    p.manage_by_serial,
                     CASE
-                      WHEN p.manage_by_serial THEN (
+                      WHEN p.manage_by_serial = TRUE
+                       AND UPPER(COALESCE(p.category, '')) IN ('MOTOR','MOTOCICLETAS')
+                      THEN TRUE ELSE FALSE
+                    END AS manage_by_serial,
+                    CASE
+                      WHEN (p.manage_by_serial = TRUE
+                       AND UPPER(COALESCE(p.category, '')) IN ('MOTOR','MOTOCICLETAS')) THEN (
                         SELECT COUNT(1)
                           FROM product_serial_unit psu
                          WHERE psu.product_id = p.id
@@ -83,7 +88,11 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                     p.presentation,
                     p.factor,
                 
-                    p.manage_by_serial,
+                    CASE
+                      WHEN p.manage_by_serial = TRUE
+                       AND UPPER(COALESCE(p.category, '')) IN ('MOTOR','MOTOCICLETAS')
+                      THEN TRUE ELSE FALSE
+                    END AS manage_by_serial,
                     p.compatibility,
                     p.gift_allowed,
                 
@@ -99,7 +108,8 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                     END AS unit_price,
                 
                     CASE
-                      WHEN p.manage_by_serial THEN (
+                      WHEN (p.manage_by_serial = TRUE
+                       AND UPPER(COALESCE(p.category, '')) IN ('MOTOR','MOTOCICLETAS')) THEN (
                         SELECT COUNT(1)
                           FROM product_serial_unit psu
                          WHERE psu.product_id = p.id
@@ -225,15 +235,15 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                       product_id,
                       purchase_item_id,
                       sale_item_id,
+                      stock_adjustment_id,
                       vin,
-                      serial_number,
+                      chassis_number,
                       engine_number,
                       color,
                       year_make,
-                      year_model,
-                      vehicle_class,
+                      dua_number,
+                      dua_item,
                       status,
-                      location_code,
                       created_at,
                       updated_at
                     FROM product_serial_unit

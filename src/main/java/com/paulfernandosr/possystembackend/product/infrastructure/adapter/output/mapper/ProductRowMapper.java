@@ -14,6 +14,8 @@ public class ProductRowMapper implements RowMapper<Product> {
                 .id(rs.getLong("product_id"))
                 .sku(rs.getString("sku"))
                 .name(rs.getString("name"))
+                .brand(rs.getString("brand"))
+                .model(rs.getString("model"))
                 .productType(rs.getString("product_type"))
                 .category(rs.getString("category"))
                 .presentation(rs.getString("presentation"))

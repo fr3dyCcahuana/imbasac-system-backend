@@ -30,16 +30,15 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
                 purchase_item_id,
                 stock_adjustment_id,
                 vin,
-                serial_number,
+                chassis_number,
                 engine_number,
                 color,
                 year_make,
-                year_model,
-                vehicle_class,
-                status,
-                location_code
+                dua_number,
+                dua_item,
+                status
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING
                 id AS serial_unit_id,
                 product_id,
@@ -47,14 +46,13 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
                 sale_item_id,
                 stock_adjustment_id,
                 vin,
-                serial_number,
+                chassis_number,
                 engine_number,
                 color,
                 year_make,
-                year_model,
-                vehicle_class,
+                dua_number,
+                dua_item,
                 status,
-                location_code,
                 created_at,
                 updated_at
             """;
@@ -66,14 +64,13 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
                             unit.getPurchaseItemId(),
                             unit.getStockAdjustmentId(),
                             unit.getVin(),
-                            unit.getSerialNumber(),
+                            unit.getChassisNumber(),
                             unit.getEngineNumber(),
                             unit.getColor(),
                             unit.getYearMake(),
-                            unit.getYearModel(),
-                            unit.getVehicleClass(),
-                            unit.getStatus(),
-                            unit.getLocationCode()
+                            unit.getDuaNumber(),
+                            unit.getDuaItem(),
+                            unit.getStatus()
                     )
                     .query(new ProductSerialUnitRowMapper())
                     .single();
@@ -82,6 +79,9 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
 
             if (msg != null && msg.contains("ux_product_serial_unit_vin")) {
                 throw new InvalidProductSerialUnitException("El VIN ya existe.");
+            }
+            if (msg != null && (msg.contains("ux_product_serial_unit_chassis") || msg.contains("ux_product_serial_unit_chassis_number"))) {
+                throw new InvalidProductSerialUnitException("El chasis/serie ya existe.");
             }
             if (msg != null && msg.contains("ux_product_serial_unit_engine_number")) {
                 throw new InvalidProductSerialUnitException("El engineNumber ya existe.");
@@ -99,7 +99,7 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
             SELECT COUNT(1)
               FROM product_serial_unit u
              WHERE u.product_id = ?
-               AND (? = '' OR u.vin ILIKE ? OR u.serial_number ILIKE ? OR u.engine_number ILIKE ?)
+               AND (? = '' OR u.vin ILIKE ? OR u.chassis_number ILIKE ? OR u.engine_number ILIKE ?)
                AND (? IS NULL OR ? = '' OR u.status = ?)
             """;
 
@@ -120,19 +120,18 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
                 u.sale_item_id,
                 u.stock_adjustment_id,
                 u.vin,
-                u.serial_number,
+                u.chassis_number,
                 u.engine_number,
                 u.color,
                 u.year_make,
-                u.year_model,
-                u.vehicle_class,
+                u.dua_number,
+                u.dua_item,
                 u.status,
-                u.location_code,
                 u.created_at,
                 u.updated_at
               FROM product_serial_unit u
              WHERE u.product_id = ?
-               AND (? = '' OR u.vin ILIKE ? OR u.serial_number ILIKE ? OR u.engine_number ILIKE ?)
+               AND (? = '' OR u.vin ILIKE ? OR u.chassis_number ILIKE ? OR u.engine_number ILIKE ?)
                AND (? IS NULL OR ? = '' OR u.status = ?)
              ORDER BY u.created_at DESC
              LIMIT ?
@@ -176,14 +175,13 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
                 u.sale_item_id,
                 u.stock_adjustment_id,
                 u.vin,
-                u.serial_number,
+                u.chassis_number,
                 u.engine_number,
                 u.color,
                 u.year_make,
-                u.year_model,
-                u.vehicle_class,
+                u.dua_number,
+                u.dua_item,
                 u.status,
-                u.location_code,
                 u.created_at,
                 u.updated_at
               FROM product_serial_unit u
@@ -218,15 +216,16 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
 
     @Override
     public java.util.Optional<ProductSerialUnit> findAvailableBySerialNumber(Long productId, String serialNumber) {
+        // Compatibilidad: antes se llamaba serialNumber, ahora es chassisNumber.
         // Puede haber duplicados si no hay índice único; por eso detectamos ambigüedad.
-        String sql = baseFindAvailableBy("serial_number") + " LIMIT 2";
+        String sql = baseFindAvailableBy("chassis_number") + " LIMIT 2";
         List<ProductSerialUnit> list = jdbcClient.sql(sql)
                 .params(productId, serialNumber)
                 .query(new ProductSerialUnitRowMapper())
                 .list();
 
         if (list.size() > 1) {
-            throw new InvalidProductSerialUnitException("serialNumber es ambiguo (existen múltiples unidades con ese valor). Use vin o engineNumber.");
+            throw new InvalidProductSerialUnitException("chassisNumber es ambiguo (existen múltiples unidades con ese valor). Use vin o engineNumber.");
         }
         return list.stream().findFirst();
     }
@@ -255,14 +254,13 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
                 u.sale_item_id,
                 u.stock_adjustment_id,
                 u.vin,
-                u.serial_number,
+                u.chassis_number,
                 u.engine_number,
                 u.color,
                 u.year_make,
-                u.year_model,
-                u.vehicle_class,
+                u.dua_number,
+                u.dua_item,
                 u.status,
-                u.location_code,
                 u.created_at,
                 u.updated_at
               FROM product_serial_unit u

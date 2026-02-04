@@ -6,66 +6,69 @@ import com.paulfernandosr.possystembackend.product.domain.exception.InvalidProdu
 import java.math.BigDecimal;
 
 /**
- * Reglas de negocio para la ficha técnica vehicular.
+ * Reglas de validación para product_vehicle_specs.
+ *
+ * IMPORTANTE (2026-01): brand y model se movieron a la tabla product.
+ * En specs solo quedan los datos técnicos.
  */
-public final class ProductVehicleSpecsRules {
+public class ProductVehicleSpecsRules {
 
-    private ProductVehicleSpecsRules() {
-    }
-
-    public static final String CATEGORY_MOTOR = "MOTOR";
-    public static final String CATEGORY_MOTOCICLETAS = "MOTOCICLETAS";
-
-    public static final String TYPE_MOTOR = "MOTOR";
-    public static final String TYPE_MOTOCICLETA = "MOTOCICLETA";
+    private ProductVehicleSpecsRules() {}
 
     public static boolean isVehicleCategory(String category) {
-        String cat = normalize(category);
-        return CATEGORY_MOTOR.equals(cat) || CATEGORY_MOTOCICLETAS.equals(cat);
+        if (category == null) return false;
+        String c = category.trim().toUpperCase();
+        return c.equals("MOTOR") || c.equals("MOTOCICLETAS");
     }
 
-    public static String deriveVehicleTypeFromCategory(String category) {
-        String cat = normalize(category);
-        if (CATEGORY_MOTOR.equals(cat)) {
-            return TYPE_MOTOR;
-        }
-        if (CATEGORY_MOTOCICLETAS.equals(cat)) {
-            return TYPE_MOTOCICLETA;
-        }
+    public static String deriveVehicleType(String category) {
+        if (category == null) return null;
+        String c = category.trim().toUpperCase();
+        if (c.equals("MOTOR")) return "MOTOR";
+        if (c.equals("MOTOCICLETAS")) return "MOTOCICLETA";
         return null;
     }
 
-    public static void validateRequired(String category, ProductVehicleSpecs specs) {
-        String vehicleType = deriveVehicleTypeFromCategory(category);
-        if (vehicleType == null) {
-            // No aplica.
-            return;
+    /**
+     * Valida los campos obligatorios de specs según la categoría del producto.
+     * También setea vehicleType derivado por category.
+     */
+    public static void validateRequired(String productCategory, ProductVehicleSpecs specs) {
+        if (specs == null) {
+            throw new InvalidProductException("vehicleSpecs no puede ser null.");
         }
 
-        // VehicleType derivado siempre manda
+        String vehicleType = deriveVehicleType(productCategory);
+        if (vehicleType == null) {
+            throw new InvalidProductException("vehicleSpecs aplica solo para category MOTOR o MOTOCICLETAS.");
+        }
         specs.setVehicleType(vehicleType);
 
+        // --------------------
         // Comunes
-        requireText(specs.getBrand(), "brand");
-        requireText(specs.getModel(), "model");
+        // --------------------
         requireText(specs.getBodywork(), "bodywork");
-        requirePositive(specs.getEngineCapacity(), "engineCapacity");
         requireText(specs.getFuel(), "fuel");
-        requirePositiveInt(specs.getCylinders(), "cylinders");
+
+        requirePositive(specs.getEngineCapacity(), "engineCapacity");
+        requirePositive(specs.getCylinders(), "cylinders");
+
         requireNonNegative(specs.getNetWeight(), "netWeight");
         requireNonNegative(specs.getPayload(), "payload");
         requireNonNegative(specs.getGrossWeight(), "grossWeight");
 
-        if (TYPE_MOTOCICLETA.equals(vehicleType)) {
-            // Adicionales obligatorios
+        // --------------------
+        // Solo MOTOCICLETA
+        // --------------------
+        if ("MOTOCICLETA".equals(vehicleType)) {
             requireText(specs.getVehicleClass(), "vehicleClass");
             requirePositive(specs.getEnginePower(), "enginePower");
             requireText(specs.getRollingForm(), "rollingForm");
 
-            requirePositiveInt(specs.getSeats(), "seats");
-            requirePositiveInt(specs.getPassengers(), "passengers");
-            requirePositiveInt(specs.getAxles(), "axles");
-            requirePositiveInt(specs.getWheels(), "wheels");
+            requirePositive(specs.getSeats(), "seats");
+            requirePositive(specs.getPassengers(), "passengers");
+            requirePositive(specs.getAxles(), "axles");
+            requirePositive(specs.getWheels(), "wheels");
 
             requirePositive(specs.getLength(), "length");
             requirePositive(specs.getWidth(), "width");
@@ -73,40 +76,27 @@ public final class ProductVehicleSpecsRules {
         }
     }
 
-    private static void requireText(String value, String field) {
-        if (value == null || value.isBlank()) {
-            throw new InvalidProductException("El campo es obligatorio: " + field);
+    private static void requireText(String val, String field) {
+        if (val == null || val.trim().isEmpty()) {
+            throw new InvalidProductException(field + " es obligatorio.");
         }
     }
 
-    private static void requirePositive(BigDecimal value, String field) {
-        if (value == null) {
-            throw new InvalidProductException("El campo es obligatorio: " + field);
-        }
-        if (value.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new InvalidProductException("El campo debe ser mayor a 0: " + field);
+    private static void requirePositive(Integer val, String field) {
+        if (val == null || val <= 0) {
+            throw new InvalidProductException(field + " debe ser > 0.");
         }
     }
 
-    private static void requireNonNegative(BigDecimal value, String field) {
-        if (value == null) {
-            throw new InvalidProductException("El campo es obligatorio: " + field);
-        }
-        if (value.compareTo(BigDecimal.ZERO) < 0) {
-            throw new InvalidProductException("El campo no puede ser negativo: " + field);
+    private static void requirePositive(BigDecimal val, String field) {
+        if (val == null || val.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidProductException(field + " debe ser > 0.");
         }
     }
 
-    private static void requirePositiveInt(Integer value, String field) {
-        if (value == null) {
-            throw new InvalidProductException("El campo es obligatorio: " + field);
+    private static void requireNonNegative(BigDecimal val, String field) {
+        if (val == null || val.compareTo(BigDecimal.ZERO) < 0) {
+            throw new InvalidProductException(field + " debe ser >= 0.");
         }
-        if (value <= 0) {
-            throw new InvalidProductException("El campo debe ser mayor a 0: " + field);
-        }
-    }
-
-    private static String normalize(String v) {
-        return v == null ? null : v.trim().toUpperCase();
     }
 }

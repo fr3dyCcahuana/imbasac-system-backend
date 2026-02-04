@@ -19,6 +19,8 @@ public class CatalogRestController {
     private final ProductTypeService productTypeService;
     private final PresentationService presentationService;
     private final OriginCountryService originCountryService;
+    private final BrandService brandService;
+    private final ModelService modelService;
 
     // --------------- COMPATIBILIDADES ---------------
 
@@ -77,6 +79,36 @@ public class CatalogRestController {
     public ResponseEntity<SuccessResponse<Collection<OriginCountry>>> getOriginCountries() {
         return ResponseEntity.ok(
                 SuccessResponse.ok(originCountryService.findAll())
+        );
+    }
+
+    // --------------- MARCAS ---------------
+
+    @PostMapping("/brands")
+    public ResponseEntity<Void> createBrand(@RequestBody Brand brand) {
+        brandService.create(brand);
+        return new ResponseEntity<>(HttpStatus.CREATED);
+    }
+
+    @GetMapping("/brands")
+    public ResponseEntity<SuccessResponse<Collection<Brand>>> getBrands() {
+        return ResponseEntity.ok(
+                SuccessResponse.ok(brandService.findAll())
+        );
+    }
+
+    // --------------- MODELOS (independiente) ---------------
+
+    @PostMapping("/models")
+    public ResponseEntity<Void> createModel(@RequestBody Model model) {
+        modelService.create(model);
+        return new ResponseEntity<>(HttpStatus.CREATED);
+    }
+
+    @GetMapping("/models")
+    public ResponseEntity<SuccessResponse<Collection<Model>>> getModels() {
+        return ResponseEntity.ok(
+                SuccessResponse.ok(modelService.findAll())
         );
     }
 }
