@@ -76,7 +76,7 @@ public class ProductSerialUnitRestController {
         private String engineNumber;
 
         private String color;
-        private Short yearMake;
+        private Integer yearMake;
         private String duaNumber;
         private Integer duaItem;
 

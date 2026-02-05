@@ -33,7 +33,7 @@ public class ProductSerialUnit {
     // Atributos
     // -------------------------
     private String color;
-    private Short yearMake;
+    private Integer yearMake;
 
     // -------------------------
     // Importación (DUA)

@@ -56,7 +56,7 @@ public class ProductStockAdjustmentRestController {
                         .chassisNumber(u.getChassisNumber())
                         .engineNumber(u.getEngineNumber())
                         .color(u.getColor())
-                        .yearMake(u.getYearMake() != null ? u.getYearMake().shortValue() : null)
+                        .yearMake(u.getYearMake() != null ? u.getYearMake() : null)
                         .duaNumber(u.getDuaNumber())
                         .duaItem(u.getDuaItem())
                         .build())

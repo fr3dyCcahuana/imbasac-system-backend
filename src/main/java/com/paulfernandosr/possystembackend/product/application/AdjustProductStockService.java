@@ -202,7 +202,7 @@ public class AdjustProductStockService implements AdjustProductStockUseCase {
             String eng = normalize(u.getEngineNumber());
             String chs = normalize(u.getChassisNumber());
             String color = normalize(u.getColor());
-            Short year = u.getYearMake();
+            Integer year = u.getYearMake();
 
             if ("IN_ADJUST".equals(type)) {
                 // comunes

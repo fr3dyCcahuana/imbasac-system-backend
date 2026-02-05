@@ -11,13 +11,13 @@ public class ProductSerialUnitRowMapper implements RowMapper<ProductSerialUnit> 
     @Override
     public ProductSerialUnit mapRow(ResultSet rs, int rowNum) throws SQLException {
         return ProductSerialUnit.builder()
-                .id(rs.getLong("id"))
+                .id(rs.getLong("serial_unit_id"))
                 .productId(rs.getLong("product_id"))
                 .vin(rs.getString("vin"))
                 .chassisNumber(rs.getString("chassis_number"))
                 .engineNumber(rs.getString("engine_number"))
                 .color(rs.getString("color"))
-                .yearMake((Short) rs.getObject("year_make"))
+                .yearMake((Integer) rs.getObject("year_make"))
                 .duaNumber(rs.getString("dua_number"))
                 .duaItem((Integer) rs.getObject("dua_item"))
                 .status(rs.getString("status"))
