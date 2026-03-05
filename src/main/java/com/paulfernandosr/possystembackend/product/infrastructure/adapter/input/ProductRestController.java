@@ -7,6 +7,8 @@ import com.paulfernandosr.possystembackend.common.infrastructure.response.Succes
 import com.paulfernandosr.possystembackend.product.domain.Product;
 import com.paulfernandosr.possystembackend.product.domain.ProductSalesDetail;
 import com.paulfernandosr.possystembackend.product.domain.port.input.*;
+import com.paulfernandosr.possystembackend.product.infrastructure.adapter.input.dto.ProductStockValidationDto;
+import com.paulfernandosr.possystembackend.product.infrastructure.adapter.input.dto.ValidateStockRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +27,7 @@ public class ProductRestController {
     private final GetProductInfoUseCase getProductInfoUseCase;
     private final UpdateProductInfoUseCase updateProductInfoUseCase;
     private final GetProductSalesDetailPageUseCase getProductSalesDetailPageUseCase;
+    private final ValidateProductStockUseCase validateProductStockUseCase;
     // POST /products
     @PostMapping
     public ResponseEntity<SuccessResponse<Product>> createNewProduct(
@@ -44,10 +47,21 @@ public class ProductRestController {
     @GetMapping
     public ResponseEntity<SuccessResponse<Collection<Product>>> getPageOfProducts(
             @RequestParam(defaultValue = "") String query,
+
+            @RequestParam(required = false) String brand,
+            @RequestParam(required = false) String model,
+            @RequestParam(required = false) String category,
+
+            // ALL | IN | OUT
+            @RequestParam(defaultValue = "ALL") String stock,
+
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        Page<Product> pageOfProducts = getPageOfProductsUseCase.getPageOfProducts(query, new Pageable(page, size));
+        Page<Product> pageOfProducts = getPageOfProductsUseCase.getPageOfProducts(
+                query, brand, model, category, stock, new Pageable(page, size)
+        );
+
         SuccessResponse.Metadata metadata = PageMapper.mapPage(pageOfProducts);
         return ResponseEntity.ok(SuccessResponse.ok(pageOfProducts.getContent(), metadata));
     }
@@ -86,5 +100,18 @@ public class ProductRestController {
 
         SuccessResponse.Metadata metadata = PageMapper.mapPage(result);
         return ResponseEntity.ok(SuccessResponse.ok(result.getContent(), metadata));
+    }
+
+    @PostMapping("/sales-detail/validate")
+    public ResponseEntity<SuccessResponse<Collection<ProductStockValidationDto>>> validateStockByIds(
+            @Valid @RequestBody ValidateStockRequest req
+    ) {
+        boolean includeSerials = Boolean.TRUE.equals(req.getIncludeSerialUnits());
+        int serialLimit = (req.getSerialLimit() == null || req.getSerialLimit() <= 0) ? 50 : req.getSerialLimit();
+
+        Collection<ProductStockValidationDto> result =
+                validateProductStockUseCase.validate(req.getIds(), includeSerials, serialLimit);
+
+        return ResponseEntity.ok(SuccessResponse.ok(result));
     }
 }

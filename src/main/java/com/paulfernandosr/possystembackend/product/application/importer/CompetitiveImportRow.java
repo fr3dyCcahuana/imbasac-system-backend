@@ -15,6 +15,9 @@ public class CompetitiveImportRow {
     private String name;
 
     private String category;
+    private String brand;
+    private String model;
+
     private String presentation;
     private BigDecimal factor;
 

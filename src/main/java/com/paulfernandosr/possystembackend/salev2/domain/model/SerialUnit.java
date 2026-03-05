@@ -11,4 +11,7 @@ public class SerialUnit {
     private Long id;
     private Long productId;
     private String status;
+    // ✅ para contratos (MOTOCICLETAS)
+    private String vin;
+    private Long contractId;
 }

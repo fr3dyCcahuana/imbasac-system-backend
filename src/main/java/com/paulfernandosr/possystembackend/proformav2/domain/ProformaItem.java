@@ -32,4 +32,5 @@ public class ProformaItem {
     private Boolean affectsStock;
 
     private LocalDateTime createdAt;
+    private String warehouseLocation;
 }

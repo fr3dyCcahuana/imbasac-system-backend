@@ -26,7 +26,9 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
         String sql = String.format("""
         SELECT id,
                product_id AS productId,
-               status
+               status,
+               vin,
+               contract_id AS contractId
           FROM product_serial_unit
          WHERE id IN (%s)
          FOR UPDATE
@@ -40,7 +42,6 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
 
     @Override
     public void markAsSold(Long serialUnitId, Long saleItemId) {
-        // Si tu tabla no tiene updated_at, elimina esa línea.
         String sql = """
             UPDATE product_serial_unit
                SET status = 'VENDIDO',
@@ -64,7 +65,9 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
         String sql = String.format("""
         SELECT id,
                product_id AS productId,
-               status
+               status,
+               vin,
+               contract_id AS contractId
           FROM product_serial_unit
          WHERE sale_item_id IN (%s)
          FOR UPDATE

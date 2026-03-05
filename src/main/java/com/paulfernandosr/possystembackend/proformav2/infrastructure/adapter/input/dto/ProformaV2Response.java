@@ -69,5 +69,6 @@ public class ProformaV2Response {
 
         private Boolean facturableSunat;
         private Boolean affectsStock;
+        private String warehouseLocation;
     }
 }

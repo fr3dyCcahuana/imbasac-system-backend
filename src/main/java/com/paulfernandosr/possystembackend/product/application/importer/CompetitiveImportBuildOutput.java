@@ -9,5 +9,7 @@ import java.util.Set;
 public record CompetitiveImportBuildOutput(
         List<Product> commands,
         List<ProductCompetitiveImportPreviewRow> previewRows,
-        Set<String> categoriesUsed
+        Set<String> categoriesUsed,
+        Set<String> brandsUsed,
+        Set<String> modelsUsed
 ) {}

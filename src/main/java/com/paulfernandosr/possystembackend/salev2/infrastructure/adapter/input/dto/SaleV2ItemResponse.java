@@ -35,4 +35,6 @@ public class SaleV2ItemResponse {
     private BigDecimal totalCostSnapshot;
 
     private BigDecimal revenueTotal;
+    private String productCategory;
+    private VehicleDetailsResponse vehicleDetails;
 }

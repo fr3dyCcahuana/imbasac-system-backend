@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.product.application.importer;
 
 import com.paulfernandosr.possystembackend.product.domain.*;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
@@ -18,7 +19,10 @@ public class CompetitiveImportBuilder {
     ) {
         List<Product> products = new ArrayList<>();
         List<ProductCompetitiveImportPreviewRow> preview = new ArrayList<>();
+
         Set<String> categoriesUsed = new HashSet<>();
+        Set<String> brandsUsed = new HashSet<>();
+        Set<String> modelsUsed = new HashSet<>();
 
         Map<String, Integer> skuFirstRow = new HashMap<>();
 
@@ -48,6 +52,16 @@ public class CompetitiveImportBuilder {
                 continue;
             }
 
+            // NUEVO: longitudes por DB
+            if (row.getBrand() != null && row.getBrand().length() > 100) {
+                addError(result, row, sku, "Marca", "TOO_LONG", row.getBrand(), "Marca debe ser <= 100 caracteres.");
+                continue;
+            }
+            if (row.getModel() != null && row.getModel().length() > 100) {
+                addError(result, row, sku, "Modelo", "TOO_LONG", row.getModel(), "Modelo debe ser <= 100 caracteres.");
+                continue;
+            }
+
             if (skuFirstRow.containsKey(sku)) {
                 addError(result, row, sku, "Código (SKU)*", "DUPLICATE_IN_FILE", sku,
                         "SKU duplicado en el archivo (primera vez en fila " + skuFirstRow.get(sku) + ").");
@@ -56,19 +70,36 @@ public class CompetitiveImportBuilder {
             skuFirstRow.put(sku, row.getRowNumber());
 
             // listas permitidas
-            if (row.getCategory() != null && !workbook.getAllowedCategories().contains(row.getCategory())) {
+            if (row.getCategory() != null && workbook.getAllowedCategories() != null && !workbook.getAllowedCategories().isEmpty()
+                    && !workbook.getAllowedCategories().contains(row.getCategory())) {
                 addError(result, row, sku, "Categoría", "NOT_ALLOWED", row.getCategory(), "Categoría no permitida.");
                 continue;
             }
-            if (row.getPresentation() != null && !workbook.getAllowedPresentations().contains(row.getPresentation())) {
+
+            // ✅ NUEVO: validar Marca/Modelo solo si la plantilla trae listas (no vacías)
+            if (row.getBrand() != null && workbook.getAllowedBrands() != null && !workbook.getAllowedBrands().isEmpty()
+                    && !workbook.getAllowedBrands().contains(row.getBrand())) {
+                addError(result, row, sku, "Marca", "NOT_ALLOWED", row.getBrand(), "Marca no permitida.");
+                continue;
+            }
+            if (row.getModel() != null && workbook.getAllowedModels() != null && !workbook.getAllowedModels().isEmpty()
+                    && !workbook.getAllowedModels().contains(row.getModel())) {
+                addError(result, row, sku, "Modelo", "NOT_ALLOWED", row.getModel(), "Modelo no permitido.");
+                continue;
+            }
+
+            if (row.getPresentation() != null && workbook.getAllowedPresentations() != null && !workbook.getAllowedPresentations().isEmpty()
+                    && !workbook.getAllowedPresentations().contains(row.getPresentation())) {
                 addError(result, row, sku, "Presentación", "NOT_ALLOWED", row.getPresentation(), "Presentación no permitida.");
                 continue;
             }
-            if (row.getOriginType() != null && !workbook.getAllowedOriginTypes().contains(row.getOriginType())) {
+            if (row.getOriginType() != null && workbook.getAllowedOriginTypes() != null && !workbook.getAllowedOriginTypes().isEmpty()
+                    && !workbook.getAllowedOriginTypes().contains(row.getOriginType())) {
                 addError(result, row, sku, "Tipo de origen", "NOT_ALLOWED", row.getOriginType(), "Tipo de origen no permitido.");
                 continue;
             }
-            if (row.getOriginCountry() != null && !workbook.getAllowedCountries().contains(row.getOriginCountry())) {
+            if (row.getOriginCountry() != null && workbook.getAllowedCountries() != null && !workbook.getAllowedCountries().isEmpty()
+                    && !workbook.getAllowedCountries().contains(row.getOriginCountry())) {
                 addError(result, row, sku, "País de origen", "NOT_ALLOWED", row.getOriginCountry(), "País de origen no permitido.");
                 continue;
             }
@@ -137,6 +168,8 @@ public class CompetitiveImportBuilder {
                     .giftAllowed(false)
 
                     .category(row.getCategory())
+                    .brand(row.getBrand())
+                    .model(row.getModel())
                     .presentation(row.getPresentation())
                     .factor(factor)
 
@@ -157,6 +190,8 @@ public class CompetitiveImportBuilder {
             validRows++;
 
             if (row.getCategory() != null) categoriesUsed.add(row.getCategory());
+            if (row.getBrand() != null) brandsUsed.add(row.getBrand());
+            if (row.getModel() != null) modelsUsed.add(row.getModel());
 
             preview.add(ProductCompetitiveImportPreviewRow.builder()
                     .row(row.getRowNumber())
@@ -172,7 +207,7 @@ public class CompetitiveImportBuilder {
         result.getSummary().setRowsRead(rowsRead);
         result.getSummary().setValidRows(validRows);
 
-        return new CompetitiveImportBuildOutput(products, preview, categoriesUsed);
+        return new CompetitiveImportBuildOutput(products, preview, categoriesUsed, brandsUsed, modelsUsed);
     }
 
     private static boolean geZero(BigDecimal v) {

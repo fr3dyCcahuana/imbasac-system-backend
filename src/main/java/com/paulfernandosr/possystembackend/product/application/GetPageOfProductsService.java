@@ -21,8 +21,8 @@ public class GetPageOfProductsService implements GetPageOfProductsUseCase {
     private final ProductImageRepository productImageRepository;
 
     @Override
-    public Page<Product> getPageOfProducts(String query, Pageable pageable) {
-        Page<Product> pageOfProducts = productRepository.findPage(query, pageable);
+    public Page<Product> getPageOfProducts(String query, String brand, String model, String category, String stock, Pageable pageable) {
+        Page<Product> pageOfProducts = productRepository.findPage(query, brand, model, category, stock, pageable);
 
         // Enriquecer con imágenes sin N+1:
         // 1 query para productos + 1 query para imágenes del set de ids de la página.

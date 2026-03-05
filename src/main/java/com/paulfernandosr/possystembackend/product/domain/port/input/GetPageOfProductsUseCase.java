@@ -5,5 +5,12 @@ import com.paulfernandosr.possystembackend.common.domain.Pageable;
 import com.paulfernandosr.possystembackend.product.domain.Product;
 
 public interface GetPageOfProductsUseCase {
-    Page<Product> getPageOfProducts(String query, Pageable pageable);
+    Page<Product> getPageOfProducts(
+            String query,
+            String brand,
+            String model,
+            String category,
+            String stock,
+            Pageable pageable
+    );
 }

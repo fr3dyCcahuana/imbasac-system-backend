@@ -55,11 +55,14 @@ public class PostgresProformaItemRepository implements ProformaItemRepository {
     @Override
     public List<ProformaItem> findByProformaId(Long proformaId) {
         String sql = """
-            SELECT *
-            FROM proforma_item
-            WHERE proforma_id = ?
-            ORDER BY line_number ASC
-            """;
+          SELECT
+            pi.*,
+            p.warehouse_location AS warehouse_location
+          FROM proforma_item pi
+          JOIN product p ON p.id = pi.product_id
+          WHERE pi.proforma_id = ?
+          ORDER BY pi.line_number ASC
+          """;
         return jdbcClient.sql(sql)
                 .param(proformaId)
                 .query(new ProformaItemRowMapper())

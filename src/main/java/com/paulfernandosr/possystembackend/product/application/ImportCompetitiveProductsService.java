@@ -3,8 +3,7 @@ package com.paulfernandosr.possystembackend.product.application;
 import com.paulfernandosr.possystembackend.product.application.importer.*;
 import com.paulfernandosr.possystembackend.product.domain.*;
 import com.paulfernandosr.possystembackend.product.domain.port.input.ImportCompetitiveProductsUseCase;
-import com.paulfernandosr.possystembackend.product.domain.port.output.CategoryWriteRepository;
-import com.paulfernandosr.possystembackend.product.domain.port.output.ProductBulkUpsertRepository;
+import com.paulfernandosr.possystembackend.product.domain.port.output.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +19,8 @@ public class ImportCompetitiveProductsService implements ImportCompetitiveProduc
 
     private final ProductBulkUpsertRepository bulkRepo;
     private final CategoryWriteRepository categoryWriteRepository;
+    private final BrandWriteRepository brandWriteRepository;
+    private final ModelWriteRepository modelWriteRepository;
 
     private static final BigDecimal MIN_PRICE = new BigDecimal("0.10");
 
@@ -55,9 +56,9 @@ public class ImportCompetitiveProductsService implements ImportCompetitiveProduc
         boolean atomic = result.getAtomic() == null || result.getAtomic();
 
         if (atomic) {
-            persistAtomic(build.commands(), build.categoriesUsed(), result);
+            persistAtomic(build.commands(), build.categoriesUsed(), build.brandsUsed(), build.modelsUsed(), result);
         } else {
-            persistNonAtomic(build.commands(), build.categoriesUsed(), result);
+            persistNonAtomic(build.commands(), build.categoriesUsed(), build.brandsUsed(), build.modelsUsed(), result);
         }
 
         result.computeSummary();
@@ -65,8 +66,16 @@ public class ImportCompetitiveProductsService implements ImportCompetitiveProduc
     }
 
     @Transactional
-    protected void persistAtomic(List<Product> products, Set<String> categoriesUsed, ProductCompetitiveImportResult result) {
+    protected void persistAtomic(
+            List<Product> products,
+            Set<String> categoriesUsed,
+            Set<String> brandsUsed,
+            Set<String> modelsUsed,
+            ProductCompetitiveImportResult result
+    ) {
         categoryWriteRepository.insertMissing(categoriesUsed);
+        brandWriteRepository.insertMissing(brandsUsed);
+        modelWriteRepository.insertMissing(modelsUsed);
 
         Set<String> existing = bulkRepo.findExistingSkus(
                 products.stream().map(Product::getSku).collect(Collectors.toSet())
@@ -85,8 +94,16 @@ public class ImportCompetitiveProductsService implements ImportCompetitiveProduc
     }
 
     @Transactional
-    protected void persistNonAtomic(List<Product> products, Set<String> categoriesUsed, ProductCompetitiveImportResult result) {
+    protected void persistNonAtomic(
+            List<Product> products,
+            Set<String> categoriesUsed,
+            Set<String> brandsUsed,
+            Set<String> modelsUsed,
+            ProductCompetitiveImportResult result
+    ) {
         categoryWriteRepository.insertMissing(categoriesUsed);
+        brandWriteRepository.insertMissing(brandsUsed);
+        modelWriteRepository.insertMissing(modelsUsed);
 
         Set<String> existing = bulkRepo.findExistingSkus(
                 products.stream().map(Product::getSku).collect(Collectors.toSet())

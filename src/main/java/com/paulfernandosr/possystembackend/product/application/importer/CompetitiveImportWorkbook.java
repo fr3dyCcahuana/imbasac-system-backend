@@ -15,5 +15,9 @@ public class CompetitiveImportWorkbook {
     private Set<String> allowedOriginTypes;
     private Set<String> allowedCountries;
 
+    // ✅ NUEVO (plantilla 2026)
+    private Set<String> allowedBrands;
+    private Set<String> allowedModels;
+
     private java.util.List<CompetitiveImportRow> rows;
 }

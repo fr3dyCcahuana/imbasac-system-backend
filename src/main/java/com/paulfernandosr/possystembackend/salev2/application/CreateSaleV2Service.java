@@ -126,7 +126,15 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                     if (!Objects.equals(u.getProductId(), product.getId())) {
                         throw new InvalidSaleV2Exception("Unidad serializada no pertenece al producto. serialUnitId=" + u.getId());
                     }
-                    if (!"EN_ALMACEN".equalsIgnoreCase(nzs(u.getStatus()))) {
+                    String st = nzs(u.getStatus()).toUpperCase();
+                    if ("EN_ALMACEN".equals(st)) {
+                        // ok
+                    } else if ("RESERVADO".equals(st)) {
+                        // ✅ permitido solo para MOTOCICLETAS reservadas por contrato
+                        if (u.getContractId() == null || u.getVin() == null || u.getVin().trim().isEmpty()) {
+                            throw new InvalidSaleV2Exception("Unidad RESERVADO no disponible (sin contrato/VIN). serialUnitId=" + u.getId());
+                        }
+                    } else {
                         throw new InvalidSaleV2Exception("Unidad serializada no disponible (status=" + u.getStatus() + "). serialUnitId=" + u.getId());
                     }
                 }

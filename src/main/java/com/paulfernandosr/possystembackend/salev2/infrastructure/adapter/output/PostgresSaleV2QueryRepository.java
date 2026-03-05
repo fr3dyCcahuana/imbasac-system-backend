@@ -155,52 +155,120 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
     @Override
     public List<SaleV2ItemResponse> findSaleItems(Long saleId) {
         String sql = """
-            SELECT
-                si.id AS sale_item_id,
-                si.line_number AS line_number,
-                si.product_id AS product_id,
-                si.sku AS sku,
-                si.description AS description,
-                si.presentation AS presentation,
-                si.factor AS factor,
-                si.quantity AS quantity,
-                si.unit_price AS unit_price,
-                si.discount_percent AS discount_percent,
-                si.discount_amount AS discount_amount,
-                si.line_kind AS line_kind,
-                si.gift_reason AS gift_reason,
-                si.facturable_sunat AS facturable_sunat,
-                si.affects_stock AS affects_stock,
-                si.visible_in_document AS visible_in_document,
-                si.unit_cost_snapshot AS unit_cost_snapshot,
-                si.total_cost_snapshot AS total_cost_snapshot,
-                si.revenue_total AS revenue_total
-              FROM sale_item si
-             WHERE si.sale_id = ?
-             ORDER BY si.line_number ASC
+        SELECT
+            si.id AS sale_item_id,
+            si.line_number AS line_number,
+            si.product_id AS product_id,
+            si.sku AS sku,
+            si.description AS description,
+            si.presentation AS presentation,
+            si.factor AS factor,
+            si.quantity AS quantity,
+            si.unit_price AS unit_price,
+            si.discount_percent AS discount_percent,
+            si.discount_amount AS discount_amount,
+            si.line_kind AS line_kind,
+            si.gift_reason AS gift_reason,
+            si.facturable_sunat AS facturable_sunat,
+            si.affects_stock AS affects_stock,
+            si.visible_in_document AS visible_in_document,
+            si.unit_cost_snapshot AS unit_cost_snapshot,
+            si.total_cost_snapshot AS total_cost_snapshot,
+            si.revenue_total AS revenue_total,
+    
+            -- ✅ NUEVO: categoría del producto
+            p.category AS product_category,
+    
+            -- ✅ NUEVO: ficha técnica (sale_item -> product_serial_unit por sale_item_id)
+            p.brand AS v_marca,
+            psu.color AS v_color,
+            p.model AS v_modelo,
+            psu.engine_number AS v_num_motor,
+            psu.chassis_number AS v_num_chasis,
+            psu.vin AS v_num_vin,
+            psu.dua_number AS v_dua,
+            psu.dua_item AS v_item_dua,
+            psu.year_make AS v_anio_fabricacion,
+    
+            vs.engine_capacity AS v_engine_capacity,
+            vs.fuel AS v_combustible,
+            vs.cylinders AS v_num_cilindros,
+            vs.net_weight AS v_peso_neto,
+            vs.gross_weight AS v_peso_bruto
+    
+          FROM sale_item si
+          JOIN product p ON p.id = si.product_id
+          LEFT JOIN product_serial_unit psu ON psu.sale_item_id = si.id
+          LEFT JOIN product_vehicle_specs vs ON vs.product_id = p.id
+         WHERE si.sale_id = ?
+         ORDER BY si.line_number ASC
         """;
 
-        RowMapper<SaleV2ItemResponse> mapper = (rs, rowNum) -> SaleV2ItemResponse.builder()
-                .saleItemId(rs.getLong("sale_item_id"))
-                .lineNumber(rs.getInt("line_number"))
-                .productId(rs.getLong("product_id"))
-                .sku(rs.getString("sku"))
-                .description(rs.getString("description"))
-                .presentation(rs.getString("presentation"))
-                .factor(rs.getBigDecimal("factor"))
-                .quantity(rs.getBigDecimal("quantity"))
-                .unitPrice(rs.getBigDecimal("unit_price"))
-                .discountPercent(rs.getBigDecimal("discount_percent"))
-                .discountAmount(rs.getBigDecimal("discount_amount"))
-                .lineKind(rs.getString("line_kind"))
-                .giftReason(rs.getString("gift_reason"))
-                .facturableSunat(rs.getBoolean("facturable_sunat"))
-                .affectsStock(rs.getBoolean("affects_stock"))
-                .visibleInDocument(rs.getBoolean("visible_in_document"))
-                .unitCostSnapshot(rs.getBigDecimal("unit_cost_snapshot"))
-                .totalCostSnapshot(rs.getBigDecimal("total_cost_snapshot"))
-                .revenueTotal(rs.getBigDecimal("revenue_total"))
-                .build();
+        RowMapper<SaleV2ItemResponse> mapper = (rs, rowNum) -> {
+            String category = rs.getString("product_category");
+            String cat = category != null ? category.trim().toUpperCase() : null;
+
+            boolean isVehicle = "MOTOR".equals(cat) || "MOTOCICLETAS".equals(cat) || "MOTOCICLETA".equals(cat);
+
+            // Si no es MOTOR/MOTOCICLETAS => vehicleDetails = null
+            VehicleDetailsResponse vehicleDetails = null;
+
+            if (isVehicle) {
+                // Si no hay serial asignado a este sale_item aún, puedes devolver null también.
+                // (depende tu regla; aquí lo hacemos: si engine_number es null => null)
+                String engineNumber = rs.getString("v_num_motor");
+                if (engineNumber != null && !engineNumber.trim().isEmpty()) {
+
+                    // engine_capacity NUMERIC -> "150CC"
+                    String cap = null;
+                    var capVal = rs.getBigDecimal("v_engine_capacity");
+                    if (capVal != null) cap = capVal.stripTrailingZeros().toPlainString() + "CC";
+
+                    vehicleDetails = VehicleDetailsResponse.builder()
+                            .marca(rs.getString("v_marca"))
+                            .color(rs.getString("v_color"))
+                            .modelo(rs.getString("v_modelo"))
+                            .numMotor(rs.getString("v_num_motor"))
+                            .numChasis(rs.getString("v_num_chasis"))
+                            .numVin(rs.getString("v_num_vin"))
+                            .dua(rs.getString("v_dua"))
+                            .itemDua((Integer) rs.getObject("v_item_dua"))
+                            .anioFabricacion((Integer) rs.getObject("v_anio_fabricacion"))
+                            .capacidadMotor(cap)
+                            .combustible(rs.getString("v_combustible"))
+                            .numCilindros((Integer) rs.getObject("v_num_cilindros"))
+                            .pesoNeto(rs.getBigDecimal("v_peso_neto"))
+                            .pesoBruto(rs.getBigDecimal("v_peso_bruto"))
+                            .build();
+                }
+            }
+
+            return SaleV2ItemResponse.builder()
+                    .saleItemId(rs.getLong("sale_item_id"))
+                    .lineNumber(rs.getInt("line_number"))
+                    .productId(rs.getLong("product_id"))
+                    .sku(rs.getString("sku"))
+                    .description(rs.getString("description"))
+                    .presentation(rs.getString("presentation"))
+                    .factor(rs.getBigDecimal("factor"))
+                    .quantity(rs.getBigDecimal("quantity"))
+                    .unitPrice(rs.getBigDecimal("unit_price"))
+                    .discountPercent(rs.getBigDecimal("discount_percent"))
+                    .discountAmount(rs.getBigDecimal("discount_amount"))
+                    .lineKind(rs.getString("line_kind"))
+                    .giftReason(rs.getString("gift_reason"))
+                    .facturableSunat(rs.getBoolean("facturable_sunat"))
+                    .affectsStock(rs.getBoolean("affects_stock"))
+                    .visibleInDocument(rs.getBoolean("visible_in_document"))
+                    .unitCostSnapshot(rs.getBigDecimal("unit_cost_snapshot"))
+                    .totalCostSnapshot(rs.getBigDecimal("total_cost_snapshot"))
+                    .revenueTotal(rs.getBigDecimal("revenue_total"))
+
+                    // ✅ NUEVO
+                    .productCategory(category)
+                    .vehicleDetails(vehicleDetails)
+                    .build();
+        };
 
         return jdbcClient.sql(sql)
                 .param(saleId)

@@ -140,83 +140,111 @@ public class PostgresProductRepository implements ProductRepository {
     }
 
     @Override
-    public Page<Product> findPage(String query, Pageable pageable) {
+    public Page<Product> findPage(String query, String brand, String model, String category, String stock, Pageable pageable) {
         String likeParam = QueryMapper.formatAsLikeParam(query);
 
-        String countSql = """
-            SELECT COUNT(1)
-              FROM product p
-             WHERE p.sku ILIKE ?
-                OR p.barcode ILIKE ?
-                OR p.name ILIKE ?
-            """;
+// si está vacío => null
+        String brandLike = (brand == null || brand.trim().isEmpty()) ? null : "%" + brand.trim() + "%";
+        String modelLike = (model == null || model.trim().isEmpty()) ? null : "%" + model.trim() + "%";
+        String categoryEq = (category == null || category.trim().isEmpty()) ? null : category.trim(); // o UPPER si normalizas
+
+        String stockNorm = (stock == null || stock.trim().isEmpty()) ? "ALL" : stock.trim().toUpperCase();
+
+        String baseCte = """
+        WITH base AS (
+          SELECT
+            p.id          AS product_id,
+            p.sku,
+            p.name,
+            p.brand,
+            p.model,
+            p.product_type,
+            p.category,
+            p.presentation,
+            p.factor,
+            p.manage_by_serial,
+            p.origin_type,
+            p.origin_country,
+            p.factory_code,
+            p.compatibility,
+            p.barcode,
+            p.warehouse_location,
+            p.price_a,
+            p.price_b,
+            p.price_c,
+            p.price_d,
+            p.cost_reference,
+            p.facturable_sunat,
+            p.affects_stock,
+            p.gift_allowed,
+            CASE
+              WHEN p.manage_by_serial = TRUE THEN COALESCE(su_agg.serial_qty, 0)
+              ELSE COALESCE(ps.quantity_on_hand, 0)
+            END AS stock_on_hand,
+            p.created_at,
+            p.updated_at
+          FROM product p
+          LEFT JOIN product_stock ps ON ps.product_id = p.id
+          LEFT JOIN (
+            SELECT product_id, COUNT(*)::numeric(14,3) AS serial_qty
+            FROM product_serial_unit
+            WHERE status = 'EN_ALMACEN'
+            GROUP BY product_id
+          ) su_agg ON su_agg.product_id = p.id
+        WHERE
+          (p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ?)
+          AND ( ?::text IS NULL OR p.brand ILIKE ?::text )
+          AND ( ?::text IS NULL OR p.model ILIKE ?::text )
+          AND ( ?::text IS NULL OR p.category = ?::text )
+        )
+        """;
+
+        String stockWhere = """
+        WHERE
+          CASE
+            WHEN ? = 'IN'  THEN stock_on_hand > 0
+            WHEN ? = 'OUT' THEN stock_on_hand <= 0
+            ELSE TRUE
+          END
+        """;
+
+        // COUNT
+        String countSql = baseCte + """
+        SELECT COUNT(1)
+        FROM base
+        """ + stockWhere;
 
         long totalElements = jdbcClient.sql(countSql)
-                .params(likeParam, likeParam, likeParam)
+                .params(
+                        likeParam, likeParam, likeParam,   // query x3
+                        brandLike, brandLike,              // brand x2
+                        modelLike, modelLike,              // model x2
+                        categoryEq, categoryEq,            // category x2
+                        stockNorm, stockNorm               // stock x2 (para el CASE)
+                )
                 .query(Long.class)
                 .single();
 
-        String selectSql = """
-            SELECT
-                p.id          AS product_id,
-                p.sku,
-                p.name,
-        p.brand,
-        p.model,
-                p.product_type,
-                p.category,
-                p.presentation,
-                p.factor,
-                p.manage_by_serial,
-                p.origin_type,
-                p.origin_country,
-                p.factory_code,
-                p.compatibility,
-                p.barcode,
-                p.warehouse_location,
-                p.price_a,
-                p.price_b,
-                p.price_c,
-                p.price_d,
-                p.cost_reference,
-                p.facturable_sunat,
-                p.affects_stock,
-                p.gift_allowed,
-                -- ✅ stock real (on hand)
-                CASE
-                  WHEN p.manage_by_serial = TRUE THEN COALESCE(su_agg.serial_qty, 0)
-                  ELSE COALESCE(ps.quantity_on_hand, 0)
-                END AS stock_on_hand,
-                p.created_at,
-                p.updated_at
-            FROM product p
-            LEFT JOIN product_stock ps
-                   ON ps.product_id = p.id
-            LEFT JOIN (
-              SELECT
-                product_id,
-                COUNT(*)::numeric(14,3) AS serial_qty
-              FROM product_serial_unit
-              WHERE status = 'EN_ALMACEN'
-              GROUP BY product_id
-            ) su_agg
-                   ON su_agg.product_id = p.id
-            WHERE p.sku ILIKE ?
-               OR p.barcode ILIKE ?
-               OR p.name ILIKE ?
-            ORDER BY p.name ASC
-            LIMIT ?
-            OFFSET ?
-            """;
+        // SELECT paginado
+        String selectSql = baseCte + """
+        SELECT *
+        FROM base
+        """ + stockWhere + """
+        ORDER BY name ASC
+        LIMIT ?
+        OFFSET ?
+        """;
 
         int pageSize = pageable.getSize();
         int pageNumber = pageable.getNumber();
 
         List<Product> products = jdbcClient.sql(selectSql)
                 .params(
-                        likeParam,
-                        likeParam,
-                        likeParam,
+                        likeParam, likeParam, likeParam,   // query x3
+                        brandLike, brandLike,              // brand x2
+                        modelLike, modelLike,              // model x2
+                        categoryEq, categoryEq,            // category x2
+                        stockNorm, stockNorm,              // stock x2
                         pageSize,
                         pageNumber * pageSize
                 )
