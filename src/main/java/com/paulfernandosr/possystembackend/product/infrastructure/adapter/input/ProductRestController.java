@@ -28,6 +28,7 @@ public class ProductRestController {
     private final UpdateProductInfoUseCase updateProductInfoUseCase;
     private final GetProductSalesDetailPageUseCase getProductSalesDetailPageUseCase;
     private final ValidateProductStockUseCase validateProductStockUseCase;
+    private final ProductImagePublicUrlService imageUrlService;
     // POST /products
     @PostMapping
     public ResponseEntity<SuccessResponse<Product>> createNewProduct(
@@ -61,7 +62,9 @@ public class ProductRestController {
         Page<Product> pageOfProducts = getPageOfProductsUseCase.getPageOfProducts(
                 query, brand, model, category, stock, new Pageable(page, size)
         );
-
+        for (Product p : pageOfProducts.getContent()) {
+            imageUrlService.enrich(p.getImages());
+        }
         SuccessResponse.Metadata metadata = PageMapper.mapPage(pageOfProducts);
         return ResponseEntity.ok(SuccessResponse.ok(pageOfProducts.getContent(), metadata));
     }
@@ -70,6 +73,7 @@ public class ProductRestController {
     @GetMapping("/{productId}")
     public ResponseEntity<SuccessResponse<Product>> getProductInfo(@PathVariable Long productId) {
         Product product = getProductInfoUseCase.getProductInfoById(productId);
+        imageUrlService.enrich(product.getImages());
         return ResponseEntity.ok(SuccessResponse.ok(product));
     }
 
@@ -97,7 +101,9 @@ public class ProductRestController {
                 query, category, onlyWithStock, priceList, context,
                 new Pageable(page, size)
         );
-
+        for (ProductSalesDetail item : result.getContent()) {
+            imageUrlService.enrich(item.getImages());
+        }
         SuccessResponse.Metadata metadata = PageMapper.mapPage(result);
         return ResponseEntity.ok(SuccessResponse.ok(result.getContent(), metadata));
     }

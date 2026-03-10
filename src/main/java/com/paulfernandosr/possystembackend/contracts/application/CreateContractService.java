@@ -51,7 +51,6 @@ public class CreateContractService implements CreateContractUseCase {
         LocalDate issueDate = request.getIssueDate() != null ? request.getIssueDate() : LocalDate.now();
 
         LockedDocumentSeries locked = documentSeriesRepository.lockSeries(
-                request.getStationId(),
                 "CONTRACT",
                 request.getSeries()
         );

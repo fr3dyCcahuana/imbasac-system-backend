@@ -70,12 +70,16 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
                    c.total_amount AS totalAmount,
                    c.status,
                    c.sale_id AS saleId,
+                   s.doc_type AS saleDocType,
+                   s.series   AS saleSeries,
+                   s.number   AS saleNumber,
                    ci.sku,
                    ci.description,
                    psu.vin
               FROM contract c
               LEFT JOIN contract_item ci ON ci.contract_id = c.id
               LEFT JOIN product_serial_unit psu ON psu.id = ci.serial_unit_id
+              LEFT JOIN sale s ON s.id = c.sale_id
              WHERE (
                     c.customer_doc_number ILIKE ?
                  OR c.customer_name ILIKE ?

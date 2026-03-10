@@ -39,7 +39,6 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
         validateRequest(request);
 
         LockedDocumentSeries series = documentSeriesRepository.lock(
-                request.getStationId(),
                 "PROFORMA",
                 request.getSeries()
         );

@@ -25,6 +25,7 @@ public class ProductImageRestController {
     private final UpdateProductImageUseCase updateProductImageUseCase;
     private final DeleteProductImageUseCase deleteProductImageUseCase;
     private final ProductImageFileStorageService fileStorageService;
+    private final ProductImagePublicUrlService imageUrlService;
 
     // POST /products/{productId}/images
     // Sube archivo y registra ruta en BD
@@ -53,6 +54,7 @@ public class ProductImageRestController {
             @PathVariable Long productId
     ) {
         Collection<ProductImage> images = getProductImagesUseCase.getImagesByProductId(productId);
+        imageUrlService.enrich(images);
         return ResponseEntity.ok(SuccessResponse.ok(images));
     }
 

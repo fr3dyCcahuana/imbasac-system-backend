@@ -67,7 +67,6 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
 
         // 1) Reservar correlativo (FOR UPDATE) - Regla #2
         LockedDocumentSeries locked = documentSeriesRepository.lockSeries(
-                request.getStationId(),
                 request.getDocType().name(),
                 request.getSeries()
         );

@@ -15,22 +15,22 @@ public class PostgresDocumentSeriesRepositoryV2 implements DocumentSeriesReposit
     private final JdbcClient jdbcClient;
 
     @Override
-    public LockedDocumentSeries lock(Long stationId, String docType, String series) {
+    public LockedDocumentSeries lock(String docType, String series) {
         String sql = """
             SELECT id, station_id, doc_type, series, next_number, enabled
             FROM document_series
-            WHERE station_id = ?
-              AND doc_type = ?
+            WHERE doc_type = ?
               AND series = ?
+              AND enabled = TRUE
             FOR UPDATE
             """;
 
         LockedDocumentSeries locked = jdbcClient.sql(sql)
-                .params(stationId, docType, series)
+                .params(docType, series)
                 .query(new LockedDocumentSeriesRowMapper())
                 .optional()
                 .orElseThrow(() -> new InvalidProformaV2Exception(
-                        "No existe serie para station=" + stationId + " docType=" + docType + " series=" + series
+                        "No existe serie para docType=" + docType + " series=" + series
                 ));
 
         if (!Boolean.TRUE.equals(locked.getEnabled())) {

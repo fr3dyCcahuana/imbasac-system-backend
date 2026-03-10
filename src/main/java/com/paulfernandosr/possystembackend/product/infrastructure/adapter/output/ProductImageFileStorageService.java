@@ -6,10 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.*;
 import java.util.UUID;
 
 @Service
@@ -17,10 +14,7 @@ import java.util.UUID;
 public class ProductImageFileStorageService {
 
     @Value("${app.files.products-images-dir}")
-    private String productsImagesDir;       // Ej: /var/www/altoquik/images/products
-
-    @Value("${app.files.products-images-base-url}")
-    private String productsImagesBaseUrl;   // Ej: https://cdn.altoquik.com/images/products
+    private String productsImagesDir;
 
     public String store(Long productId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -28,11 +22,10 @@ public class ProductImageFileStorageService {
         }
 
         try {
-            // Directorio del producto: /.../products/{productId}
-            Path productDir = Paths.get(productsImagesDir, String.valueOf(productId));
+            Path baseDir = Paths.get(productsImagesDir).toAbsolutePath().normalize();
+            Path productDir = baseDir.resolve(String.valueOf(productId)).normalize();
             Files.createDirectories(productDir);
 
-            // Nombre de archivo seguro: UUID + extensión original
             String originalFilename = file.getOriginalFilename();
             String extension = "";
 
@@ -43,15 +36,36 @@ public class ProductImageFileStorageService {
             String filename = UUID.randomUUID() + extension;
             Path destinationFile = productDir.resolve(filename).normalize();
 
-            // Guardar físicamente el archivo
+            // Protección path traversal
+            if (!destinationFile.startsWith(productDir)) {
+                throw new SecurityException("Ruta de archivo inválida.");
+            }
+
             Files.copy(file.getInputStream(), destinationFile, StandardCopyOption.REPLACE_EXISTING);
 
-            // Construir URL pública: {baseUrl}/{productId}/{filename}
-            String relativePath = productId + "/" + filename;
-            return productsImagesBaseUrl.replaceAll("/$", "") + "/" + relativePath;
+            // ✅ SOLO guardamos KEY en BD
+            return productId + "/" + filename;
 
         } catch (IOException e) {
             throw new RuntimeException("No se pudo almacenar el archivo de imagen", e);
+        }
+    }
+
+    public void deleteByKey(String imageKey) {
+        if (imageKey == null || imageKey.isBlank()) return;
+
+        try {
+            Path baseDir = Paths.get(productsImagesDir).toAbsolutePath().normalize();
+            Path filePath = baseDir.resolve(imageKey).normalize();
+
+            if (!filePath.startsWith(baseDir)) {
+                throw new SecurityException("Ruta de archivo inválida.");
+            }
+
+            Files.deleteIfExists(filePath);
+        } catch (IOException e) {
+            // Decide si aquí quieres loggear y seguir, o lanzar error
+            throw new RuntimeException("No se pudo eliminar la imagen física", e);
         }
     }
 }
