@@ -140,15 +140,23 @@ public class PostgresProductRepository implements ProductRepository {
     }
 
     @Override
-    public Page<Product> findPage(String query, String brand, String model, String category, String stock, Pageable pageable) {
+    public Page<Product> findPage(
+            String query,
+            String brand,
+            String model,
+            String category,
+            String stock,
+            String images,
+            Pageable pageable
+    ) {
         String likeParam = QueryMapper.formatAsLikeParam(query);
 
-// si está vacío => null
         String brandLike = (brand == null || brand.trim().isEmpty()) ? null : "%" + brand.trim() + "%";
         String modelLike = (model == null || model.trim().isEmpty()) ? null : "%" + model.trim() + "%";
-        String categoryEq = (category == null || category.trim().isEmpty()) ? null : category.trim(); // o UPPER si normalizas
+        String categoryEq = (category == null || category.trim().isEmpty()) ? null : category.trim();
 
         String stockNorm = (stock == null || stock.trim().isEmpty()) ? "ALL" : stock.trim().toUpperCase();
+        String imagesNorm = (images == null || images.trim().isEmpty()) ? "ALL" : images.trim().toUpperCase();
 
         String baseCte = """
         WITH base AS (
@@ -181,55 +189,96 @@ public class PostgresProductRepository implements ProductRepository {
               WHEN p.manage_by_serial = TRUE THEN COALESCE(su_agg.serial_qty, 0)
               ELSE COALESCE(ps.quantity_on_hand, 0)
             END AS stock_on_hand,
+            COALESCE(img_agg.image_qty, 0) AS image_qty,
             p.created_at,
             p.updated_at
           FROM product p
-          LEFT JOIN product_stock ps ON ps.product_id = p.id
+          LEFT JOIN product_stock ps
+                 ON ps.product_id = p.id
           LEFT JOIN (
             SELECT product_id, COUNT(*)::numeric(14,3) AS serial_qty
             FROM product_serial_unit
             WHERE status = 'EN_ALMACEN'
             GROUP BY product_id
-          ) su_agg ON su_agg.product_id = p.id
-        WHERE
-          (p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ?)
-          AND ( ?::text IS NULL OR p.brand ILIKE ?::text )
-          AND ( ?::text IS NULL OR p.model ILIKE ?::text )
-          AND ( ?::text IS NULL OR p.category = ?::text )
+          ) su_agg
+                 ON su_agg.product_id = p.id
+          LEFT JOIN (
+            SELECT product_id, COUNT(*)::int AS image_qty
+            FROM product_image
+            GROUP BY product_id
+          ) img_agg
+                 ON img_agg.product_id = p.id
+          WHERE
+            (p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ?)
+            AND (?::text IS NULL OR p.brand ILIKE ?::text)
+            AND (?::text IS NULL OR p.model ILIKE ?::text)
+            AND (?::text IS NULL OR p.category = ?::text)
         )
         """;
 
-        String stockWhere = """
+        String filtersWhere = """
         WHERE
           CASE
             WHEN ? = 'IN'  THEN stock_on_hand > 0
             WHEN ? = 'OUT' THEN stock_on_hand <= 0
             ELSE TRUE
           END
+          AND
+          CASE
+            WHEN ? = 'WITH'    THEN image_qty > 0
+            WHEN ? = 'WITHOUT' THEN image_qty = 0
+            ELSE TRUE
+          END
         """;
 
-        // COUNT
         String countSql = baseCte + """
         SELECT COUNT(1)
         FROM base
-        """ + stockWhere;
+        """ + filtersWhere;
 
         long totalElements = jdbcClient.sql(countSql)
                 .params(
-                        likeParam, likeParam, likeParam,   // query x3
-                        brandLike, brandLike,              // brand x2
-                        modelLike, modelLike,              // model x2
-                        categoryEq, categoryEq,            // category x2
-                        stockNorm, stockNorm               // stock x2 (para el CASE)
+                        likeParam, likeParam, likeParam,
+                        brandLike, brandLike,
+                        modelLike, modelLike,
+                        categoryEq, categoryEq,
+                        stockNorm, stockNorm,
+                        imagesNorm, imagesNorm
                 )
                 .query(Long.class)
                 .single();
 
-        // SELECT paginado
         String selectSql = baseCte + """
-        SELECT *
+        SELECT
+            product_id,
+            sku,
+            name,
+            brand,
+            model,
+            product_type,
+            category,
+            presentation,
+            factor,
+            manage_by_serial,
+            origin_type,
+            origin_country,
+            factory_code,
+            compatibility,
+            barcode,
+            warehouse_location,
+            price_a,
+            price_b,
+            price_c,
+            price_d,
+            cost_reference,
+            facturable_sunat,
+            affects_stock,
+            gift_allowed,
+            stock_on_hand,
+            created_at,
+            updated_at
         FROM base
-        """ + stockWhere + """
+        """ + filtersWhere + """
         ORDER BY name ASC
         LIMIT ?
         OFFSET ?
@@ -240,11 +289,12 @@ public class PostgresProductRepository implements ProductRepository {
 
         List<Product> products = jdbcClient.sql(selectSql)
                 .params(
-                        likeParam, likeParam, likeParam,   // query x3
-                        brandLike, brandLike,              // brand x2
-                        modelLike, modelLike,              // model x2
-                        categoryEq, categoryEq,            // category x2
-                        stockNorm, stockNorm,              // stock x2
+                        likeParam, likeParam, likeParam,
+                        brandLike, brandLike,
+                        modelLike, modelLike,
+                        categoryEq, categoryEq,
+                        stockNorm, stockNorm,
+                        imagesNorm, imagesNorm,
                         pageSize,
                         pageNumber * pageSize
                 )

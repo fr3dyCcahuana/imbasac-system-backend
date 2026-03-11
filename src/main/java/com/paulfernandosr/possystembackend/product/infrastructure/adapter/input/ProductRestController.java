@@ -56,15 +56,20 @@ public class ProductRestController {
             // ALL | IN | OUT
             @RequestParam(defaultValue = "ALL") String stock,
 
+            // ALL | WITH | WITHOUT
+            @RequestParam(defaultValue = "ALL") String images,
+
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
         Page<Product> pageOfProducts = getPageOfProductsUseCase.getPageOfProducts(
-                query, brand, model, category, stock, new Pageable(page, size)
+                query, brand, model, category, stock, images, new Pageable(page, size)
         );
+
         for (Product p : pageOfProducts.getContent()) {
             imageUrlService.enrich(p.getImages());
         }
+
         SuccessResponse.Metadata metadata = PageMapper.mapPage(pageOfProducts);
         return ResponseEntity.ok(SuccessResponse.ok(pageOfProducts.getContent(), metadata));
     }

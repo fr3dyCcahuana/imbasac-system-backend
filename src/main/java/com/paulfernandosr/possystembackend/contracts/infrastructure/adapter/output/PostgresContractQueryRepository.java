@@ -165,6 +165,8 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
                 .dueDate(x.getDueDate())
                 .amount(x.getAmount())
                 .paidAmount(x.getPaidAmount())
+                .paidAt(x.getPaidAt())
+                .paidByUsername(x.getPaidByUsername())
                 .status(x.getStatus())
                 .build()).toList());
 

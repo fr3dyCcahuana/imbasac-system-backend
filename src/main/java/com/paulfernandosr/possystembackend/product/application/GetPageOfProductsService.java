@@ -21,11 +21,19 @@ public class GetPageOfProductsService implements GetPageOfProductsUseCase {
     private final ProductImageRepository productImageRepository;
 
     @Override
-    public Page<Product> getPageOfProducts(String query, String brand, String model, String category, String stock, Pageable pageable) {
-        Page<Product> pageOfProducts = productRepository.findPage(query, brand, model, category, stock, pageable);
+    public Page<Product> getPageOfProducts(
+            String query,
+            String brand,
+            String model,
+            String category,
+            String stock,
+            String images,
+            Pageable pageable
+    ) {
+        Page<Product> pageOfProducts = productRepository.findPage(
+                query, brand, model, category, stock, images, pageable
+        );
 
-        // Enriquecer con imágenes sin N+1:
-        // 1 query para productos + 1 query para imágenes del set de ids de la página.
         List<Product> products = (List<Product>) pageOfProducts.getContent();
         if (products == null || products.isEmpty()) {
             return pageOfProducts;
@@ -42,7 +50,9 @@ public class GetPageOfProductsService implements GetPageOfProductsUseCase {
 
         Map<Long, List<com.paulfernandosr.possystembackend.product.domain.ProductImage>> imagesByProductId =
                 productImageRepository.findByProductIds(productIds).stream()
-                        .collect(Collectors.groupingBy(com.paulfernandosr.possystembackend.product.domain.ProductImage::getProductId));
+                        .collect(Collectors.groupingBy(
+                                com.paulfernandosr.possystembackend.product.domain.ProductImage::getProductId
+                        ));
 
         for (Product p : products) {
             p.setImages(imagesByProductId.getOrDefault(p.getId(), List.of()));

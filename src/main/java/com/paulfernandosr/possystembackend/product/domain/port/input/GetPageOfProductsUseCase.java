@@ -11,6 +11,7 @@ public interface GetPageOfProductsUseCase {
             String model,
             String category,
             String stock,
+            String images,
             Pageable pageable
     );
 }

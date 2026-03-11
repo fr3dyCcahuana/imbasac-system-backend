@@ -11,7 +11,15 @@ public interface ProductRepository {
 
     Product create(Product product);
 
-    Page<Product> findPage(String query, String brand, String model, String category, String stock, Pageable pageable);
+    Page<Product> findPage(
+            String query,
+            String brand,
+            String model,
+            String category,
+            String stock,
+            String images,
+            Pageable pageable
+    );
 
     Optional<Product> findById(Long productId);
 

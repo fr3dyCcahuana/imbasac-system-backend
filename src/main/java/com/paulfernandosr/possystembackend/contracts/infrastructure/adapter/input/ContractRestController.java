@@ -22,6 +22,7 @@ public class ContractRestController {
     private final GetContractsPageUseCase getContractsPageUseCase;
     private final GetContractUseCase getContractUseCase;
     private final GenerateSaleFromContractUseCase generateSaleFromContractUseCase;
+    private final PayContractInstallmentUseCase payContractInstallmentUseCase;
 
     @PostMapping
     public ResponseEntity<SuccessResponse<ContractDocumentResponse>> create(@RequestBody ContractCreateRequest request,
@@ -58,6 +59,18 @@ public class ContractRestController {
                                                                                       Principal principal) {
         return ResponseEntity.ok(SuccessResponse.ok(
                 generateSaleFromContractUseCase.generateSale(id, request, principal.getName())
+        ));
+    }
+
+    @PostMapping("/{id}/installments/{n}/payments")
+    public ResponseEntity<SuccessResponse<ContractInstallmentPaymentResponse>> payInstallment(
+            @PathVariable("id") Long id,
+            @PathVariable("n") int n,
+            @RequestBody ContractInstallmentPaymentRequest request,
+            Principal principal
+    ) {
+        return ResponseEntity.ok(SuccessResponse.ok(
+                payContractInstallmentUseCase.pay(id, n, request, principal.getName())
         ));
     }
 

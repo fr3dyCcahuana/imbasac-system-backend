@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -52,6 +53,8 @@ public class PostgresContractInstallmentRepository implements ContractInstallmen
                    due_date AS dueDate,
                    amount,
                    paid_amount AS paidAmount,
+                   paid_at AS paidAt,
+                   paid_by_username AS paidByUsername,
                    status
               FROM contract_installment
              WHERE contract_id = ?
@@ -77,5 +80,50 @@ public class PostgresContractInstallmentRepository implements ContractInstallmen
                 .query(LocalDate.class)
                 .optional()
                 .orElse(null);
+    }
+
+    @Override
+    public LockedInstallment lockByContractIdAndNumber(Long contractId, int installmentNumber) {
+        String sql = """
+            SELECT id,
+                   amount,
+                   paid_amount AS paidAmount,
+                   paid_at AS paidAt,
+                   paid_by_username AS paidByUsername,
+                   status
+              FROM contract_installment
+             WHERE contract_id = ?
+               AND installment_number = ?
+             FOR UPDATE
+        """;
+
+        return jdbcClient.sql(sql)
+                .params(contractId, installmentNumber)
+                .query((rs, rowNum) -> new LockedInstallment(
+                        rs.getLong("id"),
+                        rs.getBigDecimal("amount"),
+                        rs.getBigDecimal("paidAmount"),
+                        rs.getString("status")
+                ))
+                .optional()
+                .orElse(null);
+    }
+
+    @Override
+    public void updatePaidAmountAndStatus(Long contractId, int installmentNumber, BigDecimal paidAmount, String status,
+                                     java.time.LocalDateTime paidAt, Long paidBy, String paidByUsername) {
+        String sql = """
+            UPDATE contract_installment
+               SET paid_amount = ?,
+                   status = ?,
+                   paid_at = ?,
+                   paid_by = ?,
+                   paid_by_username = ?
+             WHERE contract_id = ?
+               AND installment_number = ?
+        """;
+        jdbcClient.sql(sql)
+                .params(paidAmount, status, paidAt, paidBy, paidByUsername, contractId, installmentNumber)
+                .update();
     }
 }

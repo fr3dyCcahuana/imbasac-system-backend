@@ -15,5 +15,10 @@ public class ContractInstallmentResponse {
     private LocalDate dueDate;
     private BigDecimal amount;
     private BigDecimal paidAmount;
+
+    // ✅ auditoría
+    private java.time.LocalDateTime paidAt;
+    private String paidByUsername;
+
     private String status;
 }

@@ -128,8 +128,10 @@ public class CreateContractService implements CreateContractUseCase {
 
         contractSerialUnitRepository.reserveForContract(unit.getId(), contractId);
 
-        List<ContractInstallment> installments = buildInstallments(contractId, fin, request.getFirstDueDate(), issueDate);
-        contractInstallmentRepository.insertBatch(contractId, installments);
+        if (request.getPaymentType() != null && request.getPaymentType().name().equals("CREDITO")) {
+            List<ContractInstallment> installments = buildInstallments(contractId, fin, request.getFirstDueDate(), issueDate);
+            contractInstallmentRepository.insertBatch(contractId, installments);
+        }
 
         if (request.getGuarantor() != null) {
             ContractGuarantorDto g = request.getGuarantor();
