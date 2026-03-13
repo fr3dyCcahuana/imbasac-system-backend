@@ -50,11 +50,18 @@ public class ContractDetailResponse {
     private String notes;
 
     private ContractItemDetail item;
+
+    // ✅ ficha técnica del vehículo (product_vehicle_specs)
+    private VehicleSpecsDto vehicleSpecs;
     private ContractGuarantorDto guarantor;
     private ContractCustomerProfileDto customerProfile;
     private List<ContractInstallmentResponse> installmentsDetail;
 
-    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
     public static class ContractItemDetail {
         private Long productId;
         private Long serialUnitId;
@@ -64,5 +71,9 @@ public class ContractDetailResponse {
         private String model;
         private String vin;
         private BigDecimal unitPrice;
+        private String chassisNumber;
+        private String engineNumber;
+        private String color;
+        private Integer yearMake;
     }
 }

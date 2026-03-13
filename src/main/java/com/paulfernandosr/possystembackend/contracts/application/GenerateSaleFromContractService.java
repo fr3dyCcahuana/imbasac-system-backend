@@ -30,6 +30,8 @@ public class GenerateSaleFromContractService implements GenerateSaleFromContract
     private final ContractInstallmentRepository contractInstallmentRepository;
     private final ContractSerialUnitRepository contractSerialUnitRepository;
     private final SaleContractLinkRepository saleContractLinkRepository;
+
+    // ✅ Ajuste de CxC para que cuadre con el contrato (totalAmount)
     private final AccountsReceivableOverrideRepository accountsReceivableOverrideRepository;
 
     private final CreateSaleV2UseCase createSaleV2UseCase;

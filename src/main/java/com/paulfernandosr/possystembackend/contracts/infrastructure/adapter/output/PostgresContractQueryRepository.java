@@ -5,6 +5,7 @@ import com.paulfernandosr.possystembackend.contracts.domain.port.output.Contract
 import com.paulfernandosr.possystembackend.contracts.domain.port.output.ContractInstallmentRepository;
 import com.paulfernandosr.possystembackend.contracts.domain.port.output.ContractItemRepository;
 import com.paulfernandosr.possystembackend.contracts.domain.port.output.ContractQueryRepository;
+import com.paulfernandosr.possystembackend.contracts.domain.port.output.ContractVehicleSpecsRepository;
 import com.paulfernandosr.possystembackend.contracts.infrastructure.adapter.input.dto.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -22,6 +23,7 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
     private final ContractInstallmentRepository contractInstallmentRepository;
     private final ContractGuarantorRepository contractGuarantorRepository;
     private final ContractCustomerProfileRepository contractCustomerProfileRepository;
+    private final ContractVehicleSpecsRepository contractVehicleSpecsRepository;
 
     @Override
     public long count(String likeParam, String status) {
@@ -70,16 +72,12 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
                    c.total_amount AS totalAmount,
                    c.status,
                    c.sale_id AS saleId,
-                   s.doc_type AS saleDocType,
-                   s.series   AS saleSeries,
-                   s.number   AS saleNumber,
                    ci.sku,
                    ci.description,
                    psu.vin
               FROM contract c
               LEFT JOIN contract_item ci ON ci.contract_id = c.id
               LEFT JOIN product_serial_unit psu ON psu.id = ci.serial_unit_id
-              LEFT JOIN sale s ON s.id = c.sale_id
              WHERE (
                     c.customer_doc_number ILIKE ?
                  OR c.customer_name ILIKE ?
@@ -157,6 +155,68 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
                     .vin(item.getVin())
                     .unitPrice(item.getUnitPrice())
                     .build());
+        }
+
+        
+        // ✅ datos de la unidad física (VIN / chasis / motor / color / año)
+        if (item != null && item.getSerialUnitId() != null && header.getItem() != null) {
+            String sqlUnit = """
+                SELECT vin,
+                       chassis_number AS chassisNumber,
+                       engine_number AS engineNumber,
+                       color,
+                       year_make AS yearMake
+                  FROM product_serial_unit
+                 WHERE id = ?
+            """;
+
+            Object[] unit = jdbcClient.sql(sqlUnit)
+                    .param(item.getSerialUnitId())
+                    .query((rs, rowNum) -> new Object[]{
+                            rs.getString("vin"),
+                            rs.getString("chassisNumber"),
+                            rs.getString("engineNumber"),
+                            rs.getString("color"),
+                            (Integer) rs.getObject("yearMake")
+                    })
+                    .optional()
+                    .orElse(null);
+
+            if (unit != null) {
+                header.getItem().setVin((String) unit[0]);
+                header.getItem().setChassisNumber((String) unit[1]);
+                header.getItem().setEngineNumber((String) unit[2]);
+                header.getItem().setColor((String) unit[3]);
+                header.getItem().setYearMake((Integer) unit[4]);
+            }
+        }
+
+// ✅ ficha técnica del vehículo (si existe)
+        if (item != null && item.getProductId() != null) {
+            var vs = contractVehicleSpecsRepository.findByProductId(item.getProductId());
+            if (vs != null) {
+                header.setVehicleSpecs(VehicleSpecsDto.builder()
+                        .productId(vs.getProductId())
+                        .vehicleType(vs.getVehicleType())
+                        .bodywork(vs.getBodywork())
+                        .engineCapacity(vs.getEngineCapacity())
+                        .fuel(vs.getFuel())
+                        .cylinders(vs.getCylinders())
+                        .netWeight(vs.getNetWeight())
+                        .payload(vs.getPayload())
+                        .grossWeight(vs.getGrossWeight())
+                        .vehicleClass(vs.getVehicleClass())
+                        .enginePower(vs.getEnginePower())
+                        .rollingForm(vs.getRollingForm())
+                        .seats(vs.getSeats())
+                        .passengers(vs.getPassengers())
+                        .axles(vs.getAxles())
+                        .wheels(vs.getWheels())
+                        .length(vs.getLength())
+                        .width(vs.getWidth())
+                        .height(vs.getHeight())
+                        .build());
+            }
         }
 
         var ins = contractInstallmentRepository.findByContractId(contractId);

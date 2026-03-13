@@ -34,7 +34,4 @@ public class ContractSummaryResponse {
     private String vin;
 
     private Long saleId;
-    private String saleDocType;
-    private String saleSeries;
-    private Long saleNumber;
 }

@@ -22,6 +22,7 @@ public class ContractRestController {
     private final GetContractsPageUseCase getContractsPageUseCase;
     private final GetContractUseCase getContractUseCase;
     private final GenerateSaleFromContractUseCase generateSaleFromContractUseCase;
+
     private final PayContractInstallmentUseCase payContractInstallmentUseCase;
 
     @PostMapping
