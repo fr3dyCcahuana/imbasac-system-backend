@@ -30,6 +30,7 @@ public class GenerateSaleFromContractService implements GenerateSaleFromContract
     private final ContractInstallmentRepository contractInstallmentRepository;
     private final ContractSerialUnitRepository contractSerialUnitRepository;
     private final SaleContractLinkRepository saleContractLinkRepository;
+    private final AccountsReceivableOverrideRepository accountsReceivableOverrideRepository;
 
     private final CreateSaleV2UseCase createSaleV2UseCase;
 
@@ -116,6 +117,19 @@ public class GenerateSaleFromContractService implements GenerateSaleFromContract
         saleContractLinkRepository.linkSaleToContract(document.getSaleId(), contractId);
 
         contractRepository.updateStatusAndSale(contractId, ContractStatus.VENDIDO, document.getSaleId(), contract.getNotes());
+
+        // ✅ CRÉDITO: La venta (SUNAT) queda por cashPrice, pero la deuda real debe ser contract.totalAmount
+        if (contract.getPaymentType() == PaymentType.CREDITO) {
+            Long arId = accountsReceivableOverrideRepository.findArIdBySaleId(document.getSaleId());
+            if (arId != null) {
+                LocalDate lastDue = contractInstallmentRepository.findLastDueDate(contractId);
+                accountsReceivableOverrideRepository.overrideTotals(arId, contract.getTotalAmount(), lastDue);
+                if (contract.getCustomerId() != null) {
+                    accountsReceivableOverrideRepository.recalculateCustomerAccount(contract.getCustomerId());
+                }
+            }
+        }
+
 
         return ContractGenerateSaleResponse.builder()
                 .contractId(contractId)

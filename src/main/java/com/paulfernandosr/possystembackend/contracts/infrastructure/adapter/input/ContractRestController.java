@@ -63,18 +63,18 @@ public class ContractRestController {
     }
 
     @PostMapping("/{id}/installments/{n}/payments")
-    public ResponseEntity<SuccessResponse<ContractInstallmentPaymentResponse>> payInstallment(
-            @PathVariable("id") Long id,
-            @PathVariable("n") int n,
-            @RequestBody ContractInstallmentPaymentRequest request,
-            Principal principal
-    ) {
-        return ResponseEntity.ok(SuccessResponse.ok(
-                payContractInstallmentUseCase.pay(id, n, request, principal.getName())
-        ));
-    }
+public ResponseEntity<SuccessResponse<ContractInstallmentPaymentResponse>> payInstallment(
+        @PathVariable("id") Long id,
+        @PathVariable("n") int n,
+        @RequestBody ContractInstallmentPaymentRequest request,
+        Principal principal
+) {
+    return ResponseEntity.ok(SuccessResponse.ok(
+            payContractInstallmentUseCase.pay(id, n, request, principal.getName())
+    ));
+}
 
-    @PostMapping("/{id}/void")
+@PostMapping("/{id}/void")
     public ResponseEntity<SuccessResponse<ContractVoidResponse>> voidContract(@PathVariable("id") Long id,
                                                                               @RequestBody(required = false) ContractVoidRequest request,
                                                                               Principal principal) {
