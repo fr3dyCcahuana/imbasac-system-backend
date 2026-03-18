@@ -5,12 +5,14 @@ import com.paulfernandosr.possystembackend.salev2.domain.model.VoidSaleV2Respons
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.CreateSaleV2UseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetSaleV2UseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetSalesV2PageUseCase;
+import com.paulfernandosr.possystembackend.salev2.domain.port.input.EmitSaleV2ToSunatUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.VoidSaleV2UseCase;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.PageResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2CreateRequest;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2DetailResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2DocumentResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2SummaryResponse;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2SunatEmissionResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.VoidSaleV2Request;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +30,7 @@ public class SaleV2RestController {
     private final VoidSaleV2UseCase voidSaleV2UseCase;
     private final GetSalesV2PageUseCase getSalesV2PageUseCase;
     private final GetSaleV2UseCase getSaleV2UseCase;
+    private final EmitSaleV2ToSunatUseCase emitSaleV2ToSunatUseCase;
 
     @PostMapping
     public ResponseEntity<SuccessResponse<SaleV2DocumentResponse>> create(@RequestBody SaleV2CreateRequest request,
@@ -44,9 +47,10 @@ public class SaleV2RestController {
      */
     @PostMapping("/{saleId}/void")
     public ResponseEntity<SuccessResponse<VoidSaleV2Response>> voidSale(@PathVariable Long saleId,
-                                                                        @RequestBody(required = false) VoidSaleV2Request request) {
+                                                                        @RequestBody(required = false) VoidSaleV2Request request,
+                                                                        Principal principal) {
         String reason = request == null ? null : request.getReason();
-        VoidSaleV2Response response = voidSaleV2UseCase.voidSale(saleId, reason);
+        VoidSaleV2Response response = voidSaleV2UseCase.voidSale(saleId, reason, principal.getName());
         return ResponseEntity.ok(SuccessResponse.ok(response));
     }
 
@@ -66,5 +70,10 @@ public class SaleV2RestController {
     @GetMapping("/{id}")
     public ResponseEntity<SuccessResponse<SaleV2DetailResponse>> getById(@PathVariable("id") Long saleId) {
         return ResponseEntity.ok(SuccessResponse.ok(getSaleV2UseCase.getById(saleId)));
+    }
+
+    @PostMapping("/{saleId}/emit-sunat")
+    public ResponseEntity<SuccessResponse<SaleV2SunatEmissionResponse>> emitSunat(@PathVariable Long saleId) {
+        return ResponseEntity.ok(SuccessResponse.ok(emitSaleV2ToSunatUseCase.emit(saleId)));
     }
 }

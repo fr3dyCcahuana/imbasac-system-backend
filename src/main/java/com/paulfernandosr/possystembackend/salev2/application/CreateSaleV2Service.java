@@ -34,6 +34,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
 
     private final ProductSerialUnitRepository productSerialUnitRepository;
 
+    private final SaleSessionControlRepository saleSessionControlRepository;
     private final SaleSessionAccumulatorRepository saleSessionAccumulatorRepository;
 
     // Crédito / CxC
@@ -55,6 +56,19 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         }
 
         validateRequest(request);
+
+        OpenSaleSession openSession = saleSessionControlRepository.findOpenByUserId(user.getId());
+        if (openSession == null) {
+            throw new InvalidSaleV2Exception("El usuario no tiene una sesión de caja abierta.");
+        }
+        if (!Objects.equals(openSession.getStationId(), request.getStationId())) {
+            throw new InvalidSaleV2Exception("La estación de la venta no coincide con la sesión de caja abierta del usuario.");
+        }
+        if (request.getSaleSessionId() != null && !Objects.equals(request.getSaleSessionId(), openSession.getId())) {
+            throw new InvalidSaleV2Exception("saleSessionId no coincide con la sesión de caja abierta del usuario.");
+        }
+
+        Long resolvedSaleSessionId = openSession.getId();
 
         LocalDate issueDate = request.getIssueDate() != null ? request.getIssueDate() : LocalDate.now();
 
@@ -293,7 +307,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         // 4) Insertar sale + items
         Long saleId = saleV2Repository.insertSale(
                 request.getStationId(),
-                request.getSaleSessionId(),
+                resolvedSaleSessionId,
                 user.getId(),
                 request.getDocType().name(),
                 request.getSeries(),
@@ -387,8 +401,8 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
             customerAccountRepository.recalculate(request.getCustomerId());
         }
 
-        if (request.getSaleSessionId() != null) {
-            saleSessionAccumulatorRepository.addSaleIncomeAndDiscount(request.getSaleSessionId(), totals.total, totals.discountTotal);
+        if (request.getPaymentType() == PaymentType.CONTADO) {
+            saleSessionAccumulatorRepository.addSaleIncomeAndDiscount(resolvedSaleSessionId, totals.total, totals.discountTotal);
         }
 
         documentSeriesRepository.incrementNextNumber(locked.getId());

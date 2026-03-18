@@ -4,5 +4,5 @@ import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.d
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.AccountsReceivablePaymentResponse;
 
 public interface RegisterAccountsReceivablePaymentUseCase {
-    AccountsReceivablePaymentResponse register(Long arId, AccountsReceivablePaymentRequest request);
+    AccountsReceivablePaymentResponse register(Long arId, AccountsReceivablePaymentRequest request, String username);
 }

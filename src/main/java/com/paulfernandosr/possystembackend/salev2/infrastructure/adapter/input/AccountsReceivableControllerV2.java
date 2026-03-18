@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
+
 @RestController
 @RequestMapping("/accounts-receivable")
 @RequiredArgsConstructor
@@ -21,9 +23,10 @@ public class AccountsReceivableControllerV2 {
     @PostMapping("/{arId}/payments")
     public ResponseEntity<SuccessResponse<AccountsReceivablePaymentResponse>> registerPayment(
             @PathVariable Long arId,
-            @RequestBody AccountsReceivablePaymentRequest request
+            @RequestBody AccountsReceivablePaymentRequest request,
+            Principal principal
     ) {
-        AccountsReceivablePaymentResponse response = registerAccountsReceivablePaymentUseCase.register(arId, request);
+        AccountsReceivablePaymentResponse response = registerAccountsReceivablePaymentUseCase.register(arId, request, principal.getName());
         return ResponseEntity.ok(SuccessResponse.ok(response));
     }
 
