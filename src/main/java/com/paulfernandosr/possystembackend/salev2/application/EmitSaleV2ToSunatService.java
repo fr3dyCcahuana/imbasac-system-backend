@@ -56,8 +56,19 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
             throw new InvalidSaleV2Exception("La venta no tiene ítems para emitir a SUNAT.");
         }
 
-        items.stream()
+        List<SaleV2SunatRepository.SaleItemForSunat> visibleItems = items.stream()
                 .filter(i -> Boolean.TRUE.equals(i.getVisibleInDocument()))
+                .toList();
+
+        if (visibleItems.isEmpty()) {
+            throw new InvalidSaleV2Exception("La venta no tiene líneas visibles para SUNAT (visible_in_document=true).");
+        }
+
+        if (visibleItems.size() != items.size()) {
+            throw new InvalidSaleV2Exception("La venta contiene líneas no visibles para SUNAT. Regulariza la venta antes de emitir para evitar descuadres entre cabecera e ítems.");
+        }
+
+        visibleItems.stream()
                 .filter(i -> !"VENDIDO".equalsIgnoreCase(blankIfNull(i.getLineKind())))
                 .findAny()
                 .ifPresent(i -> {
@@ -68,9 +79,7 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
             throw new InvalidSaleV2Exception("La emisión SUNAT desacoplada implementada en este parche soporta solo ventas GRAVADA.");
         }
 
-        DocumentRequest request = SaleV2SunatMapper.map(sunatProps, sale, items.stream()
-                .filter(i -> Boolean.TRUE.equals(i.getVisibleInDocument()))
-                .toList());
+        DocumentRequest request = SaleV2SunatMapper.map(sunatProps, sale, visibleItems);
 
         log.info("SUNAT V2 request: {}", request);
 

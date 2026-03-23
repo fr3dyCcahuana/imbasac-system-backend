@@ -16,6 +16,7 @@ public class PostgresSaleSessionAccumulatorRepository implements SaleSessionAccu
 
     @Override
     public void addSaleIncomeAndDiscount(Long saleSessionId, BigDecimal saleTotal, BigDecimal discountTotal) {
+        // Mantiene el módulo de sesiones sin refactor: solo acumula montos.
         String sql = """
             UPDATE sale_sessions
                SET sales_income   = COALESCE(sales_income, 0) + ?,

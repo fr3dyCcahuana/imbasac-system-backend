@@ -249,7 +249,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         Totals totals = calculateTotals(request, computedLines);
 
         // 3.1) Validaciones por documento (Regla #11)
-        validateDocumentRules(request, totals);
+        validateDocumentRules(request, totals, computedLines);
 
         // 3.2) Preparar crédito (Regla #10)
         Integer creditDays = request.getCreditDays();
@@ -277,7 +277,6 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
             }
 
             customerAccountRepository.ensureExists(request.getCustomerId());
-            accountsReceivableRepository.markOverdueForCustomer(request.getCustomerId());
             customerAccountRepository.recalculate(request.getCustomerId());
 
             var account = customerAccountRepository.findByCustomerId(request.getCustomerId());
@@ -397,7 +396,6 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                     arStatus
             );
             customerAccountRepository.touchLastSaleAt(request.getCustomerId());
-            accountsReceivableRepository.markOverdueForCustomer(request.getCustomerId());
             customerAccountRepository.recalculate(request.getCustomerId());
         }
 
@@ -424,7 +422,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                 .build();
     }
 
-    private void validateDocumentRules(SaleV2CreateRequest request, Totals totals) {
+    private void validateDocumentRules(SaleV2CreateRequest request, Totals totals, List<ComputedLine> lines) {
         if (request.getDocType() == DocType.FACTURA) {
             if (request.getCustomerDocType() == null || !"RUC".equalsIgnoreCase(request.getCustomerDocType())) {
                 throw new InvalidSaleV2Exception("FACTURA requiere customerDocType=RUC.");
@@ -439,6 +437,33 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                     || request.getCustomerDocNumber() == null || request.getCustomerDocNumber().trim().isEmpty()) {
                 throw new InvalidSaleV2Exception("Ventas >= 700 requieren documento (customerDocType y customerDocNumber)." );
             }
+        }
+
+        if (request.getDocType() == DocType.BOLETA || request.getDocType() == DocType.FACTURA) {
+            if (request.getTaxStatus() != TaxStatus.GRAVADA) {
+                throw new InvalidSaleV2Exception("BOLETA/FACTURA solo permiten taxStatus=GRAVADA en el flujo de emisión SUNAT desacoplada actual.");
+            }
+
+            if (request.getCustomerDocType() == null || request.getCustomerDocType().trim().isEmpty()
+                    || request.getCustomerDocNumber() == null || request.getCustomerDocNumber().trim().isEmpty()) {
+                throw new InvalidSaleV2Exception("BOLETA/FACTURA requieren customerDocType y customerDocNumber en el flujo de emisión SUNAT desacoplada actual.");
+            }
+
+            lines.stream()
+                    .filter(line -> !Boolean.TRUE.equals(line.getVisibleInDocument()))
+                    .findAny()
+                    .ifPresent(line -> {
+                        throw new InvalidSaleV2Exception("BOLETA/FACTURA no permiten líneas ocultas para SUNAT. productId="
+                                + line.getProduct().getId());
+                    });
+
+            lines.stream()
+                    .filter(line -> line.getLineKind() != LineKind.VENDIDO)
+                    .findAny()
+                    .ifPresent(line -> {
+                        throw new InvalidSaleV2Exception("BOLETA/FACTURA solo permiten lineKind=VENDIDO en el flujo de emisión SUNAT desacoplada actual. productId="
+                                + line.getProduct().getId());
+                    });
         }
     }
 

@@ -28,7 +28,10 @@ public final class SaleV2SunatMapper {
                                       List<SaleV2SunatRepository.SaleItemForSunat> items) {
 
         SunatProps.Business business = props.getBusiness();
-        LocalDateTime emissionDateTime = sale.getCreatedAt() != null ? sale.getCreatedAt() : LocalDateTime.now();
+        LocalDateTime baseDateTime = sale.getCreatedAt() != null ? sale.getCreatedAt() : LocalDateTime.now();
+        LocalDateTime emissionDateTime = sale.getIssueDate() != null
+                ? sale.getIssueDate().atTime(baseDateTime.toLocalTime())
+                : baseDateTime;
 
         return DocumentRequest.builder()
                 .business(DocumentRequest.Business.builder()

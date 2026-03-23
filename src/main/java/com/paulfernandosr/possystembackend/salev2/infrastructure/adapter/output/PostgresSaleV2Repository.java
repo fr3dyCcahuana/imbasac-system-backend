@@ -161,6 +161,73 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
     }
 
     @Override
+    public LockedEditableSale lockEditableById(Long saleId) {
+        String sql = """
+                    SELECT
+                      id,
+                      customer_id,
+                      doc_type,
+                      series,
+                      number,
+                      issue_date,
+                      currency,
+                      exchange_rate,
+                      price_list,
+                      customer_doc_type,
+                      customer_doc_number,
+                      customer_name,
+                      customer_address,
+                      tax_status,
+                      tax_reason,
+                      igv_rate,
+                      igv_included,
+                      payment_type,
+                      credit_days,
+                      due_date,
+                      notes,
+                      status,
+                      sunat_status,
+                      total,
+                      discount_total
+                    FROM sale
+                    WHERE id = ?
+                    FOR UPDATE
+                """;
+
+        return jdbcClient.sql(sql)
+                .param(saleId)
+                .query((rs, rowNum) -> LockedEditableSale.builder()
+                        .id(rs.getLong("id"))
+                        .customerId((Long) rs.getObject("customer_id"))
+                        .docType(rs.getString("doc_type"))
+                        .series(rs.getString("series"))
+                        .number(rs.getLong("number"))
+                        .issueDate(rs.getObject("issue_date", LocalDate.class))
+                        .currency(rs.getString("currency"))
+                        .exchangeRate(rs.getBigDecimal("exchange_rate"))
+                        .priceList(rs.getString("price_list"))
+                        .customerDocType(rs.getString("customer_doc_type"))
+                        .customerDocNumber(rs.getString("customer_doc_number"))
+                        .customerName(rs.getString("customer_name"))
+                        .customerAddress(rs.getString("customer_address"))
+                        .taxStatus(rs.getString("tax_status"))
+                        .taxReason(rs.getString("tax_reason"))
+                        .igvRate(rs.getBigDecimal("igv_rate"))
+                        .igvIncluded((Boolean) rs.getObject("igv_included"))
+                        .paymentType(rs.getString("payment_type"))
+                        .creditDays((Integer) rs.getObject("credit_days"))
+                        .dueDate(rs.getObject("due_date", LocalDate.class))
+                        .notes(rs.getString("notes"))
+                        .status(rs.getString("status"))
+                        .sunatStatus(rs.getString("sunat_status"))
+                        .total(rs.getBigDecimal("total"))
+                        .discountTotal(rs.getBigDecimal("discount_total"))
+                        .build())
+                .optional()
+                .orElse(null);
+    }
+
+    @Override
     public List<SaleItemForVoid> findItemsBySaleId(Long saleId) {
         String sql = """
                     SELECT
@@ -189,8 +256,62 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
     }
 
     @Override
+    public void deleteItemsBySaleId(Long saleId) {
+        String sql = "DELETE FROM sale_item WHERE sale_id = ?";
+        jdbcClient.sql(sql)
+                .param(saleId)
+                .update();
+    }
+
+    @Override
+    public void updateHeaderForAdminEdit(Long saleId, LocalDate issueDate, String priceList, Long customerId,
+                                         String customerDocType, String customerDocNumber, String customerName,
+                                         String customerAddress, String taxStatus, String taxReason,
+                                         BigDecimal igvRate, Boolean igvIncluded, Integer creditDays, LocalDate dueDate,
+                                         BigDecimal subtotal, BigDecimal discountTotal, BigDecimal igvAmount,
+                                         BigDecimal total, BigDecimal giftCostTotal, String notes) {
+        String sql = """
+                    UPDATE sale
+                       SET issue_date = ?,
+                           price_list = ?,
+                           customer_id = ?,
+                           customer_doc_type = ?,
+                           customer_doc_number = ?,
+                           customer_name = ?,
+                           customer_address = ?,
+                           tax_status = ?,
+                           tax_reason = ?,
+                           igv_rate = ?,
+                           igv_included = ?,
+                           credit_days = ?,
+                           due_date = ?,
+                           subtotal = ?,
+                           discount_total = ?,
+                           igv_amount = ?,
+                           total = ?,
+                           gift_cost_total = ?,
+                           notes = ?,
+                           sunat_status = 'NO_ENVIADO',
+                           sunat_response_code = NULL,
+                           sunat_response_description = NULL,
+                           sunat_hash_code = NULL,
+                           sunat_xml_path = NULL,
+                           sunat_cdr_path = NULL,
+                           sunat_pdf_path = NULL,
+                           sunat_sent_at = NULL,
+                           updated_at = NOW()
+                     WHERE id = ?
+                """;
+
+        jdbcClient.sql(sql)
+                .params(issueDate, priceList, customerId, customerDocType, customerDocNumber, customerName,
+                        customerAddress, taxStatus, taxReason, igvRate, igvIncluded, creditDays, dueDate,
+                        subtotal, discountTotal, igvAmount, total, giftCostTotal, notes, saleId)
+                .update();
+    }
+
+    @Override
     public void markAsVoided(Long saleId, String voidNote) {
-        // No existe columna void_reason; se deja trazabilidad en notes.
         String sql = """
                     UPDATE sale
                        SET status = 'ANULADA',

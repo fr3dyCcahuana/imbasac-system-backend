@@ -59,7 +59,29 @@ public interface SaleV2Repository {
                       BigDecimal giftCostTotal);
 
     LockedSale lockById(Long saleId);
+    LockedEditableSale lockEditableById(Long saleId);
     List<SaleItemForVoid> findItemsBySaleId(Long saleId);
+    void deleteItemsBySaleId(Long saleId);
+    void updateHeaderForAdminEdit(Long saleId,
+                                  LocalDate issueDate,
+                                  String priceList,
+                                  Long customerId,
+                                  String customerDocType,
+                                  String customerDocNumber,
+                                  String customerName,
+                                  String customerAddress,
+                                  String taxStatus,
+                                  String taxReason,
+                                  BigDecimal igvRate,
+                                  Boolean igvIncluded,
+                                  Integer creditDays,
+                                  LocalDate dueDate,
+                                  BigDecimal subtotal,
+                                  BigDecimal discountTotal,
+                                  BigDecimal igvAmount,
+                                  BigDecimal total,
+                                  BigDecimal giftCostTotal,
+                                  String notes);
     void markAsVoided(Long saleId, String voidNote);
 
     @Getter
@@ -74,6 +96,39 @@ public interface SaleV2Repository {
         private String docType;
         private String status;
         private String paymentType;
+        private BigDecimal total;
+        private BigDecimal discountTotal;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    class LockedEditableSale {
+        private Long id;
+        private Long customerId;
+        private String docType;
+        private String series;
+        private Long number;
+        private LocalDate issueDate;
+        private String currency;
+        private BigDecimal exchangeRate;
+        private String priceList;
+        private String customerDocType;
+        private String customerDocNumber;
+        private String customerName;
+        private String customerAddress;
+        private String taxStatus;
+        private String taxReason;
+        private BigDecimal igvRate;
+        private Boolean igvIncluded;
+        private String paymentType;
+        private Integer creditDays;
+        private LocalDate dueDate;
+        private String notes;
+        private String status;
+        private String sunatStatus;
         private BigDecimal total;
         private BigDecimal discountTotal;
     }

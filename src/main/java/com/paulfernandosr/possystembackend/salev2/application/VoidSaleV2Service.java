@@ -47,14 +47,18 @@ public class VoidSaleV2Service implements VoidSaleV2UseCase {
             throw new InvalidSaleV2Exception("Solo se puede anular una venta EMITIDA. Estado actual: " + sale.getStatus());
         }
 
+        // 1) Items
         List<SaleV2Repository.SaleItemForVoid> items = saleRepository.findItemsBySaleId(saleId);
 
+        // 2) Reversa de seriales: DEVUELTO + unlink sale_item_id
         List<Long> saleItemIds = items.stream().map(SaleV2Repository.SaleItemForVoid::getId).toList();
         var serials = productSerialUnitRepository.lockBySaleItemIds(saleItemIds);
         for (var su : serials) {
+            // Regla de negocio: al anular una venta con serial, pasa a DEVUELTO.
             productSerialUnitRepository.markAsReturned(su.getId());
         }
 
+        // 3) Reversa de stock + kardex IN_RETURN
         for (var it : items) {
             if (Boolean.TRUE.equals(it.getAffectsStock())) {
                 BigDecimal qty = it.getQuantity() == null ? BigDecimal.ZERO : it.getQuantity();
@@ -73,6 +77,7 @@ public class VoidSaleV2Service implements VoidSaleV2UseCase {
             }
         }
 
+        // 4) Reversa de cobro/credito
         if ("CONTADO".equalsIgnoreCase(sale.getPaymentType())) {
             salePaymentRepository.deleteBySaleId(saleId);
 
@@ -97,13 +102,23 @@ public class VoidSaleV2Service implements VoidSaleV2UseCase {
                 if (hasPayments || (ar.getPaidAmount() != null && ar.getPaidAmount().signum() > 0)) {
                     throw new InvalidSaleV2Exception("No se puede anular: la CxC ya tiene pagos registrados.");
                 }
+                // Mantener consistencia sin cambiar constraint de status: eliminar CxC si no tuvo pagos.
                 accountsReceivableRepository.deleteBySaleId(saleId);
             }
         }
 
+        // 5) Ajuste de sesión de ventas (se mantiene módulo de sesiones)
+        if (sale.getSaleSessionId() != null) {
+            BigDecimal total = sale.getTotal() == null ? BigDecimal.ZERO : sale.getTotal();
+            BigDecimal discount = sale.getDiscountTotal() == null ? BigDecimal.ZERO : sale.getDiscountTotal();
+            saleSessionAccumulatorRepository.subtractSaleIncomeAndDiscount(sale.getSaleSessionId(), total, discount);
+        }
+
+        // 6) Marcar venta anulada
         String voidNote = (reason == null || reason.isBlank()) ? "ANULADA" : "ANULADA: " + reason;
         saleRepository.markAsVoided(saleId, voidNote);
 
+        // 7) Recalcular cuenta del cliente (si aplica)
         if (sale.getCustomerId() != null) {
             customerAccountRepository.recalculate(sale.getCustomerId());
         }

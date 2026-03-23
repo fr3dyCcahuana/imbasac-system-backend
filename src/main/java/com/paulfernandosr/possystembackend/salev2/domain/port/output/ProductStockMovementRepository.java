@@ -9,4 +9,9 @@ public interface ProductStockMovementRepository {
      * Movimiento de reversa por anulación/devolución de una venta.
      */
     void createInReturn(Long productId, BigDecimal quantityIn, Long saleItemId, BigDecimal unitCost, BigDecimal totalCost);
+
+    /**
+     * Movimiento de ingreso por edición administrativa de una venta antes de SUNAT.
+     */
+    void createInEdit(Long productId, BigDecimal quantityIn, Long saleItemId, BigDecimal unitCost, BigDecimal totalCost);
 }

@@ -15,7 +15,6 @@ public class PostgresProductStockMovementRepository implements ProductStockMovem
 
     @Override
     public void createOutSale(Long productId, BigDecimal quantityOut, Long saleItemId) {
-        // Ajusta columnas si tu kardex tiene nombres distintos.
         String sql = """
             INSERT INTO product_stock_movement(
               product_id,
@@ -45,6 +44,26 @@ public class PostgresProductStockMovementRepository implements ProductStockMovem
               total_cost,
               created_at
             ) VALUES (?, 'IN_RETURN', 'sale_item', ?, ?, ?, ?, NOW())
+        """;
+
+        jdbcClient.sql(sql)
+                .params(productId, saleItemId, quantityIn, unitCost, totalCost)
+                .update();
+    }
+
+    @Override
+    public void createInEdit(Long productId, BigDecimal quantityIn, Long saleItemId, BigDecimal unitCost, BigDecimal totalCost) {
+        String sql = """
+            INSERT INTO product_stock_movement(
+              product_id,
+              movement_type,
+              source_table,
+              source_id,
+              quantity_in,
+              unit_cost,
+              total_cost,
+              created_at
+            ) VALUES (?, 'IN_SALE_EDIT', 'sale_item', ?, ?, ?, ?, NOW())
         """;
 
         jdbcClient.sql(sql)

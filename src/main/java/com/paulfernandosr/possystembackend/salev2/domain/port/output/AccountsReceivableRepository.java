@@ -16,7 +16,15 @@ public interface AccountsReceivableRepository {
 
     void deleteBySaleId(Long saleId);
     void updateAmountsAndStatus(Long arId, BigDecimal paidAmount, BigDecimal balanceAmount, String status);
-    void markOverdueForCustomer(Long customerId);
+    void updateBySaleId(Long saleId,
+                        Long customerId,
+                        LocalDate issueDate,
+                        LocalDate dueDate,
+                        BigDecimal totalAmount,
+                        BigDecimal paidAmount,
+                        BigDecimal balanceAmount,
+                        String status);
+    boolean existsOpenOverdueDebtByCustomerExcludingSale(Long customerId, Long excludedSaleId);
 
     @Getter
     @Setter

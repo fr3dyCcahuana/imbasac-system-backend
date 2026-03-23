@@ -2,12 +2,14 @@ package com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input;
 
 import com.paulfernandosr.possystembackend.common.infrastructure.response.SuccessResponse;
 import com.paulfernandosr.possystembackend.salev2.domain.model.VoidSaleV2Response;
+import com.paulfernandosr.possystembackend.salev2.domain.port.input.AdminEditSaleV2BeforeSunatUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.CreateSaleV2UseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetSaleV2UseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetSalesV2PageUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.EmitSaleV2ToSunatUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.VoidSaleV2UseCase;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.PageResponse;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2AdminEditRequest;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2CreateRequest;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2DetailResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2DocumentResponse;
@@ -27,6 +29,7 @@ import java.security.Principal;
 public class SaleV2RestController {
 
     private final CreateSaleV2UseCase createSaleV2UseCase;
+    private final AdminEditSaleV2BeforeSunatUseCase adminEditSaleV2BeforeSunatUseCase;
     private final VoidSaleV2UseCase voidSaleV2UseCase;
     private final GetSalesV2PageUseCase getSalesV2PageUseCase;
     private final GetSaleV2UseCase getSaleV2UseCase;
@@ -42,6 +45,20 @@ public class SaleV2RestController {
     }
 
     /**
+     * Edición administrativa previa a SUNAT.
+     * - Solo aplica a ventas ya registradas y todavía no enviadas a SUNAT.
+     * - Reversa stock/seriales de los ítems anteriores y vuelve a grabar el detalle.
+     * - No toca acumulados de caja ni sale_session.
+     */
+    @PatchMapping("/{saleId}/admin-edit-before-sunat")
+    public ResponseEntity<SuccessResponse<SaleV2DocumentResponse>> adminEditBeforeSunat(@PathVariable Long saleId,
+                                                                                         @RequestBody SaleV2AdminEditRequest request,
+                                                                                         Principal principal) {
+        SaleV2DocumentResponse response = adminEditSaleV2BeforeSunatUseCase.edit(saleId, request, principal.getName());
+        return ResponseEntity.ok(SuccessResponse.ok(response));
+    }
+
+    /**
      * Anulación de venta con reversa de stock/kardex/seriales y ajuste de CxC.
      * Regla clave: si es serial, el status queda en DEVUELTO.
      */
@@ -54,7 +71,6 @@ public class SaleV2RestController {
         return ResponseEntity.ok(SuccessResponse.ok(response));
     }
 
-    // Entregable 7: listado paginado
     @GetMapping
     public ResponseEntity<SuccessResponse<PageResponse<SaleV2SummaryResponse>>> findPage(
             @RequestParam(defaultValue = "0") int page,
@@ -66,7 +82,6 @@ public class SaleV2RestController {
         ));
     }
 
-    // Entregable 7: detalle
     @GetMapping("/{id}")
     public ResponseEntity<SuccessResponse<SaleV2DetailResponse>> getById(@PathVariable("id") Long saleId) {
         return ResponseEntity.ok(SuccessResponse.ok(getSaleV2UseCase.getById(saleId)));

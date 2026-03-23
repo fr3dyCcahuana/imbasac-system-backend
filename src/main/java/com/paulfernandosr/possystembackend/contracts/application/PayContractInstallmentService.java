@@ -99,7 +99,7 @@ public class PayContractInstallmentService implements PayContractInstallmentUseC
                 .note(appendNote(request.getNote(), contractId, installmentNumber))
                 .build();
 
-        AccountsReceivablePaymentResponse arResp = registerAccountsReceivablePaymentUseCase.register(arId, arReq);
+        AccountsReceivablePaymentResponse arResp = registerAccountsReceivablePaymentUseCase.register(arId, arReq, user.getUsername());
 
         // marcar cuota como pagada
         BigDecimal newPaid = alreadyPaid.add(pay).setScale(4, RoundingMode.HALF_UP);

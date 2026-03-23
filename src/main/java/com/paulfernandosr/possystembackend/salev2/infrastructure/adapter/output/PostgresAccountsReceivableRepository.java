@@ -125,19 +125,45 @@ public class PostgresAccountsReceivableRepository implements AccountsReceivableR
     }
 
     @Override
-    public void markOverdueForCustomer(Long customerId) {
+    public void updateBySaleId(Long saleId, Long customerId, LocalDate issueDate, LocalDate dueDate,
+                               BigDecimal totalAmount, BigDecimal paidAmount, BigDecimal balanceAmount, String status) {
         String sql = """
             UPDATE accounts_receivable
-               SET status = 'VENCIDO',
+               SET customer_id = ?,
+                   issue_date = ?,
+                   due_date = ?,
+                   total_amount = ?,
+                   paid_amount = ?,
+                   balance_amount = ?,
+                   status = ?,
                    updated_at = NOW()
-             WHERE customer_id = ?
-               AND status <> 'PAGADO'
-               AND balance_amount > 0
-               AND due_date < CURRENT_DATE
+             WHERE sale_id = ?
         """;
 
         jdbcClient.sql(sql)
-                .param(customerId)
+                .params(customerId, issueDate, dueDate, totalAmount, paidAmount, balanceAmount, status, saleId)
                 .update();
+    }
+
+    @Override
+    public boolean existsOpenOverdueDebtByCustomerExcludingSale(Long customerId, Long excludedSaleId) {
+        String sql = """
+            SELECT EXISTS (
+                SELECT 1
+                  FROM accounts_receivable
+                 WHERE customer_id = ?
+                   AND (? IS NULL OR sale_id <> ?)
+                   AND status <> 'PAGADO'
+                   AND balance_amount > 0
+                   AND due_date < CURRENT_DATE
+            )
+        """;
+
+        return Boolean.TRUE.equals(
+                jdbcClient.sql(sql)
+                        .params(customerId, excludedSaleId, excludedSaleId)
+                        .query(Boolean.class)
+                        .single()
+        );
     }
 }

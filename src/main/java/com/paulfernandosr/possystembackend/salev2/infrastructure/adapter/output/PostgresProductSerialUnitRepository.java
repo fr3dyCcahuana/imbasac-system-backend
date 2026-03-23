@@ -93,4 +93,22 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
                 .param(serialUnitId)
                 .update();
     }
+
+    @Override
+    public void releaseFromSaleForEdition(Long serialUnitId) {
+        String sql = """
+        UPDATE product_serial_unit
+           SET status = CASE
+                          WHEN contract_id IS NOT NULL THEN 'RESERVADO'
+                          ELSE 'EN_ALMACEN'
+                        END,
+               sale_item_id = NULL,
+               updated_at = NOW()
+         WHERE id = ?
+        """;
+
+        jdbcClient.sql(sql)
+                .param(serialUnitId)
+                .update();
+    }
 }
