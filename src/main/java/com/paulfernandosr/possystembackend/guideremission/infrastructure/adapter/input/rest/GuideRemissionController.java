@@ -1,6 +1,10 @@
 package com.paulfernandosr.possystembackend.guideremission.infrastructure.adapter.input.rest;
 
-import com.paulfernandosr.possystembackend.guideremission.domain.*;
+import com.paulfernandosr.possystembackend.guideremission.domain.GuideRemissionSubmission;
+import com.paulfernandosr.possystembackend.guideremission.domain.GuideRemissionSubmissionResponse;
+import com.paulfernandosr.possystembackend.guideremission.domain.GuideRemissionTicketQuery;
+import com.paulfernandosr.possystembackend.guideremission.domain.GuideRemissionTicketStatusResponse;
+import com.paulfernandosr.possystembackend.guideremission.domain.GuideRemissionTokenResponse;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.QueryGuideRemissionTicketUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.RequestGuideRemissionTokenUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.SubmitGuideRemissionUseCase;
@@ -18,8 +22,8 @@ public class GuideRemissionController {
     private final QueryGuideRemissionTicketUseCase queryGuideRemissionTicketUseCase;
 
     @PostMapping("/token")
-    public ResponseEntity<GuideRemissionTokenResponse> requestToken(@Valid @RequestBody GuideRemissionTokenRequest request) {
-        return ResponseEntity.ok(requestGuideRemissionTokenUseCase.requestToken(request));
+    public ResponseEntity<GuideRemissionTokenResponse> requestToken() {
+        return ResponseEntity.ok(requestGuideRemissionTokenUseCase.requestToken());
     }
 
     @PostMapping("/submit")

@@ -60,6 +60,33 @@ public class GuideRemissionBusinessValidator {
             require(guide.getConductorLicencia(), "Para transporte privado se requiere conductor_licencia.");
             require(guide.getVehiculoPlaca(), "Para transporte privado se requiere vehiculo_placa.");
         }
+
+        validateRelatedDocument(request);
+    }
+
+    private void validateRelatedDocument(GuideRemissionSubmission request) {
+        boolean hasAny = hasText(request.getRelatedDocumentTypeCode())
+                || hasText(request.getRelatedDocumentSerie())
+                || hasText(request.getRelatedDocumentNumero());
+
+        if (!hasAny) {
+            return;
+        }
+
+        require(request.getRelatedDocumentTypeCode(), "Si informa comprobante relacionado, debe incluir related_document_type_code.");
+        require(request.getRelatedDocumentSerie(), "Si informa comprobante relacionado, debe incluir related_document_serie.");
+        require(request.getRelatedDocumentNumero(), "Si informa comprobante relacionado, debe incluir related_document_numero.");
+
+        String normalizedType = request.getRelatedDocumentTypeCode().trim().toUpperCase();
+        if (!("01".equals(normalizedType) || "03".equals(normalizedType)
+                || "FACTURA".equals(normalizedType)
+                || "BOLETA".equals(normalizedType)
+                || "BOLETA ELECTRONICA".equals(normalizedType)
+                || "BOLETA VENTA ELECTRONICA".equals(normalizedType))) {
+            throw new InvalidGuideRemissionException(
+                    "related_document_type_code debe ser 01/FACTURA o 03/BOLETA."
+            );
+        }
     }
 
     private void require(String value, String message) {

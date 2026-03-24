@@ -19,9 +19,6 @@ public class GuideRemissionTicketQuery {
     private String tokenAccess;
 
     @NotBlank
-    private String ruc;
-
-    @NotBlank
     private String serie;
 
     @NotBlank

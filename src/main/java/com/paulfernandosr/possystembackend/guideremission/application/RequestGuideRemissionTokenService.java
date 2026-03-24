@@ -1,6 +1,5 @@
 package com.paulfernandosr.possystembackend.guideremission.application;
 
-import com.paulfernandosr.possystembackend.guideremission.domain.GuideRemissionTokenRequest;
 import com.paulfernandosr.possystembackend.guideremission.domain.GuideRemissionTokenResponse;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.RequestGuideRemissionTokenUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.output.GuideRemissionProvider;
@@ -13,7 +12,7 @@ public class RequestGuideRemissionTokenService implements RequestGuideRemissionT
     private final GuideRemissionProvider guideRemissionProvider;
 
     @Override
-    public GuideRemissionTokenResponse requestToken(GuideRemissionTokenRequest request) {
-        return guideRemissionProvider.requestToken(request);
+    public GuideRemissionTokenResponse requestToken() {
+        return guideRemissionProvider.requestToken();
     }
 }

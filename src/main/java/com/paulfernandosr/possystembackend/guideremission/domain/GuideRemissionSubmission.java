@@ -19,10 +19,6 @@ import java.util.List;
 public class GuideRemissionSubmission {
     @Valid
     @NotNull
-    private GuideRemissionCompany empresa;
-
-    @Valid
-    @NotNull
     private GuideRemissionData guia;
 
     @Valid
@@ -31,4 +27,8 @@ public class GuideRemissionSubmission {
 
     @NotBlank
     private String token;
+
+    private String relatedDocumentTypeCode;
+    private String relatedDocumentSerie;
+    private String relatedDocumentNumero;
 }
