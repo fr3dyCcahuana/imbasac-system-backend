@@ -16,11 +16,13 @@ public class QueryGuideRemissionTicketService implements QueryGuideRemissionTick
     private final GuideRemissionProvider guideRemissionProvider;
     private final GuideRemissionRepository guideRemissionRepository;
     private final GuideRemissionProperties properties;
+    private final GuideRemissionPhpResponseEvaluator responseEvaluator;
 
     @Override
     @Transactional
     public GuideRemissionTicketStatusResponse queryTicket(GuideRemissionTicketQuery request) {
         GuideRemissionTicketStatusResponse response = guideRemissionProvider.queryTicket(request);
+        responseEvaluator.assertSuccessfulTicketQuery(response);
         guideRemissionRepository.saveTicketStatus(properties.getCompany().getRuc(), request, response);
         return response;
     }

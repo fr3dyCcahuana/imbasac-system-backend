@@ -1,21 +1,30 @@
 package com.paulfernandosr.possystembackend.guideremission.application;
 
-import com.paulfernandosr.possystembackend.guideremission.domain.GuideRemissionData;
-import com.paulfernandosr.possystembackend.guideremission.domain.GuideRemissionItem;
-import com.paulfernandosr.possystembackend.guideremission.domain.GuideRemissionSubmission;
+import com.paulfernandosr.possystembackend.guideremission.domain.*;
 import com.paulfernandosr.possystembackend.guideremission.domain.exception.InvalidGuideRemissionException;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 @Component
 public class GuideRemissionBusinessValidator {
     public void validate(GuideRemissionSubmission request) {
-        GuideRemissionData guide = request.getGuia();
+        validateGuideAndItems(request.getGuia(), request.getItems());
+        validateRelatedDocument(request.getRelatedDocumentTypeCode(), request.getRelatedDocumentSerie(), request.getRelatedDocumentNumero());
+        require(request.getToken(), "La guía debe incluir token.");
+    }
 
-        if (request.getItems() == null || request.getItems().isEmpty()) {
+    public void validate(GuideRemissionFullFlowRequest request) {
+        validateGuideAndItems(request.getGuia(), request.getItems());
+        validateRelatedDocument(request.getRelatedDocumentTypeCode(), request.getRelatedDocumentSerie(), request.getRelatedDocumentNumero());
+    }
+
+    private void validateGuideAndItems(GuideRemissionData guide, List<GuideRemissionItem> items) {
+        if (items == null || items.isEmpty()) {
             throw new InvalidGuideRemissionException("La guía debe tener al menos un item.");
         }
 
-        for (GuideRemissionItem item : request.getItems()) {
+        for (GuideRemissionItem item : items) {
             require(item.getCantidad(), "Cada item debe incluir cantidad.");
             require(item.getDescripcion(), "Cada item debe incluir descripción.");
             require(item.getCodigo(), "Cada item debe incluir código.");
@@ -60,24 +69,20 @@ public class GuideRemissionBusinessValidator {
             require(guide.getConductorLicencia(), "Para transporte privado se requiere conductor_licencia.");
             require(guide.getVehiculoPlaca(), "Para transporte privado se requiere vehiculo_placa.");
         }
-
-        validateRelatedDocument(request);
     }
 
-    private void validateRelatedDocument(GuideRemissionSubmission request) {
-        boolean hasAny = hasText(request.getRelatedDocumentTypeCode())
-                || hasText(request.getRelatedDocumentSerie())
-                || hasText(request.getRelatedDocumentNumero());
+    private void validateRelatedDocument(String typeCode, String serie, String numero) {
+        boolean hasAny = hasText(typeCode) || hasText(serie) || hasText(numero);
 
         if (!hasAny) {
             return;
         }
 
-        require(request.getRelatedDocumentTypeCode(), "Si informa comprobante relacionado, debe incluir related_document_type_code.");
-        require(request.getRelatedDocumentSerie(), "Si informa comprobante relacionado, debe incluir related_document_serie.");
-        require(request.getRelatedDocumentNumero(), "Si informa comprobante relacionado, debe incluir related_document_numero.");
+        require(typeCode, "Si informa comprobante relacionado, debe incluir related_document_type_code.");
+        require(serie, "Si informa comprobante relacionado, debe incluir related_document_serie.");
+        require(numero, "Si informa comprobante relacionado, debe incluir related_document_numero.");
 
-        String normalizedType = request.getRelatedDocumentTypeCode().trim().toUpperCase();
+        String normalizedType = typeCode.trim().toUpperCase();
         if (!("01".equals(normalizedType) || "03".equals(normalizedType)
                 || "FACTURA".equals(normalizedType)
                 || "BOLETA".equals(normalizedType)

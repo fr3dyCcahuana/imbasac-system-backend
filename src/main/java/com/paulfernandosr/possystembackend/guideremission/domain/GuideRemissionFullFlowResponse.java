@@ -10,11 +10,9 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public class GuideRemissionTokenResponse {
-    private String accessToken;
-    private String tokenType;
-    private Long expiresIn;
-    private Integer cod;
-    private String msg;
-    private String exc;
+public class GuideRemissionFullFlowResponse {
+    private String initialTokenSource;
+    private boolean retriedWithFreshToken;
+    private GuideRemissionSubmissionResponse submission;
+    private GuideRemissionTicketStatusResponse ticketStatus;
 }

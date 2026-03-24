@@ -21,4 +21,7 @@ public class GuideRemissionTicketStatusResponse {
     private String rutaXml;
     private String rutaCdr;
     private String numerror;
+    private Integer cod;
+    private String msg;
+    private String exc;
 }

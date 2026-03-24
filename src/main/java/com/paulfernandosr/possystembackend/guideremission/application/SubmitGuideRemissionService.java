@@ -17,6 +17,7 @@ public class SubmitGuideRemissionService implements SubmitGuideRemissionUseCase 
     private final GuideRemissionProvider guideRemissionProvider;
     private final GuideRemissionRepository guideRemissionRepository;
     private final GuideRemissionProperties properties;
+    private final GuideRemissionPhpResponseEvaluator responseEvaluator;
 
     @Override
     @Transactional
@@ -24,8 +25,8 @@ public class SubmitGuideRemissionService implements SubmitGuideRemissionUseCase 
         validator.validate(request);
 
         GuideRemissionSubmissionResponse response = guideRemissionProvider.submit(request);
+        responseEvaluator.assertSuccessfulSubmission(response);
         guideRemissionRepository.saveSubmission(properties.toCompanyPayload(), request, response);
-
         return response;
     }
 }

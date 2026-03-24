@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.guideremission.infrastructure.config;
 
 import com.paulfernandosr.possystembackend.guideremission.domain.GuideRemissionCompany;
+import com.paulfernandosr.possystembackend.guideremission.infrastructure.GuideRemissionRedisConstants;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -29,6 +30,26 @@ public class GuideRemissionProperties {
      * Timeout de conexión en segundos.
      */
     private int connectTimeoutSeconds = 10;
+
+    /**
+     * Milisegundos a esperar entre el submit y la consulta del ticket.
+     */
+    private long ticketQueryDelayMillis = 1000;
+
+    /**
+     * Restar algunos segundos al expires_in antes de grabarlo en Redis.
+     */
+    private long tokenTtlSkewSeconds = 60;
+
+    /**
+     * TTL de respaldo cuando el servicio no informa expires_in.
+     */
+    private long cachedTokenTtlSecondsFallback = 3300;
+
+    /**
+     * Prefijo Redis para el token de guía.
+     */
+    private String redisKeyPrefix = GuideRemissionRedisConstants.DEFAULT_TOKEN_PREFIX;
 
     @Valid
     @NotNull
