@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -115,6 +116,126 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                         existingId
                 )
                 .update();
+    }
+
+
+    @Override
+    public Optional<GuideRemissionDocument> findDocument(String companyRuc, String serie, String numero) {
+        List<GuideRemissionDocument> documents = jdbcClient.sql("""
+                SELECT id,
+                       company_ruc,
+                       serie,
+                       numero,
+                       issue_date,
+                       issue_time,
+                       transfer_date,
+                       transfer_reason_code,
+                       transfer_mode_code,
+                       related_document_type_code,
+                       related_document_serie,
+                       related_document_numero,
+                       transporter_document_number,
+                       transporter_name,
+                       legacy_transport_entity_id,
+                       legacy_transport_mtc_number,
+                       driver_dni,
+                       driver_full_name,
+                       driver_license,
+                       vehicle_plate,
+                       recipient_document_type,
+                       recipient_document_number,
+                       recipient_name,
+                       departure_ubigeo,
+                       departure_address,
+                       departure_establishment_code,
+                       arrival_ubigeo,
+                       arrival_address,
+                       arrival_establishment_code,
+                       total_weight,
+                       number_of_packages,
+                       notes,
+                       ticket,
+                       status,
+                       ticket_response_code,
+                       cdr_generated,
+                       cdr_hash,
+                       cdr_message,
+                       document_description,
+                       submitted_at
+                  FROM guide_remissions
+                 WHERE company_ruc = ?
+                   AND serie = ?
+                   AND numero = ?
+                """)
+                .params(companyRuc, serie, numero)
+                .query((rs, rowNum) -> GuideRemissionDocument.builder()
+                        .id(rs.getLong("id"))
+                        .companyRuc(rs.getString("company_ruc"))
+                        .serie(rs.getString("serie"))
+                        .numero(rs.getString("numero"))
+                        .issueDate(rs.getObject("issue_date", LocalDate.class))
+                        .issueTime(rs.getObject("issue_time", LocalTime.class))
+                        .transferDate(rs.getObject("transfer_date", LocalDate.class))
+                        .transferReasonCode(rs.getString("transfer_reason_code"))
+                        .transferModeCode(rs.getString("transfer_mode_code"))
+                        .relatedDocumentTypeCode(rs.getString("related_document_type_code"))
+                        .relatedDocumentSerie(rs.getString("related_document_serie"))
+                        .relatedDocumentNumero(rs.getString("related_document_numero"))
+                        .transporterDocumentNumber(rs.getString("transporter_document_number"))
+                        .transporterName(rs.getString("transporter_name"))
+                        .legacyTransportEntityId(rs.getString("legacy_transport_entity_id"))
+                        .legacyTransportMtcNumber(rs.getString("legacy_transport_mtc_number"))
+                        .driverDni(rs.getString("driver_dni"))
+                        .driverFullName(rs.getString("driver_full_name"))
+                        .driverLicense(rs.getString("driver_license"))
+                        .vehiclePlate(rs.getString("vehicle_plate"))
+                        .recipientDocumentType(rs.getObject("recipient_document_type", Integer.class))
+                        .recipientDocumentNumber(rs.getString("recipient_document_number"))
+                        .recipientName(rs.getString("recipient_name"))
+                        .departureUbigeo(rs.getString("departure_ubigeo"))
+                        .departureAddress(rs.getString("departure_address"))
+                        .departureEstablishmentCode(rs.getString("departure_establishment_code"))
+                        .arrivalUbigeo(rs.getString("arrival_ubigeo"))
+                        .arrivalAddress(rs.getString("arrival_address"))
+                        .arrivalEstablishmentCode(rs.getString("arrival_establishment_code"))
+                        .totalWeight(rs.getBigDecimal("total_weight"))
+                        .numberOfPackages(rs.getString("number_of_packages"))
+                        .notes(rs.getString("notes"))
+                        .ticket(rs.getString("ticket"))
+                        .status(rs.getString("status"))
+                        .ticketResponseCode(rs.getString("ticket_response_code"))
+                        .cdrGenerated(rs.getString("cdr_generated"))
+                        .cdrHash(rs.getString("cdr_hash"))
+                        .cdrMessage(rs.getString("cdr_message"))
+                        .documentDescription(rs.getString("document_description"))
+                        .submittedAt(rs.getObject("submitted_at", OffsetDateTime.class))
+                        .items(new ArrayList<>())
+                        .build())
+                .list();
+
+        if (documents.isEmpty()) {
+            return Optional.empty();
+        }
+
+        GuideRemissionDocument document = documents.get(0);
+        List<GuideRemissionDocumentItem> items = jdbcClient.sql("""
+                SELECT line_no, quantity, description, item_code, unit_code
+                  FROM guide_remission_items
+                 WHERE guide_remission_id = ?
+                 ORDER BY line_no
+                """)
+                .param(document.getId())
+                .query((rs, rowNum) -> GuideRemissionDocumentItem.builder()
+                        .lineNo(rs.getObject("line_no", Integer.class))
+                        .quantity(rs.getBigDecimal("quantity"))
+                        .description(rs.getString("description"))
+                        .itemCode(rs.getString("item_code"))
+                        .unitCode(rs.getString("unit_code"))
+                        .build())
+                .list();
+
+        document.setItems(items);
+        return Optional.of(document);
     }
 
     private Long insertHeader(GuideRemissionCompany company,

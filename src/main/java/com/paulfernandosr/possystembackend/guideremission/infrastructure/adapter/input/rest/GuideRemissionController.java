@@ -1,12 +1,15 @@
 package com.paulfernandosr.possystembackend.guideremission.infrastructure.adapter.input.rest;
 
 import com.paulfernandosr.possystembackend.guideremission.domain.*;
+import com.paulfernandosr.possystembackend.guideremission.domain.port.input.GenerateGuideRemissionPdfUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.ProcessGuideRemissionFullFlowUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.QueryGuideRemissionTicketUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.RequestGuideRemissionTokenUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.SubmitGuideRemissionUseCase;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,6 +21,7 @@ public class GuideRemissionController {
     private final SubmitGuideRemissionUseCase submitGuideRemissionUseCase;
     private final QueryGuideRemissionTicketUseCase queryGuideRemissionTicketUseCase;
     private final ProcessGuideRemissionFullFlowUseCase processGuideRemissionFullFlowUseCase;
+    private final GenerateGuideRemissionPdfUseCase generateGuideRemissionPdfUseCase;
 
     @PostMapping("/token")
     public ResponseEntity<GuideRemissionTokenResponse> requestToken() {
@@ -38,4 +42,16 @@ public class GuideRemissionController {
     public ResponseEntity<GuideRemissionFullFlowResponse> processFullFlow(@Valid @RequestBody GuideRemissionFullFlowRequest request) {
         return ResponseEntity.ok(processGuideRemissionFullFlowUseCase.process(request));
     }
+
+    @GetMapping(value = "/{serie}/{numero}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> generatePdf(@PathVariable String serie, @PathVariable String numero) {
+        byte[] pdf = generateGuideRemissionPdfUseCase.generate(serie, numero);
+        String filename = "GRE-" + serie + "-" + numero + ".pdf";
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"")
+                .body(pdf);
+    }
 }
+
