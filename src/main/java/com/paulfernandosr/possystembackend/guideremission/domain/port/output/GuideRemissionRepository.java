@@ -10,4 +10,6 @@ public interface GuideRemissionRepository {
     void saveTicketStatus(String companyRuc, GuideRemissionTicketQuery request, GuideRemissionTicketStatusResponse response);
 
     Optional<GuideRemissionDocument> findDocument(String companyRuc, String serie, String numero);
+
+    GuideRemissionPageResult searchPage(String companyRuc, GuideRemissionPageCriteria criteria);
 }

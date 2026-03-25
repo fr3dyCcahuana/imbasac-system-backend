@@ -7,6 +7,7 @@ import com.paulfernandosr.possystembackend.guideremission.domain.port.input.Proc
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.QueryGuideRemissionTicketUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.RequestGuideRemissionTokenUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.SubmitGuideRemissionUseCase;
+import com.paulfernandosr.possystembackend.guideremission.domain.port.input.SearchGuideRemissionsUseCase;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -24,6 +25,7 @@ public class GuideRemissionController {
     private final ProcessGuideRemissionFullFlowUseCase processGuideRemissionFullFlowUseCase;
     private final GenerateGuideRemissionPdfUseCase generateGuideRemissionPdfUseCase;
     private final GetGuideRemissionDetailUseCase getGuideRemissionDetailUseCase;
+    private final SearchGuideRemissionsUseCase searchGuideRemissionsUseCase;
 
     @PostMapping("/token")
     public ResponseEntity<GuideRemissionTokenResponse> requestToken() {
@@ -43,6 +45,40 @@ public class GuideRemissionController {
     @PostMapping("/full-flow")
     public ResponseEntity<GuideRemissionFullFlowResponse> processFullFlow(@Valid @RequestBody GuideRemissionFullFlowRequest request) {
         return ResponseEntity.ok(processGuideRemissionFullFlowUseCase.process(request));
+    }
+
+
+    @GetMapping
+    public ResponseEntity<GuideRemissionPageResponse> search(
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "10") Integer size,
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String serie,
+            @RequestParam(required = false) String numero,
+            @RequestParam(name = "recipient_document_number", required = false) String recipientDocumentNumber,
+            @RequestParam(name = "related_document", required = false) String relatedDocument,
+            @RequestParam(name = "issue_date_from", required = false) java.time.LocalDate issueDateFrom,
+            @RequestParam(name = "issue_date_to", required = false) java.time.LocalDate issueDateTo,
+            @RequestParam(name = "transfer_date_from", required = false) java.time.LocalDate transferDateFrom,
+            @RequestParam(name = "transfer_date_to", required = false) java.time.LocalDate transferDateTo
+    ) {
+        GuideRemissionPageCriteria criteria = GuideRemissionPageCriteria.builder()
+                .page(page)
+                .size(size)
+                .query(query)
+                .status(status)
+                .serie(serie)
+                .numero(numero)
+                .recipientDocumentNumber(recipientDocumentNumber)
+                .relatedDocument(relatedDocument)
+                .issueDateFrom(issueDateFrom)
+                .issueDateTo(issueDateTo)
+                .transferDateFrom(transferDateFrom)
+                .transferDateTo(transferDateTo)
+                .build();
+
+        return ResponseEntity.ok(searchGuideRemissionsUseCase.search(criteria));
     }
 
     @GetMapping("/{serie}/{numero}")

@@ -228,6 +228,97 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
         return Optional.of(document);
     }
 
+    @Override
+    public GuideRemissionPageResult searchPage(String companyRuc, GuideRemissionPageCriteria criteria) {
+        List<Object> params = new ArrayList<>();
+        String whereClause = buildSearchWhereClause(companyRuc, criteria, params);
+
+        Long total = jdbcClient.sql("SELECT COUNT(*) FROM guide_remissions gr " + whereClause)
+                .params(params)
+                .query(Long.class)
+                .single();
+
+        List<Object> dataParams = new ArrayList<>(params);
+        dataParams.add(criteria.getSize());
+        dataParams.add(criteria.getPage() * criteria.getSize());
+
+        List<GuideRemissionPageItem> items = jdbcClient.sql("""
+                SELECT gr.id,
+                       gr.serie,
+                       gr.numero,
+                       gr.issue_date,
+                       gr.issue_time,
+                       gr.transfer_date,
+                       gr.status,
+                       gr.recipient_document_number,
+                       gr.recipient_name,
+                       gr.transporter_document_number,
+                       gr.transporter_name,
+                       gr.total_weight,
+                       gr.number_of_packages,
+                       gr.ticket,
+                       gr.ticket_response_code,
+                       gr.related_document_type_code,
+                       gr.related_document_serie,
+                       gr.related_document_numero,
+                       gr.submitted_at,
+                       gr.created_at,
+                       CASE
+                           WHEN COALESCE(rd.related_documents_count, 0) > 0 THEN rd.related_documents_count
+                           WHEN gr.related_document_type_code IS NOT NULL
+                            AND gr.related_document_serie IS NOT NULL
+                            AND gr.related_document_numero IS NOT NULL THEN 1
+                           ELSE 0
+                       END AS related_documents_count,
+                       COALESCE(gi.items_count, 0) AS items_count
+                  FROM guide_remissions gr
+                  LEFT JOIN LATERAL (
+                      SELECT COUNT(*) AS related_documents_count
+                        FROM guide_remission_related_documents grd
+                       WHERE grd.guide_remission_id = gr.id
+                  ) rd ON TRUE
+                  LEFT JOIN LATERAL (
+                      SELECT COUNT(*) AS items_count
+                        FROM guide_remission_items gri
+                       WHERE gri.guide_remission_id = gr.id
+                  ) gi ON TRUE
+                """ + whereClause + """
+                 ORDER BY gr.created_at DESC, gr.id DESC
+                 LIMIT ? OFFSET ?
+                """)
+                .params(dataParams)
+                .query((rs, rowNum) -> GuideRemissionPageItem.builder()
+                        .id(rs.getLong("id"))
+                        .serie(rs.getString("serie"))
+                        .numero(rs.getString("numero"))
+                        .issueDate(rs.getObject("issue_date", LocalDate.class))
+                        .issueTime(rs.getObject("issue_time", LocalTime.class))
+                        .transferDate(rs.getObject("transfer_date", LocalDate.class))
+                        .status(rs.getString("status"))
+                        .recipientDocumentNumber(rs.getString("recipient_document_number"))
+                        .recipientName(rs.getString("recipient_name"))
+                        .transporterDocumentNumber(rs.getString("transporter_document_number"))
+                        .transporterName(rs.getString("transporter_name"))
+                        .totalWeight(rs.getBigDecimal("total_weight"))
+                        .numberOfPackages(rs.getString("number_of_packages"))
+                        .ticket(rs.getString("ticket"))
+                        .ticketResponseCode(rs.getString("ticket_response_code"))
+                        .primaryRelatedDocumentTypeCode(rs.getString("related_document_type_code"))
+                        .primaryRelatedDocumentSerie(rs.getString("related_document_serie"))
+                        .primaryRelatedDocumentNumero(rs.getString("related_document_numero"))
+                        .relatedDocumentsCount(Math.toIntExact(rs.getLong("related_documents_count")))
+                        .itemsCount(Math.toIntExact(rs.getLong("items_count")))
+                        .submittedAt(rs.getObject("submitted_at", OffsetDateTime.class))
+                        .createdAt(rs.getObject("created_at", OffsetDateTime.class))
+                        .build())
+                .list();
+
+        return GuideRemissionPageResult.builder()
+                .items(items)
+                .totalElements(total != null ? total : 0L)
+                .build();
+    }
+
     private Long insertHeader(GuideRemissionCompany company,
                               GuideRemissionSubmission request,
                               GuideRemissionSubmissionResponse response) {
@@ -632,6 +723,90 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
         }
 
         return items;
+    }
+
+    private String buildSearchWhereClause(String companyRuc, GuideRemissionPageCriteria criteria, List<Object> params) {
+        StringBuilder sql = new StringBuilder(" WHERE gr.company_ruc = ?");
+        params.add(companyRuc);
+
+        if (hasText(criteria.getQuery())) {
+            String like = like(criteria.getQuery());
+            sql.append("""
+                     AND (
+                            UPPER(gr.serie) LIKE ?
+                         OR UPPER(gr.numero) LIKE ?
+                         OR UPPER(COALESCE(gr.recipient_name, '')) LIKE ?
+                         OR UPPER(COALESCE(gr.recipient_document_number, '')) LIKE ?
+                         OR UPPER(COALESCE(gr.ticket, '')) LIKE ?
+                         OR UPPER(COALESCE(gr.transporter_name, '')) LIKE ?
+                         OR UPPER(COALESCE(gr.related_document_type_code, '') || ' ' || COALESCE(gr.related_document_serie, '') || '-' || COALESCE(gr.related_document_numero, '')) LIKE ?
+                         OR EXISTS (
+                                SELECT 1
+                                  FROM guide_remission_related_documents grd
+                                 WHERE grd.guide_remission_id = gr.id
+                                   AND UPPER(COALESCE(grd.document_type_code, '') || ' ' || COALESCE(grd.document_serie, '') || '-' || COALESCE(grd.document_numero, '')) LIKE ?
+                         )
+                     )
+                    """);
+            for (int i = 0; i < 8; i++) {
+                params.add(like);
+            }
+        }
+
+        if (hasText(criteria.getStatus())) {
+            sql.append(" AND UPPER(gr.status) = ?");
+            params.add(criteria.getStatus().trim().toUpperCase());
+        }
+        if (hasText(criteria.getSerie())) {
+            sql.append(" AND UPPER(gr.serie) LIKE ?");
+            params.add(like(criteria.getSerie()));
+        }
+        if (hasText(criteria.getNumero())) {
+            sql.append(" AND UPPER(gr.numero) LIKE ?");
+            params.add(like(criteria.getNumero()));
+        }
+        if (hasText(criteria.getRecipientDocumentNumber())) {
+            sql.append(" AND UPPER(COALESCE(gr.recipient_document_number, '')) LIKE ?");
+            params.add(like(criteria.getRecipientDocumentNumber()));
+        }
+        if (hasText(criteria.getRelatedDocument())) {
+            sql.append("""
+                     AND (
+                            UPPER(COALESCE(gr.related_document_type_code, '') || ' ' || COALESCE(gr.related_document_serie, '') || '-' || COALESCE(gr.related_document_numero, '')) LIKE ?
+                         OR EXISTS (
+                                SELECT 1
+                                  FROM guide_remission_related_documents grd
+                                 WHERE grd.guide_remission_id = gr.id
+                                   AND UPPER(COALESCE(grd.document_type_code, '') || ' ' || COALESCE(grd.document_serie, '') || '-' || COALESCE(grd.document_numero, '')) LIKE ?
+                         )
+                     )
+                    """);
+            String relatedDocumentLike = like(criteria.getRelatedDocument());
+            params.add(relatedDocumentLike);
+            params.add(relatedDocumentLike);
+        }
+        if (criteria.getIssueDateFrom() != null) {
+            sql.append(" AND gr.issue_date >= ?");
+            params.add(criteria.getIssueDateFrom());
+        }
+        if (criteria.getIssueDateTo() != null) {
+            sql.append(" AND gr.issue_date <= ?");
+            params.add(criteria.getIssueDateTo());
+        }
+        if (criteria.getTransferDateFrom() != null) {
+            sql.append(" AND gr.transfer_date >= ?");
+            params.add(criteria.getTransferDateFrom());
+        }
+        if (criteria.getTransferDateTo() != null) {
+            sql.append(" AND gr.transfer_date <= ?");
+            params.add(criteria.getTransferDateTo());
+        }
+
+        return sql.toString();
+    }
+
+    private String like(String value) {
+        return "%" + value.trim().toUpperCase() + "%";
     }
 
     private GuideRemissionRelatedDocument primaryRelatedDocument(GuideRemissionSubmission request) {
