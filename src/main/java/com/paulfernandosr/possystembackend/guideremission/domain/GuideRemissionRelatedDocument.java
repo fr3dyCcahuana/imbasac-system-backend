@@ -2,11 +2,8 @@ package com.paulfernandosr.possystembackend.guideremission.domain;
 
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.*;
-
-import java.util.List;
 
 @Getter
 @Setter
@@ -14,19 +11,13 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public class GuideRemissionItem {
+public class GuideRemissionRelatedDocument {
     @NotBlank
-    private String cantidad;
+    private String documentTypeCode;
 
     @NotBlank
-    private String descripcion;
+    private String serie;
 
     @NotBlank
-    private String codigo;
-
-    @NotBlank
-    private String codigoUnidad;
-
-    @Valid
-    private List<GuideRemissionItemSourceLine> sourceLines;
+    private String numero;
 }

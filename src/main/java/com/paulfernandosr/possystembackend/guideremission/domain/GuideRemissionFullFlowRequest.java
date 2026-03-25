@@ -24,7 +24,16 @@ public class GuideRemissionFullFlowRequest {
     @NotEmpty
     private List<GuideRemissionItem> items;
 
+    /**
+     * Compatibilidad heredada: primer comprobante relacionado.
+     */
     private String relatedDocumentTypeCode;
     private String relatedDocumentSerie;
     private String relatedDocumentNumero;
+
+    /**
+     * Nuevo modelo: una guia puede estar asociada a multiples comprobantes.
+     */
+    @Valid
+    private List<GuideRemissionRelatedDocument> relatedDocuments;
 }

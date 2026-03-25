@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Slf4j
 public class ProcessGuideRemissionFullFlowService implements ProcessGuideRemissionFullFlowUseCase {
+    private final GuideRemissionRequestNormalizer normalizer;
     private final GuideRemissionBusinessValidator validator;
     private final GuideRemissionProvider guideRemissionProvider;
     private final GuideRemissionRepository guideRemissionRepository;
@@ -24,6 +25,7 @@ public class ProcessGuideRemissionFullFlowService implements ProcessGuideRemissi
     @Override
     @Transactional
     public GuideRemissionFullFlowResponse process(GuideRemissionFullFlowRequest request) {
+        normalizer.normalize(request);
         validator.validate(request);
         log.info("[guide-remission][full-flow] Inicio de flujo completo. ruc={}, serie={}, numero={}",
                 properties.getCompany().getRuc(), request.getGuia().getSerie(), request.getGuia().getNumero());
@@ -92,6 +94,7 @@ public class ProcessGuideRemissionFullFlowService implements ProcessGuideRemissi
                 .relatedDocumentTypeCode(request.getRelatedDocumentTypeCode())
                 .relatedDocumentSerie(request.getRelatedDocumentSerie())
                 .relatedDocumentNumero(request.getRelatedDocumentNumero())
+                .relatedDocuments(request.getRelatedDocuments())
                 .build();
     }
 

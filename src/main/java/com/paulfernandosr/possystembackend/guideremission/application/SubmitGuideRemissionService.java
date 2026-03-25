@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class SubmitGuideRemissionService implements SubmitGuideRemissionUseCase {
+    private final GuideRemissionRequestNormalizer normalizer;
     private final GuideRemissionBusinessValidator validator;
     private final GuideRemissionProvider guideRemissionProvider;
     private final GuideRemissionRepository guideRemissionRepository;
@@ -22,6 +23,7 @@ public class SubmitGuideRemissionService implements SubmitGuideRemissionUseCase 
     @Override
     @Transactional
     public GuideRemissionSubmissionResponse submit(GuideRemissionSubmission request) {
+        normalizer.normalize(request);
         validator.validate(request);
 
         GuideRemissionSubmissionResponse response = guideRemissionProvider.submit(request);

@@ -1,5 +1,8 @@
 package com.paulfernandosr.possystembackend.guideremission.domain;
 
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
+
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -14,6 +17,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class GuideRemissionDocument {
     private Long id;
     private String companyRuc;
@@ -55,6 +59,10 @@ public class GuideRemissionDocument {
     private String cdrMessage;
     private String documentDescription;
     private OffsetDateTime submittedAt;
+
+    @Builder.Default
+    private List<GuideRemissionRelatedDocument> relatedDocuments = new ArrayList<>();
+
     @Builder.Default
     private List<GuideRemissionDocumentItem> items = new ArrayList<>();
 }

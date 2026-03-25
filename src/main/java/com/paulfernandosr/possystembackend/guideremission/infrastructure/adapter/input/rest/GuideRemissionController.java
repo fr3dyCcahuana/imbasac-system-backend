@@ -2,6 +2,7 @@ package com.paulfernandosr.possystembackend.guideremission.infrastructure.adapte
 
 import com.paulfernandosr.possystembackend.guideremission.domain.*;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.GenerateGuideRemissionPdfUseCase;
+import com.paulfernandosr.possystembackend.guideremission.domain.port.input.GetGuideRemissionDetailUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.ProcessGuideRemissionFullFlowUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.QueryGuideRemissionTicketUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.RequestGuideRemissionTokenUseCase;
@@ -22,6 +23,7 @@ public class GuideRemissionController {
     private final QueryGuideRemissionTicketUseCase queryGuideRemissionTicketUseCase;
     private final ProcessGuideRemissionFullFlowUseCase processGuideRemissionFullFlowUseCase;
     private final GenerateGuideRemissionPdfUseCase generateGuideRemissionPdfUseCase;
+    private final GetGuideRemissionDetailUseCase getGuideRemissionDetailUseCase;
 
     @PostMapping("/token")
     public ResponseEntity<GuideRemissionTokenResponse> requestToken() {
@@ -43,6 +45,11 @@ public class GuideRemissionController {
         return ResponseEntity.ok(processGuideRemissionFullFlowUseCase.process(request));
     }
 
+    @GetMapping("/{serie}/{numero}")
+    public ResponseEntity<GuideRemissionDetailResponse> getBySerieAndNumero(@PathVariable String serie, @PathVariable String numero) {
+        return ResponseEntity.ok(getGuideRemissionDetailUseCase.getBySerieAndNumero(serie, numero));
+    }
+
     @GetMapping(value = "/{serie}/{numero}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> generatePdf(@PathVariable String serie, @PathVariable String numero) {
         byte[] pdf = generateGuideRemissionPdfUseCase.generate(serie, numero);
@@ -54,4 +61,3 @@ public class GuideRemissionController {
                 .body(pdf);
     }
 }
-

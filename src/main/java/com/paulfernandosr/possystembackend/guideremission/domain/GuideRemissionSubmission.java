@@ -28,7 +28,16 @@ public class GuideRemissionSubmission {
     @NotBlank
     private String token;
 
+    /**
+     * Compatibilidad heredada: primer comprobante relacionado.
+     */
     private String relatedDocumentTypeCode;
     private String relatedDocumentSerie;
     private String relatedDocumentNumero;
+
+    /**
+     * Nuevo modelo: una guia puede estar asociada a multiples comprobantes.
+     */
+    @Valid
+    private List<GuideRemissionRelatedDocument> relatedDocuments;
 }

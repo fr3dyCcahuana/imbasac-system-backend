@@ -26,7 +26,6 @@ public class GuideRemissionExceptionHandler {
         return build(HttpStatus.BAD_GATEWAY, ex.getMessage());
     }
 
-
     @ExceptionHandler(GuideRemissionNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleNotFound(GuideRemissionNotFoundException ex) {
         return build(HttpStatus.NOT_FOUND, ex.getMessage());

@@ -25,6 +25,28 @@ security:
   session:
     ttl: 1800
 
+integration:
+  guide-remission:
+    base-url: "http://localhost/API_SUNAT_GUIAS"
+    connect-timeout-seconds: 10
+    read-timeout-seconds: 60
+    auth:
+      guias-client-id: "test-85e5b0ae-255c-4891-a595-0b98c65c9854"
+      guias-client-secret: "test-Hty/M6QshYvPgItX2P0+Kw=="
+      usu-secundario-produccion-user: "MODDATOS"
+      usu-secundario-produccion-password: "MODDATOS"
+    company:
+      ruc: "10481211641"
+      razon-social: "IMPORTACIONES BAEZ S.A.C."
+      nombre-comercial: "IMBASAC"
+      domicilio-fiscal: "AV. LOS EJEMPLOS 123"
+      ubigeo: "150101"
+      urbanizacion: "-"
+      distrito: "LIMA"
+      provincia: "LIMA"
+      departamento: "LIMA"
+      modo: 1
+
 sale:
   sunat:
     mode: "0"

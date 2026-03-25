@@ -13,7 +13,9 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -29,9 +31,12 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
             existingId = insertHeader(company, request, response);
         } else {
             updateHeader(existingId, company, request, response);
+            deleteItemAllocations(existingId);
             deleteItems(existingId);
+            deleteRelatedDocuments(existingId);
         }
 
+        insertRelatedDocuments(existingId, request.getRelatedDocuments());
         insertItems(existingId, request.getItems());
     }
 
@@ -117,7 +122,6 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                 )
                 .update();
     }
-
 
     @Override
     public Optional<GuideRemissionDocument> findDocument(String companyRuc, String serie, String numero) {
@@ -209,6 +213,7 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                         .cdrMessage(rs.getString("cdr_message"))
                         .documentDescription(rs.getString("document_description"))
                         .submittedAt(rs.getObject("submitted_at", OffsetDateTime.class))
+                        .relatedDocuments(new ArrayList<>())
                         .items(new ArrayList<>())
                         .build())
                 .list();
@@ -218,23 +223,8 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
         }
 
         GuideRemissionDocument document = documents.get(0);
-        List<GuideRemissionDocumentItem> items = jdbcClient.sql("""
-                SELECT line_no, quantity, description, item_code, unit_code
-                  FROM guide_remission_items
-                 WHERE guide_remission_id = ?
-                 ORDER BY line_no
-                """)
-                .param(document.getId())
-                .query((rs, rowNum) -> GuideRemissionDocumentItem.builder()
-                        .lineNo(rs.getObject("line_no", Integer.class))
-                        .quantity(rs.getBigDecimal("quantity"))
-                        .description(rs.getString("description"))
-                        .itemCode(rs.getString("item_code"))
-                        .unitCode(rs.getString("unit_code"))
-                        .build())
-                .list();
-
-        document.setItems(items);
+        document.setRelatedDocuments(loadRelatedDocuments(document));
+        document.setItems(loadItems(document.getId()));
         return Optional.of(document);
     }
 
@@ -242,6 +232,7 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                               GuideRemissionSubmission request,
                               GuideRemissionSubmissionResponse response) {
         GuideRemissionData guia = request.getGuia();
+        GuideRemissionRelatedDocument primaryDocument = primaryRelatedDocument(request);
 
         String insertSql = """
                 INSERT INTO guide_remissions(
@@ -296,9 +287,9 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                         parseLocalDate(guia.getFechaTraslado()),
                         guia.getGuiaMotivoTraslado(),
                         guia.getGuiaModalidadTraslado(),
-                        normalizeRelatedDocumentType(request.getRelatedDocumentTypeCode()),
-                        request.getRelatedDocumentSerie(),
-                        request.getRelatedDocumentNumero(),
+                        primaryDocument != null ? normalizeRelatedDocumentType(primaryDocument.getDocumentTypeCode()) : null,
+                        primaryDocument != null ? primaryDocument.getSerie() : null,
+                        primaryDocument != null ? primaryDocument.getNumero() : null,
                         firstNonBlank(guia.getNumeroDocumentoTransporte(), guia.getEntidadIdTransporte()),
                         guia.getEntidadTransporte(),
                         guia.getEntidadIdTransporte(),
@@ -335,6 +326,7 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                               GuideRemissionSubmission request,
                               GuideRemissionSubmissionResponse response) {
         GuideRemissionData guia = request.getGuia();
+        GuideRemissionRelatedDocument primaryDocument = primaryRelatedDocument(request);
 
         String updateSql = """
                 UPDATE guide_remissions
@@ -382,9 +374,9 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                         parseLocalDate(guia.getFechaTraslado()),
                         guia.getGuiaMotivoTraslado(),
                         guia.getGuiaModalidadTraslado(),
-                        normalizeRelatedDocumentType(request.getRelatedDocumentTypeCode()),
-                        request.getRelatedDocumentSerie(),
-                        request.getRelatedDocumentNumero(),
+                        primaryDocument != null ? normalizeRelatedDocumentType(primaryDocument.getDocumentTypeCode()) : null,
+                        primaryDocument != null ? primaryDocument.getSerie() : null,
+                        primaryDocument != null ? primaryDocument.getNumero() : null,
                         firstNonBlank(guia.getNumeroDocumentoTransporte(), guia.getEntidadIdTransporte()),
                         guia.getEntidadTransporte(),
                         guia.getEntidadIdTransporte(),
@@ -413,12 +405,43 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                 .update();
     }
 
+    private void insertRelatedDocuments(Long guideRemissionId, List<GuideRemissionRelatedDocument> relatedDocuments) {
+        if (relatedDocuments == null || relatedDocuments.isEmpty()) {
+            return;
+        }
+
+        String insertSql = """
+                INSERT INTO guide_remission_related_documents(
+                    guide_remission_id,
+                    line_no,
+                    document_type_code,
+                    document_serie,
+                    document_numero,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+                """;
+
+        int lineNo = 1;
+        for (GuideRemissionRelatedDocument document : relatedDocuments) {
+            jdbcClient.sql(insertSql)
+                    .params(
+                            guideRemissionId,
+                            lineNo++,
+                            normalizeRelatedDocumentType(document.getDocumentTypeCode()),
+                            document.getSerie(),
+                            document.getNumero()
+                    )
+                    .update();
+        }
+    }
+
     private void insertItems(Long guideRemissionId, List<GuideRemissionItem> items) {
         if (items == null || items.isEmpty()) {
             return;
         }
 
-        String insertSql = """
+        String insertItemSql = """
                 INSERT INTO guide_remission_items(
                     guide_remission_id,
                     line_no,
@@ -429,23 +452,76 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                 ) VALUES (?, ?, ?, ?, ?, ?)
                 """;
 
+        String insertAllocationSql = """
+                INSERT INTO guide_remission_item_allocations(
+                    guide_remission_id,
+                    guide_item_line_no,
+                    allocation_line_no,
+                    related_document_type_code,
+                    related_document_serie,
+                    related_document_numero,
+                    related_document_line_no,
+                    source_item_code,
+                    source_item_description,
+                    quantity,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                """;
+
         int lineNo = 1;
         for (GuideRemissionItem item : items) {
-            jdbcClient.sql(insertSql)
+            int currentLineNo = lineNo++;
+
+            jdbcClient.sql(insertItemSql)
                     .params(
                             guideRemissionId,
-                            lineNo++,
+                            currentLineNo,
                             parseBigDecimal(item.getCantidad()),
                             item.getDescripcion(),
                             item.getCodigo(),
                             item.getCodigoUnidad()
                     )
                     .update();
+
+            if (item.getSourceLines() == null || item.getSourceLines().isEmpty()) {
+                continue;
+            }
+
+            int allocationLineNo = 1;
+            for (GuideRemissionItemSourceLine sourceLine : item.getSourceLines()) {
+                jdbcClient.sql(insertAllocationSql)
+                        .params(
+                                guideRemissionId,
+                                currentLineNo,
+                                allocationLineNo++,
+                                normalizeRelatedDocumentType(sourceLine.getRelatedDocumentTypeCode()),
+                                sourceLine.getRelatedDocumentSerie(),
+                                sourceLine.getRelatedDocumentNumero(),
+                                sourceLine.getRelatedDocumentLineNo(),
+                                sourceLine.getSourceItemCode(),
+                                sourceLine.getSourceItemDescription(),
+                                parseBigDecimal(sourceLine.getCantidad())
+                        )
+                        .update();
+            }
         }
+    }
+
+    private void deleteItemAllocations(Long guideRemissionId) {
+        jdbcClient.sql("DELETE FROM guide_remission_item_allocations WHERE guide_remission_id = ?")
+                .param(guideRemissionId)
+                .update();
     }
 
     private void deleteItems(Long guideRemissionId) {
         jdbcClient.sql("DELETE FROM guide_remission_items WHERE guide_remission_id = ?")
+                .param(guideRemissionId)
+                .update();
+    }
+
+    private void deleteRelatedDocuments(Long guideRemissionId) {
+        jdbcClient.sql("DELETE FROM guide_remission_related_documents WHERE guide_remission_id = ?")
                 .param(guideRemissionId)
                 .update();
     }
@@ -461,6 +537,117 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                 .params(companyRuc, serie, numero)
                 .query(Long.class)
                 .optional();
+    }
+
+    private List<GuideRemissionRelatedDocument> loadRelatedDocuments(GuideRemissionDocument document) {
+        List<GuideRemissionRelatedDocument> relatedDocuments = jdbcClient.sql("""
+                SELECT line_no,
+                       document_type_code,
+                       document_serie,
+                       document_numero
+                  FROM guide_remission_related_documents
+                 WHERE guide_remission_id = ?
+                 ORDER BY line_no
+                """)
+                .param(document.getId())
+                .query((rs, rowNum) -> GuideRemissionRelatedDocument.builder()
+                        .documentTypeCode(rs.getString("document_type_code"))
+                        .serie(rs.getString("document_serie"))
+                        .numero(rs.getString("document_numero"))
+                        .build())
+                .list();
+
+        if (!relatedDocuments.isEmpty()) {
+            return relatedDocuments;
+        }
+
+        if (hasText(document.getRelatedDocumentTypeCode())
+                && hasText(document.getRelatedDocumentSerie())
+                && hasText(document.getRelatedDocumentNumero())) {
+            return List.of(GuideRemissionRelatedDocument.builder()
+                    .documentTypeCode(document.getRelatedDocumentTypeCode())
+                    .serie(document.getRelatedDocumentSerie())
+                    .numero(document.getRelatedDocumentNumero())
+                    .build());
+        }
+
+        return new ArrayList<>();
+    }
+
+    private List<GuideRemissionDocumentItem> loadItems(Long guideRemissionId) {
+        List<GuideRemissionDocumentItem> items = jdbcClient.sql("""
+                SELECT line_no, quantity, description, item_code, unit_code
+                  FROM guide_remission_items
+                 WHERE guide_remission_id = ?
+                 ORDER BY line_no
+                """)
+                .param(guideRemissionId)
+                .query((rs, rowNum) -> GuideRemissionDocumentItem.builder()
+                        .lineNo(rs.getObject("line_no", Integer.class))
+                        .quantity(rs.getBigDecimal("quantity"))
+                        .description(rs.getString("description"))
+                        .itemCode(rs.getString("item_code"))
+                        .unitCode(rs.getString("unit_code"))
+                        .sourceAllocations(new ArrayList<>())
+                        .build())
+                .list();
+
+        Map<Integer, List<GuideRemissionDocumentItemAllocation>> allocationsByItemLine = new LinkedHashMap<>();
+        List<AllocationRow> allocationRows = jdbcClient.sql("""
+                SELECT guide_item_line_no,
+                       allocation_line_no,
+                       related_document_type_code,
+                       related_document_serie,
+                       related_document_numero,
+                       related_document_line_no,
+                       source_item_code,
+                       source_item_description,
+                       quantity
+                  FROM guide_remission_item_allocations
+                 WHERE guide_remission_id = ?
+                 ORDER BY guide_item_line_no, allocation_line_no
+                """)
+                .param(guideRemissionId)
+                .query((rs, rowNum) -> new AllocationRow(
+                        rs.getObject("guide_item_line_no", Integer.class),
+                        GuideRemissionDocumentItemAllocation.builder()
+                                .allocationLineNo(rs.getObject("allocation_line_no", Integer.class))
+                                .relatedDocumentTypeCode(rs.getString("related_document_type_code"))
+                                .relatedDocumentSerie(rs.getString("related_document_serie"))
+                                .relatedDocumentNumero(rs.getString("related_document_numero"))
+                                .relatedDocumentLineNo(rs.getObject("related_document_line_no", Integer.class))
+                                .sourceItemCode(rs.getString("source_item_code"))
+                                .sourceItemDescription(rs.getString("source_item_description"))
+                                .quantity(rs.getBigDecimal("quantity"))
+                                .build()
+                ))
+                .list();
+
+        for (AllocationRow row : allocationRows) {
+            allocationsByItemLine.computeIfAbsent(row.guideItemLineNo(), key -> new ArrayList<>()).add(row.allocation());
+        }
+
+        for (GuideRemissionDocumentItem item : items) {
+            item.setSourceAllocations(allocationsByItemLine.getOrDefault(item.getLineNo(), new ArrayList<>()));
+        }
+
+        return items;
+    }
+
+    private GuideRemissionRelatedDocument primaryRelatedDocument(GuideRemissionSubmission request) {
+        if (request.getRelatedDocuments() != null && !request.getRelatedDocuments().isEmpty()) {
+            return request.getRelatedDocuments().get(0);
+        }
+        if (hasText(request.getRelatedDocumentTypeCode())
+                && hasText(request.getRelatedDocumentSerie())
+                && hasText(request.getRelatedDocumentNumero())) {
+            return GuideRemissionRelatedDocument.builder()
+                    .documentTypeCode(request.getRelatedDocumentTypeCode())
+                    .serie(request.getRelatedDocumentSerie())
+                    .numero(request.getRelatedDocumentNumero())
+                    .build();
+        }
+        return null;
     }
 
     private GuideRemissionStatus resolveStatus(GuideRemissionTicketStatusResponse response) {
@@ -518,5 +705,12 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
         if (first != null && !first.isBlank()) return first;
         if (second != null && !second.isBlank()) return second;
         return null;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private record AllocationRow(Integer guideItemLineNo, GuideRemissionDocumentItemAllocation allocation) {
     }
 }

@@ -6,8 +6,6 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.*;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
 
 @Getter
 @Setter
@@ -15,13 +13,13 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public class GuideRemissionDocumentItem {
-    private Integer lineNo;
+public class GuideRemissionDocumentItemAllocation {
+    private Integer allocationLineNo;
+    private String relatedDocumentTypeCode;
+    private String relatedDocumentSerie;
+    private String relatedDocumentNumero;
+    private Integer relatedDocumentLineNo;
+    private String sourceItemCode;
+    private String sourceItemDescription;
     private BigDecimal quantity;
-    private String description;
-    private String itemCode;
-    private String unitCode;
-
-    @Builder.Default
-    private List<GuideRemissionDocumentItemAllocation> sourceAllocations = new ArrayList<>();
 }
