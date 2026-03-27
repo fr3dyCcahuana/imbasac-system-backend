@@ -13,10 +13,8 @@ import lombok.*;
 @AllArgsConstructor
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class GuideRemissionData {
-    @NotBlank
-    private String serie;
+        private String serie;
 
-    @NotBlank
     private String numero;
 
     @NotBlank

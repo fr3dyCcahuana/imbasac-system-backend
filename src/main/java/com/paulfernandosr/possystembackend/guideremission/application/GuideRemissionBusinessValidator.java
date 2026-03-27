@@ -39,8 +39,6 @@ public class GuideRemissionBusinessValidator {
             validateItemSourceLines(item, itemIndex);
         }
 
-        require(guide.getSerie(), "La guía debe incluir serie.");
-        require(guide.getNumero(), "La guía debe incluir número.");
         require(guide.getFechaEmision(), "La guía debe incluir fecha de emisión.");
         require(guide.getHoraEmision(), "La guía debe incluir hora de emisión.");
         require(guide.getFechaTraslado(), "La guía debe incluir fecha de traslado.");

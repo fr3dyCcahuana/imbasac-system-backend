@@ -11,5 +11,7 @@ public interface GuideRemissionRepository {
 
     Optional<GuideRemissionDocument> findDocument(String companyRuc, String serie, String numero);
 
+    GuideRemissionGeneratedSeries reserveNextGuideRemissionSeries();
+
     GuideRemissionPageResult searchPage(String companyRuc, GuideRemissionPageCriteria criteria);
 }

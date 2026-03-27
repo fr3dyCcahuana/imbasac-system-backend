@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.guideremission.infrastructure.adapter.output;
 
 import com.paulfernandosr.possystembackend.guideremission.domain.*;
+import com.paulfernandosr.possystembackend.guideremission.domain.exception.InvalidGuideRemissionException;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.output.GuideRemissionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -226,6 +227,60 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
         document.setRelatedDocuments(loadRelatedDocuments(document));
         document.setItems(loadItems(document.getId()));
         return Optional.of(document);
+    }
+
+    @Override
+    public GuideRemissionGeneratedSeries reserveNextGuideRemissionSeries() {
+        List<DocumentSeriesRow> rows = jdbcClient.sql("""
+                SELECT id, series, next_number
+                  FROM document_series
+                 WHERE UPPER(doc_type) = ?
+                   AND enabled = TRUE
+                 FOR UPDATE
+                """)
+                .param("GUIDE_REMISSION")
+                .query((rs, rowNum) -> new DocumentSeriesRow(
+                        rs.getLong("id"),
+                        rs.getString("series"),
+                        rs.getLong("next_number")
+                ))
+                .list();
+
+        if (rows.isEmpty()) {
+            throw new InvalidGuideRemissionException(
+                    "No existe una serie activa en document_series para el doc_type GUIDE_REMISSION."
+            );
+        }
+        if (rows.size() > 1) {
+            throw new InvalidGuideRemissionException(
+                    "Existe más de una serie activa en document_series para el doc_type GUIDE_REMISSION."
+            );
+        }
+
+        DocumentSeriesRow row = rows.get(0);
+        if (!hasText(row.series())) {
+            throw new InvalidGuideRemissionException(
+                    "La serie configurada en document_series para GUIDE_REMISSION no es válida."
+            );
+        }
+        if (row.nextNumber() <= 0) {
+            throw new InvalidGuideRemissionException(
+                    "El next_number configurado en document_series para GUIDE_REMISSION debe ser mayor a cero."
+            );
+        }
+
+        jdbcClient.sql("""
+                UPDATE document_series
+                   SET next_number = next_number + 1
+                 WHERE id = ?
+                """)
+                .param(row.id())
+                .update();
+
+        return GuideRemissionGeneratedSeries.builder()
+                .serie(row.series().trim())
+                .numero(String.valueOf(row.nextNumber()))
+                .build();
     }
 
     @Override
@@ -887,5 +942,8 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
     }
 
     private record AllocationRow(Integer guideItemLineNo, GuideRemissionDocumentItemAllocation allocation) {
+    }
+
+    private record DocumentSeriesRow(Long id, String series, long nextNumber) {
     }
 }

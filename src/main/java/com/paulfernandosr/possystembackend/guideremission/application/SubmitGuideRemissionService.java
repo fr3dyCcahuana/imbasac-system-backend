@@ -19,12 +19,14 @@ public class SubmitGuideRemissionService implements SubmitGuideRemissionUseCase 
     private final GuideRemissionRepository guideRemissionRepository;
     private final GuideRemissionProperties properties;
     private final GuideRemissionPhpResponseEvaluator responseEvaluator;
+    private final GuideRemissionSeriesGeneratorService seriesGeneratorService;
 
     @Override
     @Transactional
     public GuideRemissionSubmissionResponse submit(GuideRemissionSubmission request) {
         normalizer.normalize(request);
         validator.validate(request);
+        seriesGeneratorService.assignNextSeriesAndNumber(request.getGuia());
 
         GuideRemissionSubmissionResponse response = guideRemissionProvider.submit(request);
         responseEvaluator.assertSuccessfulSubmission(response);
