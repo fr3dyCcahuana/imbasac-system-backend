@@ -75,10 +75,13 @@ public class SaleV2RestController {
     public ResponseEntity<SuccessResponse<PageResponse<SaleV2SummaryResponse>>> findPage(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(required = false) String query
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) String docType,
+            @RequestParam(required = false) String series,
+            @RequestParam(required = false) Long number
     ) {
         return ResponseEntity.ok(SuccessResponse.ok(
-                getSalesV2PageUseCase.findPage(query, page, size)
+                getSalesV2PageUseCase.findPage(query, docType, series, number, page, size)
         ));
     }
 

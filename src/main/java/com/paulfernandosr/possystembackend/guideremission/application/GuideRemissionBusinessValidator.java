@@ -54,8 +54,8 @@ public class GuideRemissionBusinessValidator {
         parsePositiveNumber(guide.getPesoTotal(), "El peso total de la guía debe ser mayor a cero.");
 
         if ("04".equals(guide.getGuiaMotivoTraslado())) {
-            require(guide.getPartidaCodigoEstablecimiento(), "Para traslado entre almacenes se requiere partida_codigo_establecimiento.");
-            require(guide.getLlegadaCodigoEstablecimiento(), "Para traslado entre almacenes se requiere llegada_codigo_establecimiento.");
+//            require(guide.getPartidaCodigoEstablecimiento(), "Para traslado entre almacenes se requiere partida_codigo_establecimiento.");
+//            require(guide.getLlegadaCodigoEstablecimiento(), "Para traslado entre almacenes se requiere llegada_codigo_establecimiento.");
         }
 
         if ("01".equals(guide.getGuiaModalidadTraslado())) {

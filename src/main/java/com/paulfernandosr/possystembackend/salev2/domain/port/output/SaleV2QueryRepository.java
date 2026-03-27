@@ -6,9 +6,11 @@ import java.util.List;
 
 public interface SaleV2QueryRepository {
 
-    long countSales(String likeParam);
+    long countSales(String likeParam, String docType, String series, Long number);
 
-    List<SaleV2SummaryResponse> findSalesPage(String likeParam, int limit, int offset);
+    List<SaleV2SummaryResponse> findSalesPage(String likeParam, String docType, String series, Long number, int limit, int offset);
+
+    List<SaleV2SummaryItemResponse> findSaleSummaryItemsBySaleIds(List<Long> saleIds);
 
     SaleV2DetailResponse findSaleDetail(Long saleId);
 

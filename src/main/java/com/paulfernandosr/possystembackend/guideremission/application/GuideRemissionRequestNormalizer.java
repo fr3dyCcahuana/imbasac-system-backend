@@ -16,6 +16,7 @@ public class GuideRemissionRequestNormalizer {
             return;
         }
 
+        normalizeGuide(request.getGuia());
         normalizeItems(request.getItems());
         List<GuideRemissionRelatedDocument> resolved = resolveRelatedDocuments(
                 request.getRelatedDocuments(),
@@ -193,5 +194,18 @@ public class GuideRemissionRequestNormalizer {
 
     private boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
+    }
+
+    private void normalizeGuide(GuideRemissionData guia) {
+        if (guia == null) {
+            return;
+        }
+
+        guia.setPartidaCodigoEstablecimiento(defaultEstablishmentCode(guia.getPartidaCodigoEstablecimiento()));
+        guia.setLlegadaCodigoEstablecimiento(defaultEstablishmentCode(guia.getLlegadaCodigoEstablecimiento()));
+    }
+
+    private String defaultEstablishmentCode(String value) {
+        return (value == null || value.trim().isEmpty()) ? "0000" : value.trim();
     }
 }

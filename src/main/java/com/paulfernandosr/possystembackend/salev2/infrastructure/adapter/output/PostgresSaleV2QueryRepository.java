@@ -7,7 +7,9 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Repository
 @RequiredArgsConstructor
@@ -16,46 +18,99 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
     private final JdbcClient jdbcClient;
 
     @Override
-    public long countSales(String likeParam) {
-        String sql = """
-            SELECT COUNT(1)
-              FROM sale s
-             WHERE s.series ILIKE ?
-                OR CAST(s.number AS TEXT) ILIKE ?
-                OR COALESCE(s.customer_name,'') ILIKE ?
-                OR COALESCE(s.customer_doc_number,'') ILIKE ?
-                OR (s.doc_type || ' ' || s.series || '-' || s.number) ILIKE ?
-        """;
-        return jdbcClient.sql(sql)
-                .params(likeParam, likeParam, likeParam, likeParam, likeParam)
+    public long countSales(String likeParam, String docType, String series, Long number) {
+        StringBuilder sql = new StringBuilder("""
+        SELECT COUNT(1)
+          FROM sale s
+         WHERE 1 = 1
+    """);
+
+        List<Object> params = new ArrayList<>();
+
+        if (docType != null && !docType.isBlank()) {
+            sql.append(" AND s.doc_type = ? ");
+            params.add(docType);
+        }
+
+        if (series != null && !series.isBlank()) {
+            sql.append(" AND UPPER(TRIM(s.series)) = ? ");
+            params.add(series);
+        }
+
+        if (number != null) {
+            sql.append(" AND s.number = ? ");
+            params.add(number);
+        }
+
+        sql.append("""
+        AND (
+            ? = '%'
+            OR COALESCE(s.customer_name, '') ILIKE ?
+            OR COALESCE(s.customer_doc_number, '') ILIKE ?
+        )
+    """);
+
+        params.add(likeParam);
+        params.add(likeParam);
+        params.add(likeParam);
+
+        return jdbcClient.sql(sql.toString())
+                .params(params)
                 .query(Long.class)
                 .single();
     }
 
     @Override
-    public List<SaleV2SummaryResponse> findSalesPage(String likeParam, int limit, int offset) {
-        String sql = """
-            SELECT
-                s.id          AS sale_id,
-                s.doc_type    AS doc_type,
-                s.series      AS series,
-                s.number      AS number,
-                s.issue_date  AS issue_date,
-                s.customer_doc_number AS customer_doc_number,
-                s.customer_name       AS customer_name,
-                s.payment_type AS payment_type,
-                s.total       AS total,
-                s.status      AS status
-              FROM sale s
-             WHERE s.series ILIKE ?
-                OR CAST(s.number AS TEXT) ILIKE ?
-                OR COALESCE(s.customer_name,'') ILIKE ?
-                OR COALESCE(s.customer_doc_number,'') ILIKE ?
-                OR (s.doc_type || ' ' || s.series || '-' || s.number) ILIKE ?
-             ORDER BY s.issue_date DESC, s.id DESC
-             LIMIT ?
-            OFFSET ?
-        """;
+    public List<SaleV2SummaryResponse> findSalesPage(String likeParam, String docType, String series, Long number, int limit, int offset) {
+        StringBuilder sql = new StringBuilder("""
+        SELECT
+            s.id          AS sale_id,
+            s.doc_type    AS doc_type,
+            s.series      AS series,
+            s.number      AS number,
+            s.issue_date  AS issue_date,
+            s.customer_doc_number AS customer_doc_number,
+            s.customer_name       AS customer_name,
+            s.payment_type AS payment_type,
+            s.total       AS total,
+            s.status      AS status
+          FROM sale s
+         WHERE 1 = 1
+    """);
+
+        List<Object> params = new ArrayList<>();
+
+        if (docType != null && !docType.isBlank()) {
+            sql.append(" AND s.doc_type = ? ");
+            params.add(docType);
+        }
+
+        if (series != null && !series.isBlank()) {
+            sql.append(" AND UPPER(TRIM(s.series)) = ? ");
+            params.add(series);
+        }
+
+        if (number != null) {
+            sql.append(" AND s.number = ? ");
+            params.add(number);
+        }
+
+        sql.append("""
+        AND (
+            ? = '%'
+            OR COALESCE(s.customer_name, '') ILIKE ?
+            OR COALESCE(s.customer_doc_number, '') ILIKE ?
+        )
+        ORDER BY s.issue_date DESC, s.id DESC
+        LIMIT ?
+        OFFSET ?
+    """);
+
+        params.add(likeParam);
+        params.add(likeParam);
+        params.add(likeParam);
+        params.add(limit);
+        params.add(offset);
 
         RowMapper<SaleV2SummaryResponse> mapper = (rs, rowNum) -> SaleV2SummaryResponse.builder()
                 .saleId(rs.getLong("sale_id"))
@@ -70,8 +125,45 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                 .status(rs.getString("status"))
                 .build();
 
+        return jdbcClient.sql(sql.toString())
+                .params(params)
+                .query(mapper)
+                .list();
+    }
+
+    @Override
+    public List<SaleV2SummaryItemResponse> findSaleSummaryItemsBySaleIds(List<Long> saleIds) {
+        if (saleIds == null || saleIds.isEmpty()) {
+            return List.of();
+        }
+
+        String placeholders = saleIds.stream()
+                .map(id -> "?")
+                .collect(Collectors.joining(","));
+
+        String sql = String.format("""
+        SELECT
+            si.sale_id AS sale_id,
+            si.quantity AS quantity,
+            si.sku AS sku,
+            si.description AS description,
+            si.presentation AS presentation,
+            si.line_number AS line_number
+          FROM sale_item si
+         WHERE si.sale_id IN (%s)
+         ORDER BY si.sale_id ASC, si.line_number ASC
+    """, placeholders);
+
+        RowMapper<SaleV2SummaryItemResponse> mapper = (rs, rowNum) -> SaleV2SummaryItemResponse.builder()
+                .saleId(rs.getLong("sale_id"))
+                .quantity(rs.getBigDecimal("quantity"))
+                .sku(rs.getString("sku"))
+                .description(rs.getString("description"))
+                .presentation(rs.getString("presentation"))
+                .build();
+
         return jdbcClient.sql(sql)
-                .params(likeParam, likeParam, likeParam, likeParam, likeParam, limit, offset)
+                .params(saleIds.toArray())
                 .query(mapper)
                 .list();
     }

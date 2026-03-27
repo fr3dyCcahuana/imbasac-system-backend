@@ -4,6 +4,7 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Getter
 @Setter
@@ -23,4 +24,6 @@ public class SaleV2SummaryResponse {
     private String paymentType;
     private BigDecimal total;
     private String status;
+
+    private List<SaleV2SummaryItemResponse> items;
 }
