@@ -67,8 +67,10 @@ public interface SaleV2SunatRepository {
     @AllArgsConstructor
     class SaleItemForSunat {
         private Integer lineNumber;
+        private Long productId;
         private String sku;
         private String description;
+        private String productCategory;
         private BigDecimal quantity;
         private BigDecimal revenueTotal;
         private String lineKind;

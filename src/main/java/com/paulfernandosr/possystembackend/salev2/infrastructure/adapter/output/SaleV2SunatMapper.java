@@ -8,6 +8,7 @@ import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.su
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.UnitOfMeasureType;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
 import com.paulfernandosr.possystembackend.salev2.domain.port.output.SaleV2SunatRepository;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.sunat.SunatCodeInferer;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -83,11 +84,26 @@ public final class SaleV2SunatMapper {
         BigDecimal basePrice = nz(item.getRevenueTotal())
                 .divide(qty, 6, RoundingMode.HALF_UP);
 
+        String description = required(item.getDescription(), "description");
+        String productCategory = required(item.getProductCategory(), "productCategory");
+
+        String inferredSunatCode;
+        try {
+            inferredSunatCode = SunatCodeInferer.infer(description, productCategory);
+        } catch (Exception ex) {
+            throw new InvalidSaleV2Exception(
+                    "No se pudo inferir código SUNAT para la línea " + item.getLineNumber()
+                            + " producto=" + description
+                            + " categoría=" + productCategory
+                            + ". Detalle: " + ex.getMessage()
+            );
+        }
+
         return DocumentRequest.Item.builder()
-                .product(required(item.getDescription(), "description"))
+                .product(description)
                 .quantity(qty.stripTrailingZeros().toPlainString())
                 .basePrice(basePrice.toPlainString())
-                .sunatCode("-")
+                .sunatCode(inferredSunatCode)
                 .productCode(blankIfNull(item.getSku()))
                 .unitCode(UnitOfMeasureType.PRODUCT_UNIT.getCode())
                 .igvTypeCode(IgvType.TAXABLE_ONEROUS.getCode())

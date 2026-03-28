@@ -89,24 +89,29 @@ public class PostgresSaleV2SunatRepository implements SaleV2SunatRepository {
     public List<SaleItemForSunat> findItems(Long saleId) {
         String sql = """
             SELECT
-                line_number,
-                sku,
-                description,
-                quantity,
-                revenue_total,
-                line_kind,
-                visible_in_document
-            FROM sale_item
-            WHERE sale_id = ?
-            ORDER BY line_number
+                si.line_number,
+                si.product_id,
+                si.sku,
+                si.description,
+                p.category AS product_category,
+                si.quantity,
+                si.revenue_total,
+                si.line_kind,
+                si.visible_in_document
+            FROM sale_item si
+            LEFT JOIN product p ON p.id = si.product_id
+            WHERE si.sale_id = ?
+            ORDER BY si.line_number
         """;
 
         return jdbcClient.sql(sql)
                 .param(saleId)
                 .query((rs, rowNum) -> SaleItemForSunat.builder()
                         .lineNumber(rs.getInt("line_number"))
+                        .productId(rs.getObject("product_id") != null ? rs.getLong("product_id") : null)
                         .sku(rs.getString("sku"))
                         .description(rs.getString("description"))
+                        .productCategory(rs.getString("product_category"))
                         .quantity(rs.getBigDecimal("quantity"))
                         .revenueTotal(rs.getBigDecimal("revenue_total"))
                         .lineKind(rs.getString("line_kind"))
