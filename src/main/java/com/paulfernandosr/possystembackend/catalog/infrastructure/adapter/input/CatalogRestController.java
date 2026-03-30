@@ -22,6 +22,10 @@ public class CatalogRestController {
     private final BrandService brandService;
     private final ModelService modelService;
 
+    private final DepartmentService departmentService;
+    private final ProvinceService provinceService;
+    private final DistrictService districtService;
+
     // --------------- COMPATIBILIDADES ---------------
 
     @PostMapping("/compatibilities")
@@ -109,6 +113,33 @@ public class CatalogRestController {
     public ResponseEntity<SuccessResponse<Collection<Model>>> getModels() {
         return ResponseEntity.ok(
                 SuccessResponse.ok(modelService.findAll())
+        );
+    }
+
+    // --------------- UBIGEO: DEPARTAMENTOS / PROVINCIAS / DISTRITOS ---------------
+
+    @GetMapping("/departments")
+    public ResponseEntity<SuccessResponse<Collection<Department>>> getDepartments() {
+        return ResponseEntity.ok(
+                SuccessResponse.ok(departmentService.findAll())
+        );
+    }
+
+    @GetMapping("/provinces")
+    public ResponseEntity<SuccessResponse<Collection<Province>>> getProvinces(
+            @RequestParam String departmentCode
+    ) {
+        return ResponseEntity.ok(
+                SuccessResponse.ok(provinceService.findByDepartmentCode(departmentCode))
+        );
+    }
+
+    @GetMapping("/districts")
+    public ResponseEntity<SuccessResponse<Collection<District>>> getDistricts(
+            @RequestParam String provinceCode
+    ) {
+        return ResponseEntity.ok(
+                SuccessResponse.ok(districtService.findByProvinceCode(provinceCode))
         );
     }
 }
