@@ -4,6 +4,7 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Getter
@@ -38,6 +39,7 @@ public class SaleV2DetailResponse {
     private String taxStatus;
     private String taxReason;
     private BigDecimal igvRate;
+    private Boolean igvIncluded;
 
     private String paymentType;
     private Integer creditDays;
@@ -52,6 +54,14 @@ public class SaleV2DetailResponse {
 
     private String notes;
     private String status;
+
+    private Long contractId;
+
+    private SaleV2ReferenceResponse reference;
+    private SaleV2SunatInfoResponse sunat;
+
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 
     private List<SaleV2ItemResponse> items;
 

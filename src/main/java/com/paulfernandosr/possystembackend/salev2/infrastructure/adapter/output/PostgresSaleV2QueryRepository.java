@@ -191,6 +191,7 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                 s.tax_status      AS tax_status,
                 s.tax_reason      AS tax_reason,
                 s.igv_rate        AS igv_rate,
+                s.igv_included    AS igv_included,
                 s.payment_type    AS payment_type,
                 s.credit_days     AS credit_days,
                 s.due_date        AS due_date,
@@ -200,42 +201,96 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                 s.total           AS total,
                 s.gift_cost_total AS gift_cost_total,
                 s.notes           AS notes,
-                s.status          AS status
+                s.status          AS status,
+                s.contract_id     AS contract_id,
+                s.created_at      AS created_at,
+                s.updated_at      AS updated_at,
+
+                sr.proforma_id    AS reference_proforma_id,
+                sr.imported_at    AS reference_imported_at,
+
+                s.sunat_status               AS sunat_status,
+                s.sunat_response_code        AS sunat_response_code,
+                s.sunat_response_description AS sunat_response_description,
+                s.sunat_hash_code            AS sunat_hash_code,
+                s.sunat_xml_path             AS sunat_xml_path,
+                s.sunat_cdr_path             AS sunat_cdr_path,
+                s.sunat_pdf_path             AS sunat_pdf_path,
+                s.sunat_sent_at              AS sunat_sent_at
+
               FROM sale s
+              LEFT JOIN sale_reference sr
+                     ON sr.sale_id = s.id
              WHERE s.id = ?
         """;
 
-        RowMapper<SaleV2DetailResponse> mapper = (rs, rowNum) -> SaleV2DetailResponse.builder()
-                .saleId(rs.getLong("sale_id"))
-                .stationId(rs.getLong("station_id"))
-                .saleSessionId((Long) rs.getObject("sale_session_id"))
-                .createdBy(rs.getLong("created_by"))
-                .docType(rs.getString("doc_type"))
-                .series(rs.getString("series"))
-                .number(rs.getLong("number"))
-                .issueDate(rs.getDate("issue_date").toLocalDate())
-                .currency(rs.getString("currency"))
-                .exchangeRate(rs.getBigDecimal("exchange_rate"))
-                .priceList(rs.getString("price_list"))
-                .customerId((Long) rs.getObject("customer_id"))
-                .customerDocType(rs.getString("customer_doc_type"))
-                .customerDocNumber(rs.getString("customer_doc_number"))
-                .customerName(rs.getString("customer_name"))
-                .customerAddress(rs.getString("customer_address"))
-                .taxStatus(rs.getString("tax_status"))
-                .taxReason(rs.getString("tax_reason"))
-                .igvRate(rs.getBigDecimal("igv_rate"))
-                .paymentType(rs.getString("payment_type"))
-                .creditDays((Integer) rs.getObject("credit_days"))
-                .dueDate(rs.getDate("due_date") != null ? rs.getDate("due_date").toLocalDate() : null)
-                .subtotal(rs.getBigDecimal("subtotal"))
-                .discountTotal(rs.getBigDecimal("discount_total"))
-                .igvAmount(rs.getBigDecimal("igv_amount"))
-                .total(rs.getBigDecimal("total"))
-                .giftCostTotal(rs.getBigDecimal("gift_cost_total"))
-                .notes(rs.getString("notes"))
-                .status(rs.getString("status"))
-                .build();
+        RowMapper<SaleV2DetailResponse> mapper = (rs, rowNum) -> {
+            SaleV2ReferenceResponse reference = null;
+            Object refProformaId = rs.getObject("reference_proforma_id");
+            if (refProformaId != null) {
+                reference = SaleV2ReferenceResponse.builder()
+                        .proformaId(((Number) refProformaId).longValue())
+                        .importedAt(rs.getTimestamp("reference_imported_at") != null
+                                ? rs.getTimestamp("reference_imported_at").toLocalDateTime()
+                                : null)
+                        .build();
+            }
+
+            SaleV2SunatInfoResponse sunat = SaleV2SunatInfoResponse.builder()
+                    .status(rs.getString("sunat_status"))
+                    .responseCode(rs.getString("sunat_response_code"))
+                    .responseDescription(rs.getString("sunat_response_description"))
+                    .hashCode(rs.getString("sunat_hash_code"))
+                    .xmlPath(rs.getString("sunat_xml_path"))
+                    .cdrPath(rs.getString("sunat_cdr_path"))
+                    .pdfPath(rs.getString("sunat_pdf_path"))
+                    .sentAt(rs.getTimestamp("sunat_sent_at") != null
+                            ? rs.getTimestamp("sunat_sent_at").toLocalDateTime()
+                            : null)
+                    .build();
+
+            return SaleV2DetailResponse.builder()
+                    .saleId(rs.getLong("sale_id"))
+                    .stationId(rs.getLong("station_id"))
+                    .saleSessionId((Long) rs.getObject("sale_session_id"))
+                    .createdBy(rs.getLong("created_by"))
+                    .docType(rs.getString("doc_type"))
+                    .series(rs.getString("series"))
+                    .number(rs.getLong("number"))
+                    .issueDate(rs.getDate("issue_date").toLocalDate())
+                    .currency(rs.getString("currency"))
+                    .exchangeRate(rs.getBigDecimal("exchange_rate"))
+                    .priceList(rs.getString("price_list"))
+                    .customerId((Long) rs.getObject("customer_id"))
+                    .customerDocType(rs.getString("customer_doc_type"))
+                    .customerDocNumber(rs.getString("customer_doc_number"))
+                    .customerName(rs.getString("customer_name"))
+                    .customerAddress(rs.getString("customer_address"))
+                    .taxStatus(rs.getString("tax_status"))
+                    .taxReason(rs.getString("tax_reason"))
+                    .igvRate(rs.getBigDecimal("igv_rate"))
+                    .igvIncluded(rs.getObject("igv_included", Boolean.class))
+                    .paymentType(rs.getString("payment_type"))
+                    .creditDays((Integer) rs.getObject("credit_days"))
+                    .dueDate(rs.getDate("due_date") != null ? rs.getDate("due_date").toLocalDate() : null)
+                    .subtotal(rs.getBigDecimal("subtotal"))
+                    .discountTotal(rs.getBigDecimal("discount_total"))
+                    .igvAmount(rs.getBigDecimal("igv_amount"))
+                    .total(rs.getBigDecimal("total"))
+                    .giftCostTotal(rs.getBigDecimal("gift_cost_total"))
+                    .notes(rs.getString("notes"))
+                    .status(rs.getString("status"))
+                    .contractId((Long) rs.getObject("contract_id"))
+                    .reference(reference)
+                    .sunat(sunat)
+                    .createdAt(rs.getTimestamp("created_at") != null
+                            ? rs.getTimestamp("created_at").toLocalDateTime()
+                            : null)
+                    .updatedAt(rs.getTimestamp("updated_at") != null
+                            ? rs.getTimestamp("updated_at").toLocalDateTime()
+                            : null)
+                    .build();
+        };
 
         return jdbcClient.sql(sql)
                 .param(saleId)
@@ -267,11 +322,13 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
             si.unit_cost_snapshot AS unit_cost_snapshot,
             si.total_cost_snapshot AS total_cost_snapshot,
             si.revenue_total AS revenue_total,
-    
-            -- ✅ NUEVO: categoría del producto
+            si.created_at AS created_at,
+
             p.category AS product_category,
-    
-            -- ✅ NUEVO: ficha técnica (sale_item -> product_serial_unit por sale_item_id)
+
+            psu.id AS serial_unit_id,
+            psu.status AS serial_unit_status,
+
             p.brand AS v_marca,
             psu.color AS v_color,
             p.model AS v_modelo,
@@ -281,13 +338,13 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
             psu.dua_number AS v_dua,
             psu.dua_item AS v_item_dua,
             psu.year_make AS v_anio_fabricacion,
-    
+
             vs.engine_capacity AS v_engine_capacity,
             vs.fuel AS v_combustible,
             vs.cylinders AS v_num_cilindros,
             vs.net_weight AS v_peso_neto,
             vs.gross_weight AS v_peso_bruto
-    
+
           FROM sale_item si
           JOIN product p ON p.id = si.product_id
           LEFT JOIN product_serial_unit psu ON psu.sale_item_id = si.id
@@ -302,19 +359,16 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
 
             boolean isVehicle = "MOTOR".equals(cat) || "MOTOCICLETAS".equals(cat) || "MOTOCICLETA".equals(cat);
 
-            // Si no es MOTOR/MOTOCICLETAS => vehicleDetails = null
             VehicleDetailsResponse vehicleDetails = null;
 
             if (isVehicle) {
-                // Si no hay serial asignado a este sale_item aún, puedes devolver null también.
-                // (depende tu regla; aquí lo hacemos: si engine_number es null => null)
                 String engineNumber = rs.getString("v_num_motor");
                 if (engineNumber != null && !engineNumber.trim().isEmpty()) {
-
-                    // engine_capacity NUMERIC -> "150CC"
                     String cap = null;
                     var capVal = rs.getBigDecimal("v_engine_capacity");
-                    if (capVal != null) cap = capVal.stripTrailingZeros().toPlainString() + "CC";
+                    if (capVal != null) {
+                        cap = capVal.stripTrailingZeros().toPlainString() + "CC";
+                    }
 
                     vehicleDetails = VehicleDetailsResponse.builder()
                             .marca(rs.getString("v_marca"))
@@ -355,9 +409,12 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                     .unitCostSnapshot(rs.getBigDecimal("unit_cost_snapshot"))
                     .totalCostSnapshot(rs.getBigDecimal("total_cost_snapshot"))
                     .revenueTotal(rs.getBigDecimal("revenue_total"))
-
-                    // ✅ NUEVO
                     .productCategory(category)
+                    .serialUnitId((Long) rs.getObject("serial_unit_id"))
+                    .serialUnitStatus(rs.getString("serial_unit_status"))
+                    .createdAt(rs.getTimestamp("created_at") != null
+                            ? rs.getTimestamp("created_at").toLocalDateTime()
+                            : null)
                     .vehicleDetails(vehicleDetails)
                     .build();
         };

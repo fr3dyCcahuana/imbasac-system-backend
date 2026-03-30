@@ -440,13 +440,14 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         }
 
         if (request.getDocType() == DocType.BOLETA || request.getDocType() == DocType.FACTURA) {
-            if (request.getTaxStatus() != TaxStatus.GRAVADA) {
-                throw new InvalidSaleV2Exception("BOLETA/FACTURA solo permiten taxStatus=GRAVADA en el flujo de emisión SUNAT desacoplada actual.");
+            if (request.getTaxStatus() == TaxStatus.NO_GRAVADA
+                    && (request.getTaxReason() == null || request.getTaxReason().trim().isEmpty())) {
+                request.setTaxReason("EXONERADA");
             }
 
             if (request.getCustomerDocType() == null || request.getCustomerDocType().trim().isEmpty()
                     || request.getCustomerDocNumber() == null || request.getCustomerDocNumber().trim().isEmpty()) {
-                throw new InvalidSaleV2Exception("BOLETA/FACTURA requieren customerDocType y customerDocNumber en el flujo de emisión SUNAT desacoplada actual.");
+                throw new InvalidSaleV2Exception("BOLETA/FACTURA requieren customerDocType y customerDocNumber.");
             }
 
             lines.stream()
@@ -474,6 +475,10 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         if (request.getSeries() == null || request.getSeries().trim().isEmpty()) throw new InvalidSaleV2Exception("series es obligatorio.");
         if (request.getPriceList() == null) throw new InvalidSaleV2Exception("priceList es obligatorio.");
         if (request.getTaxStatus() == null) request.setTaxStatus(TaxStatus.NO_GRAVADA);
+        if (request.getTaxStatus() == TaxStatus.NO_GRAVADA
+                && (request.getTaxReason() == null || request.getTaxReason().trim().isEmpty())) {
+            request.setTaxReason("EXONERADA");
+        }
         if (request.getIgvIncluded() == null) request.setIgvIncluded(Boolean.FALSE);
         if (request.getTaxStatus() != TaxStatus.GRAVADA) request.setIgvIncluded(Boolean.FALSE);
         if (request.getPaymentType() == null) throw new InvalidSaleV2Exception("paymentType es obligatorio.");

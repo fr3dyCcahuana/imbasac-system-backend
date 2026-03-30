@@ -91,6 +91,9 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
         String customerName = firstNonNull(request.getCustomerName(), current.getCustomerName());
         String customerAddress = firstNonNull(request.getCustomerAddress(), current.getCustomerAddress());
         String taxReason = request.getTaxReason() != null ? request.getTaxReason() : current.getTaxReason();
+        if (taxStatus == TaxStatus.NO_GRAVADA && (taxReason == null || taxReason.trim().isEmpty())) {
+            taxReason = "EXONERADA";
+        }
 
         AccountsReceivableRepository.LockedAr currentAr = null;
         if (paymentType == PaymentType.CREDITO) {
@@ -114,7 +117,7 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
 
         List<ComputedLine> computedLines = buildComputedLines(request, docType, priceList, taxStatus, igvIncluded, igvRate);
         Totals totals = calculateTotals(taxStatus, igvIncluded, igvRate, computedLines);
-        validateDocumentRules(docType, customerDocType, customerDocNumber, totals, taxStatus, computedLines);
+        validateDocumentRules(docType, customerDocType, customerDocNumber, totals, taxStatus, taxReason, computedLines);
 
         Integer creditDays = current.getCreditDays();
         LocalDate dueDate = current.getDueDate();
@@ -440,6 +443,7 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
                                        String customerDocNumber,
                                        Totals totals,
                                        TaxStatus taxStatus,
+                                       String taxReason,
                                        List<ComputedLine> lines) {
         if (docType == DocType.FACTURA) {
             if (customerDocType == null || !"RUC".equalsIgnoreCase(customerDocType)) {
@@ -458,13 +462,14 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
         }
 
         if (docType == DocType.BOLETA || docType == DocType.FACTURA) {
-            if (taxStatus != TaxStatus.GRAVADA) {
-                throw new InvalidSaleV2Exception("BOLETA/FACTURA solo permiten taxStatus=GRAVADA en el flujo de emisión SUNAT desacoplada actual.");
+            if (taxStatus == TaxStatus.NO_GRAVADA
+                    && (taxReason == null || taxReason.trim().isEmpty())) {
+                throw new InvalidSaleV2Exception("BOLETA/FACTURA NO_GRAVADA requieren taxReason. En tu flujo debe ser EXONERADA.");
             }
 
             if (customerDocType == null || customerDocType.trim().isEmpty()
                     || customerDocNumber == null || customerDocNumber.trim().isEmpty()) {
-                throw new InvalidSaleV2Exception("BOLETA/FACTURA requieren customerDocType y customerDocNumber en el flujo de emisión SUNAT desacoplada actual.");
+                throw new InvalidSaleV2Exception("BOLETA/FACTURA requieren customerDocType y customerDocNumber.");
             }
 
             lines.stream()

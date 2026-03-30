@@ -1,9 +1,8 @@
 package com.paulfernandosr.possystembackend.salev2.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.DocumentRequest;
-import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.DocumentResponse;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.SunatProps;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.EmitSaleV2ToSunatUseCase;
@@ -75,10 +74,6 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
                     throw new InvalidSaleV2Exception("La emisión SUNAT desacoplada no soporta obsequios u otros tipos de línea. Línea=" + i.getLineNumber());
                 });
 
-        if (!"GRAVADA".equalsIgnoreCase(blankIfNull(sale.getTaxStatus()))) {
-            throw new InvalidSaleV2Exception("La emisión SUNAT desacoplada implementada en este parche soporta solo ventas GRAVADA.");
-        }
-
         DocumentRequest request = SaleV2SunatMapper.map(sunatProps, sale, visibleItems);
 
         log.info("SUNAT V2 request: {}", request);
@@ -91,14 +86,15 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
 
             log.info("SUNAT V2 response: {}", rawResponse);
 
-            DocumentResponse response = objectMapper.readValue(rawResponse, DocumentResponse.class);
-            DocumentResponse.Data data = response != null ? response.getData() : null;
-            String code = data != null ? data.getCode() : null;
-            String description = data != null ? data.getDescription() : "Respuesta vacía de SUNAT";
-            String hashCode = data != null && data.getHash() != null ? data.getHash().getCode() : null;
-            String xmlPath = data != null ? data.getXmlPath() : null;
-            String cdrPath = data != null ? data.getCdrPath() : null;
-            String pdfPath = data != null ? data.getPdfPath() : null;
+            JsonNode root = objectMapper.readTree(rawResponse);
+            JsonNode data = root != null ? root.path("data") : null;
+
+            String code = textValue(data, "respuesta_sunat_codigo");
+            String description = defaultIfBlank(textValue(data, "respuesta_sunat_descripcion"), "Respuesta vacía de SUNAT");
+            String hashCode = extractHashCode(data != null ? data.path("codigo_hash") : null);
+            String xmlPath = textValue(data, "ruta_xml");
+            String cdrPath = textValue(data, "ruta_cdr");
+            String pdfPath = textValue(data, "ruta_pdf");
             String finalStatus = SUCCESS_RESPONSE.equals(code) ? "ACEPTADO" : "RECHAZADO";
             LocalDateTime emittedAt = LocalDateTime.now();
 
@@ -117,14 +113,14 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
             return buildResponse(saleId, sale.getDocType(), sale.getSeries(), sale.getNumber(), finalStatus,
                     code, description, hashCode, xmlPath, cdrPath, pdfPath, emittedAt);
 
-        } catch (JsonProcessingException ex) {
-            LocalDateTime emittedAt = LocalDateTime.now();
-            saleV2SunatRepository.markEmissionError(saleId, ex.getOriginalMessage(), emittedAt);
-            throw new InvalidSaleV2Exception("No se pudo interpretar la respuesta de SUNAT: " + ex.getOriginalMessage());
         } catch (RuntimeException ex) {
             LocalDateTime emittedAt = LocalDateTime.now();
             saleV2SunatRepository.markEmissionError(saleId, ex.getMessage(), emittedAt);
             throw ex;
+        } catch (Exception ex) {
+            LocalDateTime emittedAt = LocalDateTime.now();
+            saleV2SunatRepository.markEmissionError(saleId, ex.getMessage(), emittedAt);
+            throw new InvalidSaleV2Exception("No se pudo interpretar la respuesta de SUNAT: " + ex.getMessage());
         }
     }
 
@@ -136,6 +132,51 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
         if (!"BOLETA".equals(docType) && !"FACTURA".equals(docType)) {
             throw new InvalidSaleV2Exception("Solo BOLETA/FACTURA se envían a SUNAT. docType=" + sale.getDocType());
         }
+    }
+
+
+    private String textValue(JsonNode node, String fieldName) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        JsonNode child = node.path(fieldName);
+        if (child.isMissingNode() || child.isNull()) {
+            return null;
+        }
+        return child.asText();
+    }
+
+    private String extractHashCode(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        if (node.isArray()) {
+            for (JsonNode item : node) {
+                if (item != null && !item.isNull()) {
+                    String value = item.asText();
+                    if (value != null && !value.trim().isEmpty()) {
+                        return value;
+                    }
+                }
+            }
+            return null;
+        }
+        if (node.isObject()) {
+            JsonNode codeNode = node.path("codigo");
+            if (!codeNode.isMissingNode() && !codeNode.isNull()) {
+                return codeNode.asText();
+            }
+            JsonNode hashNode = node.path("hash");
+            if (!hashNode.isMissingNode() && !hashNode.isNull()) {
+                return hashNode.asText();
+            }
+        }
+        String value = node.asText();
+        return value == null || value.trim().isEmpty() ? null : value;
+    }
+
+    private String defaultIfBlank(String value, String defaultValue) {
+        return value == null || value.trim().isEmpty() ? defaultValue : value;
     }
 
     private SaleV2SunatEmissionResponse buildResponse(Long saleId, String docType, String series, Long number,

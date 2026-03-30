@@ -62,20 +62,21 @@ public final class SaleV2SunatMapper {
                         .issueTime(emissionDateTime.toLocalTime().format(TIME_FORMATTER))
                         .dueDate("")
                         .currencyId(mapCurrencyCode(sale.getCurrency()))
-                        .paymentMethodId(mapPaymentMethodCode(sale.getPaymentType()))
-                        .totalTaxed(nz(sale.getSubtotal()).setScale(2, RoundingMode.HALF_UP).toPlainString())
-                        .totalIgv(nz(sale.getIgvAmount()).setScale(2, RoundingMode.HALF_UP).toPlainString())
-                        .totalExempted("")
-                        .totalUnaffected("")
+                        .paymentMethodId(PaymentMethod.CASH.getCode())
+                        .totalTaxed(totalTaxed(sale).toPlainString())
+                        .totalIgv(totalIgv(sale).toPlainString())
+                        .totalExempted(totalExempted(sale).toPlainString())
+                        .totalUnaffected(totalUnaffected(sale).toPlainString())
                         .globalDiscount(nz(sale.getDiscountTotal()).setScale(2, RoundingMode.HALF_UP).toPlainString())
                         .documentTypeCode(mapDocumentCode(sale.getDocType()))
                         .note(blankIfNull(sale.getNotes()))
                         .build())
-                .items(items.stream().map(SaleV2SunatMapper::mapItem).toList())
+                .items(items.stream().map(i -> mapItem(i, sale)).toList())
                 .build();
     }
 
-    private static DocumentRequest.Item mapItem(SaleV2SunatRepository.SaleItemForSunat item) {
+    private static DocumentRequest.Item mapItem(SaleV2SunatRepository.SaleItemForSunat item,
+                                                SaleV2SunatRepository.LockedSunatSale sale) {
         BigDecimal qty = nz(item.getQuantity());
         if (qty.signum() <= 0) {
             throw new InvalidSaleV2Exception("Cantidad inválida para emisión SUNAT en línea " + item.getLineNumber());
@@ -106,7 +107,7 @@ public final class SaleV2SunatMapper {
                 .sunatCode(inferredSunatCode)
                 .productCode(blankIfNull(item.getSku()))
                 .unitCode(UnitOfMeasureType.PRODUCT_UNIT.getCode())
-                .igvTypeCode(IgvType.TAXABLE_ONEROUS.getCode())
+                .igvTypeCode(resolveIgvTypeCode(sale))
                 .build();
     }
 
@@ -139,13 +140,32 @@ public final class SaleV2SunatMapper {
         };
     }
 
-    private static String mapPaymentMethodCode(String paymentType) {
-        String v = required(paymentType, "paymentType").trim().toUpperCase();
-        return switch (v) {
-            case "CONTADO" -> PaymentMethod.CASH.getCode();
-            case "CREDITO" -> PaymentMethod.CREDIT.getCode();
-            default -> throw new InvalidSaleV2Exception("Tipo de pago no soportado para SUNAT: " + paymentType);
-        };
+    private static BigDecimal totalTaxed(SaleV2SunatRepository.LockedSunatSale sale) {
+        return isNoGravada(sale) ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                : nz(sale.getSubtotal()).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static BigDecimal totalIgv(SaleV2SunatRepository.LockedSunatSale sale) {
+        return isNoGravada(sale) ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                : nz(sale.getIgvAmount()).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static BigDecimal totalExempted(SaleV2SunatRepository.LockedSunatSale sale) {
+        return isNoGravada(sale)
+                ? nz(sale.getSubtotal()).setScale(2, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static BigDecimal totalUnaffected(SaleV2SunatRepository.LockedSunatSale sale) {
+        return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private static String resolveIgvTypeCode(SaleV2SunatRepository.LockedSunatSale sale) {
+        return isNoGravada(sale) ? "20" : IgvType.TAXABLE_ONEROUS.getCode();
+    }
+
+    private static boolean isNoGravada(SaleV2SunatRepository.LockedSunatSale sale) {
+        return "NO_GRAVADA".equalsIgnoreCase(blankIfNull(sale.getTaxStatus()));
     }
 
     private static BigDecimal nz(BigDecimal value) {

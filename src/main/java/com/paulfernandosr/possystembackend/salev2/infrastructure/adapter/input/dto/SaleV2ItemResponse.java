@@ -3,6 +3,7 @@ package com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -36,5 +37,11 @@ public class SaleV2ItemResponse {
 
     private BigDecimal revenueTotal;
     private String productCategory;
+
+    private Long serialUnitId;
+    private String serialUnitStatus;
+
+    private LocalDateTime createdAt;
+
     private VehicleDetailsResponse vehicleDetails;
 }
