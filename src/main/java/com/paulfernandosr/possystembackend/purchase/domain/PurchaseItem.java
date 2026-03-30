@@ -39,5 +39,7 @@ public class PurchaseItem {
     private LocalDate expirationDate;
 
     private LocalDateTime createdAt;
+
+    private PurchaseProduct product;
     private List<PurchaseSerialUnit> serialUnits;
 }

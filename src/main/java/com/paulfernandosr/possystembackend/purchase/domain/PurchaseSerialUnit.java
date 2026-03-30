@@ -10,6 +10,10 @@ import lombok.*;
 @AllArgsConstructor
 public class PurchaseSerialUnit {
 
+    private Long id;
+    private Long productId;
+    private Long purchaseItemId;
+
     /**
      * Para MOTOCICLETAS (y solo MOTOCICLETAS): VIN.
      */
@@ -47,4 +51,9 @@ public class PurchaseSerialUnit {
      * Para ingresos por compra/lote: ítem de DUA (obligatorio, > 0).
      */
     private Integer duaItem;
+
+    private String status;
+
+    private java.time.LocalDateTime createdAt;
+    private java.time.LocalDateTime updatedAt;
 }

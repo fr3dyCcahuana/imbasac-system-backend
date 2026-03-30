@@ -66,6 +66,9 @@ public class Purchase {
     private String deliveryGuideSeries;
     private String deliveryGuideNumber;
     private String deliveryGuideCompany;
+
+    private PurchaseSummary summary;
+
     // Detalle
     private List<PurchaseItem> items;
 }
