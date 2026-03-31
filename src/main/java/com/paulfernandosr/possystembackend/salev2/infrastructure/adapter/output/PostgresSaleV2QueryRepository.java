@@ -216,11 +216,20 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                 s.sunat_xml_path             AS sunat_xml_path,
                 s.sunat_cdr_path             AS sunat_cdr_path,
                 s.sunat_pdf_path             AS sunat_pdf_path,
-                s.sunat_sent_at              AS sunat_sent_at
+                s.sunat_sent_at              AS sunat_sent_at,
+
+                s.edit_status                AS edit_status,
+                s.edit_count                 AS edit_count,
+                s.last_edited_at             AS last_edited_at,
+                s.last_edited_by             AS last_edited_by,
+                s.last_edit_reason           AS last_edit_reason,
+                u_edit.username              AS last_edited_by_username
 
               FROM sale s
               LEFT JOIN sale_reference sr
                      ON sr.sale_id = s.id
+              LEFT JOIN users u_edit
+                     ON u_edit.id = s.last_edited_by
              WHERE s.id = ?
         """;
 
@@ -247,6 +256,17 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                     .sentAt(rs.getTimestamp("sunat_sent_at") != null
                             ? rs.getTimestamp("sunat_sent_at").toLocalDateTime()
                             : null)
+                    .build();
+
+            SaleV2EditInfoResponse edit = SaleV2EditInfoResponse.builder()
+                    .status(rs.getString("edit_status"))
+                    .count((Integer) rs.getObject("edit_count"))
+                    .lastEditedAt(rs.getTimestamp("last_edited_at") != null
+                            ? rs.getTimestamp("last_edited_at").toLocalDateTime()
+                            : null)
+                    .lastEditedBy((Long) rs.getObject("last_edited_by"))
+                    .lastEditedByUsername(rs.getString("last_edited_by_username"))
+                    .lastEditReason(rs.getString("last_edit_reason"))
                     .build();
 
             return SaleV2DetailResponse.builder()
@@ -283,6 +303,7 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                     .contractId((Long) rs.getObject("contract_id"))
                     .reference(reference)
                     .sunat(sunat)
+                    .edit(edit)
                     .createdAt(rs.getTimestamp("created_at") != null
                             ? rs.getTimestamp("created_at").toLocalDateTime()
                             : null)

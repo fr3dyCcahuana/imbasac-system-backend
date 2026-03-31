@@ -8,6 +8,8 @@ import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.d
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2DocumentResponse;
 import com.paulfernandosr.possystembackend.user.domain.User;
 import com.paulfernandosr.possystembackend.user.domain.port.output.UserRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -24,7 +29,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeSunatUseCase {
 
-    private static final Set<String> SUNAT_NOT_SENT_STATUSES = Set.of("", "NO_ENVIADO", "PENDIENTE", "ERROR", "RECHAZADO");
+    private static final Set<String> SUNAT_EDITABLE_STATUSES = Set.of("", "NO_ENVIADO", "ERROR", "RECHAZADO", "NO_APLICA");
 
     private final UserRepository userRepository;
     private final ProductSnapshotRepository productSnapshotRepository;
@@ -36,6 +41,7 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
     private final AccountsReceivableRepository accountsReceivableRepository;
     private final AccountsReceivablePaymentRepository accountsReceivablePaymentRepository;
     private final CustomerAccountRepository customerAccountRepository;
+    private final ObjectMapper objectMapper;
 
     private final CostPolicy costPolicy = CostPolicy.PROMEDIO;
 
@@ -111,6 +117,8 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
         List<Long> previousItemIds = previousItems.stream().map(SaleV2Repository.SaleItemForVoid::getId).toList();
 
         var previousSerials = productSerialUnitRepository.lockBySaleItemIds(previousItemIds);
+        String beforeSnapshotJson = toJson(buildBeforeSnapshot(current, previousItems, previousSerials));
+
         for (var serial : previousSerials) {
             productSerialUnitRepository.releaseFromSaleForEdition(serial.getId());
         }
@@ -251,7 +259,39 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
                 totals.igvAmount,
                 totals.total,
                 totals.giftCostTotal,
-                notes
+                notes,
+                user.getId(),
+                request.getEditReason().trim()
+        );
+
+        String afterSnapshotJson = toJson(buildAfterSnapshot(
+                current,
+                issueDate,
+                priceList,
+                customerId,
+                customerDocType,
+                customerDocNumber,
+                customerName,
+                customerAddress,
+                taxStatus,
+                taxReason,
+                igvRate,
+                igvIncluded,
+                paymentType,
+                creditDays,
+                dueDate,
+                notes,
+                totals,
+                computedLines
+        ));
+
+        saleV2Repository.insertEditHistory(
+                saleId,
+                request.getEditReason().trim(),
+                user.getId(),
+                user.getUsername(),
+                beforeSnapshotJson,
+                afterSnapshotJson
         );
 
         Long arId = null;
@@ -495,6 +535,12 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
         if (request.getItems() == null || request.getItems().isEmpty()) {
             throw new InvalidSaleV2Exception("Debe enviar items.");
         }
+        if (request.getEditReason() == null || request.getEditReason().trim().isEmpty()) {
+            throw new InvalidSaleV2Exception("editReason es obligatorio.");
+        }
+        if (request.getEditReason().length() > 500) {
+            throw new InvalidSaleV2Exception("editReason no puede exceder 500 caracteres.");
+        }
     }
 
     private Totals calculateTotals(TaxStatus taxStatus,
@@ -543,7 +589,7 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
 
     private boolean isAlreadySentToSunat(String sunatStatus) {
         String normalized = nzs(sunatStatus).trim().toUpperCase();
-        return !SUNAT_NOT_SENT_STATUSES.contains(normalized);
+        return !SUNAT_EDITABLE_STATUSES.contains(normalized);
     }
 
     private static BigDecimal nz(BigDecimal value) {
@@ -580,6 +626,175 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
         private BigDecimal igvLine;
         private BigDecimal grossAfterDiscount;
         private List<Long> serialUnitIds;
+    }
+
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            throw new InvalidSaleV2Exception("No se pudo serializar el historial de edición.");
+        }
+    }
+
+    private Map<String, Object> buildBeforeSnapshot(SaleV2Repository.LockedEditableSale current,
+                                                    List<SaleV2Repository.SaleItemForVoid> previousItems,
+                                                    List<SerialUnit> previousSerials) {
+        List<Map<String, Object>> items = new ArrayList<>();
+        Map<Long, List<Map<String, Object>>> serialsByProductId = buildSerialsByProductId(previousSerials);
+
+        for (SaleV2Repository.SaleItemForVoid item : previousItems) {
+            Map<String, Object> itemMap = new LinkedHashMap<>();
+            itemMap.put("saleItemId", item.getId());
+            itemMap.put("lineNumber", item.getLineNumber());
+            itemMap.put("productId", item.getProductId());
+            itemMap.put("sku", item.getSku());
+            itemMap.put("description", item.getDescription());
+            itemMap.put("presentation", item.getPresentation());
+            itemMap.put("factor", item.getFactor());
+            itemMap.put("quantity", item.getQuantity());
+            itemMap.put("unitPrice", item.getUnitPrice());
+            itemMap.put("discountPercent", item.getDiscountPercent());
+            itemMap.put("discountAmount", item.getDiscountAmount());
+            itemMap.put("lineKind", item.getLineKind());
+            itemMap.put("giftReason", item.getGiftReason());
+            itemMap.put("facturableSunat", item.getFacturableSunat());
+            itemMap.put("affectsStock", item.getAffectsStock());
+            itemMap.put("visibleInDocument", item.getVisibleInDocument());
+            itemMap.put("revenueTotal", item.getRevenueTotal());
+            itemMap.put("unitCostSnapshot", item.getUnitCostSnapshot());
+            itemMap.put("totalCostSnapshot", item.getTotalCostSnapshot());
+            itemMap.put("serialUnits", serialsByProductId.getOrDefault(item.getProductId(), List.of()));
+            items.add(itemMap);
+        }
+
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("saleId", current.getId());
+        snapshot.put("docType", current.getDocType());
+        snapshot.put("series", current.getSeries());
+        snapshot.put("number", current.getNumber());
+        snapshot.put("issueDate", current.getIssueDate());
+        snapshot.put("currency", current.getCurrency());
+        snapshot.put("exchangeRate", current.getExchangeRate());
+        snapshot.put("priceList", current.getPriceList());
+        snapshot.put("customerId", current.getCustomerId());
+        snapshot.put("customerDocType", current.getCustomerDocType());
+        snapshot.put("customerDocNumber", current.getCustomerDocNumber());
+        snapshot.put("customerName", current.getCustomerName());
+        snapshot.put("customerAddress", current.getCustomerAddress());
+        snapshot.put("taxStatus", current.getTaxStatus());
+        snapshot.put("taxReason", current.getTaxReason());
+        snapshot.put("igvRate", current.getIgvRate());
+        snapshot.put("igvIncluded", current.getIgvIncluded());
+        snapshot.put("paymentType", current.getPaymentType());
+        snapshot.put("creditDays", current.getCreditDays());
+        snapshot.put("dueDate", current.getDueDate());
+        snapshot.put("notes", current.getNotes());
+        snapshot.put("saleStatus", current.getStatus());
+        snapshot.put("sunatStatus", current.getSunatStatus());
+        snapshot.put("editStatus", current.getEditStatus());
+        snapshot.put("editCount", current.getEditCount());
+        snapshot.put("lastEditedAt", current.getLastEditedAt());
+        snapshot.put("lastEditedBy", current.getLastEditedBy());
+        snapshot.put("lastEditReason", current.getLastEditReason());
+        snapshot.put("total", current.getTotal());
+        snapshot.put("discountTotal", current.getDiscountTotal());
+        snapshot.put("items", items);
+        return snapshot;
+    }
+
+    private Map<String, Object> buildAfterSnapshot(SaleV2Repository.LockedEditableSale current,
+                                                   LocalDate issueDate,
+                                                   PriceList priceList,
+                                                   Long customerId,
+                                                   String customerDocType,
+                                                   String customerDocNumber,
+                                                   String customerName,
+                                                   String customerAddress,
+                                                   TaxStatus taxStatus,
+                                                   String taxReason,
+                                                   BigDecimal igvRate,
+                                                   boolean igvIncluded,
+                                                   PaymentType paymentType,
+                                                   Integer creditDays,
+                                                   LocalDate dueDate,
+                                                   String notes,
+                                                   Totals totals,
+                                                   List<ComputedLine> computedLines) {
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (ComputedLine line : computedLines) {
+            Map<String, Object> itemMap = new LinkedHashMap<>();
+            itemMap.put("lineNumber", line.getLineNumber());
+            itemMap.put("productId", line.getProduct().getId());
+            itemMap.put("sku", line.getProduct().getSku());
+            itemMap.put("description", line.getProduct().getName());
+            itemMap.put("presentation", line.getProduct().getPresentation());
+            itemMap.put("factor", line.getProduct().getFactor());
+            itemMap.put("quantity", line.getQuantity());
+            itemMap.put("unitPrice", line.getUnitPrice());
+            itemMap.put("discountPercent", line.getDiscountPercent());
+            itemMap.put("discountAmount", line.getDiscountAmount());
+            itemMap.put("lineKind", line.getLineKind().name());
+            itemMap.put("giftReason", line.getGiftReason());
+            itemMap.put("facturableSunat", line.getProduct().getFacturableSunat());
+            itemMap.put("affectsStock", line.getProduct().getAffectsStock());
+            itemMap.put("visibleInDocument", line.getVisibleInDocument());
+            itemMap.put("revenueTotal", line.getRevenueTotal());
+            itemMap.put("igvLine", line.getIgvLine());
+            itemMap.put("grossAfterDiscount", line.getGrossAfterDiscount());
+            itemMap.put("unitCostSnapshot", line.getUnitCostSnapshot());
+            itemMap.put("totalCostSnapshot", line.getTotalCostSnapshot());
+            itemMap.put("serialUnitIds", line.getSerialUnitIds());
+            items.add(itemMap);
+        }
+
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("saleId", current.getId());
+        snapshot.put("docType", current.getDocType());
+        snapshot.put("series", current.getSeries());
+        snapshot.put("number", current.getNumber());
+        snapshot.put("issueDate", issueDate);
+        snapshot.put("currency", current.getCurrency());
+        snapshot.put("exchangeRate", current.getExchangeRate());
+        snapshot.put("priceList", priceList.name());
+        snapshot.put("customerId", customerId);
+        snapshot.put("customerDocType", customerDocType);
+        snapshot.put("customerDocNumber", customerDocNumber);
+        snapshot.put("customerName", customerName);
+        snapshot.put("customerAddress", customerAddress);
+        snapshot.put("taxStatus", taxStatus.name());
+        snapshot.put("taxReason", taxReason);
+        snapshot.put("igvRate", igvRate);
+        snapshot.put("igvIncluded", igvIncluded);
+        snapshot.put("paymentType", paymentType.name());
+        snapshot.put("creditDays", creditDays);
+        snapshot.put("dueDate", dueDate);
+        snapshot.put("notes", notes);
+        snapshot.put("saleStatus", current.getStatus());
+        snapshot.put("sunatStatus", "SIMPLE".equalsIgnoreCase(current.getDocType()) ? "NO_APLICA" : "NO_ENVIADO");
+        snapshot.put("editStatus", "EDITADA");
+        snapshot.put("total", totals.total);
+        snapshot.put("subtotal", totals.subtotal);
+        snapshot.put("discountTotal", totals.discountTotal);
+        snapshot.put("igvAmount", totals.igvAmount);
+        snapshot.put("giftCostTotal", totals.giftCostTotal);
+        snapshot.put("items", items);
+        return snapshot;
+    }
+
+    private Map<Long, List<Map<String, Object>>> buildSerialsByProductId(List<SerialUnit> serialUnits) {
+        Map<Long, List<Map<String, Object>>> result = new HashMap<>();
+        for (SerialUnit serial : serialUnits) {
+            Map<String, Object> serialMap = new LinkedHashMap<>();
+            serialMap.put("id", serial.getId());
+            serialMap.put("productId", serial.getProductId());
+            serialMap.put("status", serial.getStatus());
+            serialMap.put("vin", serial.getVin());
+            serialMap.put("contractId", serial.getContractId());
+
+            result.computeIfAbsent(serial.getProductId(), key -> new ArrayList<>()).add(serialMap);
+        }
+        return result;
     }
 
     private static class Totals {

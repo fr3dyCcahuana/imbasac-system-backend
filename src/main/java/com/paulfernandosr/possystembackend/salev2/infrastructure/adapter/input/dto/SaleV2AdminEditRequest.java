@@ -33,6 +33,7 @@ public class SaleV2AdminEditRequest {
     private LocalDate dueDate;
 
     private String notes;
+    private String editReason;
 
     private List<Item> items;
     private Payment payment;

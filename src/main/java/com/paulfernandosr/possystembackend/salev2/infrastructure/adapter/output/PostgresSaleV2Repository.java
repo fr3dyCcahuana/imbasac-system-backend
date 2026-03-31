@@ -187,6 +187,11 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
                       notes,
                       status,
                       sunat_status,
+                      edit_status,
+                      edit_count,
+                      last_edited_at,
+                      last_edited_by,
+                      last_edit_reason,
                       total,
                       discount_total
                     FROM sale
@@ -220,6 +225,13 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
                         .notes(rs.getString("notes"))
                         .status(rs.getString("status"))
                         .sunatStatus(rs.getString("sunat_status"))
+                        .editStatus(rs.getString("edit_status"))
+                        .editCount((Integer) rs.getObject("edit_count"))
+                        .lastEditedAt(rs.getTimestamp("last_edited_at") != null
+                                ? rs.getTimestamp("last_edited_at").toLocalDateTime()
+                                : null)
+                        .lastEditedBy((Long) rs.getObject("last_edited_by"))
+                        .lastEditReason(rs.getString("last_edit_reason"))
                         .total(rs.getBigDecimal("total"))
                         .discountTotal(rs.getBigDecimal("discount_total"))
                         .build())
@@ -232,9 +244,22 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
         String sql = """
                     SELECT
                       id,
+                      line_number,
                       product_id,
+                      sku,
+                      description,
+                      presentation,
+                      factor,
                       quantity,
+                      unit_price,
+                      discount_percent,
+                      discount_amount,
+                      line_kind,
+                      gift_reason,
+                      facturable_sunat,
                       affects_stock,
+                      visible_in_document,
+                      revenue_total,
                       unit_cost_snapshot,
                       total_cost_snapshot
                     FROM sale_item
@@ -246,9 +271,22 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
                 .param(saleId)
                 .query((rs, rowNum) -> SaleItemForVoid.builder()
                         .id(rs.getLong("id"))
+                        .lineNumber((Integer) rs.getObject("line_number"))
                         .productId(rs.getLong("product_id"))
+                        .sku(rs.getString("sku"))
+                        .description(rs.getString("description"))
+                        .presentation(rs.getString("presentation"))
+                        .factor(rs.getBigDecimal("factor"))
                         .quantity(rs.getBigDecimal("quantity"))
-                        .affectsStock(rs.getBoolean("affects_stock"))
+                        .unitPrice(rs.getBigDecimal("unit_price"))
+                        .discountPercent(rs.getBigDecimal("discount_percent"))
+                        .discountAmount(rs.getBigDecimal("discount_amount"))
+                        .lineKind(rs.getString("line_kind"))
+                        .giftReason(rs.getString("gift_reason"))
+                        .facturableSunat(rs.getObject("facturable_sunat", Boolean.class))
+                        .affectsStock(rs.getObject("affects_stock", Boolean.class))
+                        .visibleInDocument(rs.getObject("visible_in_document", Boolean.class))
+                        .revenueTotal(rs.getBigDecimal("revenue_total"))
                         .unitCostSnapshot(rs.getBigDecimal("unit_cost_snapshot"))
                         .totalCostSnapshot(rs.getBigDecimal("total_cost_snapshot"))
                         .build())
@@ -269,7 +307,8 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
                                          String customerAddress, String taxStatus, String taxReason,
                                          BigDecimal igvRate, Boolean igvIncluded, Integer creditDays, LocalDate dueDate,
                                          BigDecimal subtotal, BigDecimal discountTotal, BigDecimal igvAmount,
-                                         BigDecimal total, BigDecimal giftCostTotal, String notes) {
+                                         BigDecimal total, BigDecimal giftCostTotal, String notes,
+                                         Long editedBy, String editReason) {
         String sql = """
                     UPDATE sale
                        SET issue_date = ?,
@@ -291,7 +330,15 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
                            total = ?,
                            gift_cost_total = ?,
                            notes = ?,
-                           sunat_status = 'NO_ENVIADO',
+                           edit_status = 'EDITADA',
+                           edit_count = COALESCE(edit_count, 0) + 1,
+                           last_edited_at = NOW(),
+                           last_edited_by = ?,
+                           last_edit_reason = ?,
+                           sunat_status = CASE
+                                            WHEN doc_type = 'SIMPLE' THEN 'NO_APLICA'
+                                            ELSE 'NO_ENVIADO'
+                                          END,
                            sunat_response_code = NULL,
                            sunat_response_description = NULL,
                            sunat_hash_code = NULL,
@@ -306,7 +353,40 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
         jdbcClient.sql(sql)
                 .params(issueDate, priceList, customerId, customerDocType, customerDocNumber, customerName,
                         customerAddress, taxStatus, taxReason, igvRate, igvIncluded, creditDays, dueDate,
-                        subtotal, discountTotal, igvAmount, total, giftCostTotal, notes, saleId)
+                        subtotal, discountTotal, igvAmount, total, giftCostTotal, notes,
+                        editedBy, editReason, saleId)
+                .update();
+    }
+
+    @Override
+    public void insertEditHistory(Long saleId, String editReason, Long editedBy, String editedByUsername,
+                                  String beforeSnapshotJson, String afterSnapshotJson) {
+        String sql = """
+                    INSERT INTO sale_edit_history(
+                      sale_id,
+                      edit_number,
+                      edit_reason,
+                      edited_by,
+                      edited_by_username,
+                      edited_at,
+                      before_snapshot,
+                      after_snapshot
+                    )
+                    SELECT
+                      s.id,
+                      s.edit_count,
+                      ?,
+                      ?,
+                      ?,
+                      NOW(),
+                      CAST(? AS jsonb),
+                      CAST(? AS jsonb)
+                    FROM sale s
+                    WHERE s.id = ?
+                """;
+
+        jdbcClient.sql(sql)
+                .params(editReason, editedBy, editedByUsername, beforeSnapshotJson, afterSnapshotJson, saleId)
                 .update();
     }
 

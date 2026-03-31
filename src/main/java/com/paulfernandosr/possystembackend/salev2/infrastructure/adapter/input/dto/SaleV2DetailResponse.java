@@ -59,6 +59,7 @@ public class SaleV2DetailResponse {
 
     private SaleV2ReferenceResponse reference;
     private SaleV2SunatInfoResponse sunat;
+    private SaleV2EditInfoResponse edit;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

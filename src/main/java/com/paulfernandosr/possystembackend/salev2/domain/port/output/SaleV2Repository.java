@@ -81,7 +81,17 @@ public interface SaleV2Repository {
                                   BigDecimal igvAmount,
                                   BigDecimal total,
                                   BigDecimal giftCostTotal,
-                                  String notes);
+                                  String notes,
+                                  Long editedBy,
+                                  String editReason);
+
+    void insertEditHistory(Long saleId,
+                           String editReason,
+                           Long editedBy,
+                           String editedByUsername,
+                           String beforeSnapshotJson,
+                           String afterSnapshotJson);
+
     void markAsVoided(Long saleId, String voidNote);
 
     @Getter
@@ -129,6 +139,11 @@ public interface SaleV2Repository {
         private String notes;
         private String status;
         private String sunatStatus;
+        private String editStatus;
+        private Integer editCount;
+        private java.time.LocalDateTime lastEditedAt;
+        private Long lastEditedBy;
+        private String lastEditReason;
         private BigDecimal total;
         private BigDecimal discountTotal;
     }
@@ -140,9 +155,22 @@ public interface SaleV2Repository {
     @Builder
     class SaleItemForVoid {
         private Long id;
+        private Integer lineNumber;
         private Long productId;
+        private String sku;
+        private String description;
+        private String presentation;
+        private BigDecimal factor;
         private BigDecimal quantity;
+        private BigDecimal unitPrice;
+        private BigDecimal discountPercent;
+        private BigDecimal discountAmount;
+        private String lineKind;
+        private String giftReason;
+        private Boolean facturableSunat;
         private Boolean affectsStock;
+        private Boolean visibleInDocument;
+        private BigDecimal revenueTotal;
         private BigDecimal unitCostSnapshot;
         private BigDecimal totalCostSnapshot;
     }
