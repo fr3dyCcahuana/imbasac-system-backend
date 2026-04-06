@@ -305,10 +305,15 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                        gr.issue_time,
                        gr.transfer_date,
                        gr.status,
+                       gr.transfer_mode_code,
                        gr.recipient_document_number,
                        gr.recipient_name,
                        gr.transporter_document_number,
                        gr.transporter_name,
+                       gr.driver_dni,
+                       gr.driver_full_name,
+                       gr.driver_license,
+                       gr.vehicle_plate,
                        gr.total_weight,
                        gr.number_of_packages,
                        gr.ticket,
@@ -342,30 +347,42 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                  LIMIT ? OFFSET ?
                 """)
                 .params(dataParams)
-                .query((rs, rowNum) -> GuideRemissionPageItem.builder()
-                        .id(rs.getLong("id"))
-                        .serie(rs.getString("serie"))
-                        .numero(rs.getString("numero"))
-                        .issueDate(rs.getObject("issue_date", LocalDate.class))
-                        .issueTime(rs.getObject("issue_time", LocalTime.class))
-                        .transferDate(rs.getObject("transfer_date", LocalDate.class))
-                        .status(rs.getString("status"))
-                        .recipientDocumentNumber(rs.getString("recipient_document_number"))
-                        .recipientName(rs.getString("recipient_name"))
-                        .transporterDocumentNumber(rs.getString("transporter_document_number"))
-                        .transporterName(rs.getString("transporter_name"))
-                        .totalWeight(rs.getBigDecimal("total_weight"))
-                        .numberOfPackages(rs.getString("number_of_packages"))
-                        .ticket(rs.getString("ticket"))
-                        .ticketResponseCode(rs.getString("ticket_response_code"))
-                        .primaryRelatedDocumentTypeCode(rs.getString("related_document_type_code"))
-                        .primaryRelatedDocumentSerie(rs.getString("related_document_serie"))
-                        .primaryRelatedDocumentNumero(rs.getString("related_document_numero"))
-                        .relatedDocumentsCount(Math.toIntExact(rs.getLong("related_documents_count")))
-                        .itemsCount(Math.toIntExact(rs.getLong("items_count")))
-                        .submittedAt(rs.getObject("submitted_at", OffsetDateTime.class))
-                        .createdAt(rs.getObject("created_at", OffsetDateTime.class))
-                        .build())
+                .query((rs, rowNum) -> {
+                    String transferModeCode = rs.getString("transfer_mode_code");
+                    boolean isPublicTransport = "01".equals(transferModeCode);
+                    boolean isPrivateTransport = "02".equals(transferModeCode);
+
+                    return GuideRemissionPageItem.builder()
+                            .id(rs.getLong("id"))
+                            .serie(rs.getString("serie"))
+                            .numero(rs.getString("numero"))
+                            .issueDate(rs.getObject("issue_date", LocalDate.class))
+                            .issueTime(rs.getObject("issue_time", LocalTime.class))
+                            .transferDate(rs.getObject("transfer_date", LocalDate.class))
+                            .status(rs.getString("status"))
+                            .transferModeCode(transferModeCode)
+                            .transferModeLabel(transportModeLabel(transferModeCode))
+                            .recipientDocumentNumber(rs.getString("recipient_document_number"))
+                            .recipientName(rs.getString("recipient_name"))
+                            .transporterDocumentNumber(isPublicTransport ? rs.getString("transporter_document_number") : null)
+                            .transporterName(isPublicTransport ? rs.getString("transporter_name") : null)
+                            .driverDocumentNumber(isPrivateTransport ? rs.getString("driver_dni") : null)
+                            .driverFullName(isPrivateTransport ? rs.getString("driver_full_name") : null)
+                            .driverLicense(isPrivateTransport ? rs.getString("driver_license") : null)
+                            .vehiclePlate(isPrivateTransport ? rs.getString("vehicle_plate") : null)
+                            .totalWeight(rs.getBigDecimal("total_weight"))
+                            .numberOfPackages(rs.getString("number_of_packages"))
+                            .ticket(rs.getString("ticket"))
+                            .ticketResponseCode(rs.getString("ticket_response_code"))
+                            .primaryRelatedDocumentTypeCode(rs.getString("related_document_type_code"))
+                            .primaryRelatedDocumentSerie(rs.getString("related_document_serie"))
+                            .primaryRelatedDocumentNumero(rs.getString("related_document_numero"))
+                            .relatedDocumentsCount(Math.toIntExact(rs.getLong("related_documents_count")))
+                            .itemsCount(Math.toIntExact(rs.getLong("items_count")))
+                            .submittedAt(rs.getObject("submitted_at", OffsetDateTime.class))
+                            .createdAt(rs.getObject("created_at", OffsetDateTime.class))
+                            .build();
+                })
                 .list();
 
         return GuideRemissionPageResult.builder()
@@ -920,6 +937,19 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
         return switch (normalized) {
             case "01", "FACTURA" -> "01";
             case "03", "BOLETA", "BOLETA ELECTRONICA", "BOLETA VENTA ELECTRONICA" -> "03";
+            default -> value.trim();
+        };
+    }
+
+
+    private String transportModeLabel(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+
+        return switch (value.trim()) {
+            case "01" -> "PUBLICO";
+            case "02" -> "PRIVADO";
             default -> value.trim();
         };
     }

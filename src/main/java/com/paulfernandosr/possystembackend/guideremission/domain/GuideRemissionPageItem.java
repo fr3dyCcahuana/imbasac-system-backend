@@ -23,10 +23,16 @@ public class GuideRemissionPageItem {
     private LocalTime issueTime;
     private LocalDate transferDate;
     private String status;
+    private String transferModeCode;
+    private String transferModeLabel;
     private String recipientDocumentNumber;
     private String recipientName;
     private String transporterDocumentNumber;
     private String transporterName;
+    private String driverDocumentNumber;
+    private String driverFullName;
+    private String driverLicense;
+    private String vehiclePlate;
     private BigDecimal totalWeight;
     private String numberOfPackages;
     private String ticket;
