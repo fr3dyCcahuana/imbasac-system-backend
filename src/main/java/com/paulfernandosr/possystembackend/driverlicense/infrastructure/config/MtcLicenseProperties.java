@@ -6,13 +6,35 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class MtcLicenseProperties {
 
     private String searchUrl = "https://slcp.mtc.gob.pe/";
-    private boolean headless = false;
+
+    /**
+     * En producción debe ir true.
+     * En local puedes poner false si quieres ver el navegador.
+     */
+    private boolean headless = true;
+
     private int timeoutMs = 30000;
     private long sessionTtlSeconds = 120L;
 
     /**
-     * Directorio donde guardar evidencia de debug:
-     * screenshots/html/txt
+     * Activa o desactiva el debug funcional:
+     * - screenshots
+     * - html
+     * - body txt
+     * - logs de selectores/form/body
+     */
+    private boolean debugEnabled = false;
+
+    /**
+     * Activa o desactiva logs de red Playwright:
+     * - request
+     * - response
+     * - requestFailed
+     */
+    private boolean networkLogEnabled = false;
+
+    /**
+     * Directorio donde guardar evidencia de debug.
      */
     private String debugDir = "logs/mtc-debug";
 
@@ -46,6 +68,22 @@ public class MtcLicenseProperties {
 
     public void setSessionTtlSeconds(long sessionTtlSeconds) {
         this.sessionTtlSeconds = sessionTtlSeconds;
+    }
+
+    public boolean isDebugEnabled() {
+        return debugEnabled;
+    }
+
+    public void setDebugEnabled(boolean debugEnabled) {
+        this.debugEnabled = debugEnabled;
+    }
+
+    public boolean isNetworkLogEnabled() {
+        return networkLogEnabled;
+    }
+
+    public void setNetworkLogEnabled(boolean networkLogEnabled) {
+        this.networkLogEnabled = networkLogEnabled;
     }
 
     public String getDebugDir() {

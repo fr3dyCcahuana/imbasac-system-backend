@@ -5,6 +5,7 @@ import com.paulfernandosr.possystembackend.driverlicense.domain.DriverLicenseGat
 import com.paulfernandosr.possystembackend.driverlicense.domain.DriverLicenseQuery;
 import com.paulfernandosr.possystembackend.driverlicense.domain.DriverLicenseResult;
 import com.paulfernandosr.possystembackend.driverlicense.domain.DriverLicenseStatus;
+import com.paulfernandosr.possystembackend.driverlicense.infrastructure.config.MtcLicenseProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -23,11 +24,14 @@ public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
 
     private final MtcCaptchaService captchaService;
     private final MtcDebugSupport debugSupport;
+    private final MtcLicenseProperties properties;
 
     public MtcPlaywrightDriverLicenseGateway(MtcCaptchaService captchaService,
-                                             MtcDebugSupport debugSupport) {
+                                             MtcDebugSupport debugSupport,
+                                             MtcLicenseProperties properties) {
         this.captchaService = captchaService;
         this.debugSupport = debugSupport;
+        this.properties = properties;
     }
 
     @Override
@@ -50,7 +54,9 @@ public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
             return DriverLicenseResult.error("La página del MTC ya fue cerrada. Genera un nuevo captcha.");
         }
 
-        attachNetworkLogging(page, query.sessionId());
+        if (properties.isNetworkLogEnabled()) {
+            attachNetworkLogging(page, query.sessionId());
+        }
 
         try {
             debugSupport.logSelectors(page, query.sessionId(), "before-fill");

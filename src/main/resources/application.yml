@@ -25,13 +25,31 @@ security:
   session:
     ttl: 1800
 
+
+#headless: true → no intenta abrir UI
+#debug-enabled: false → no guarda evidencias ni logs debug
+#network-log-enabled: false → no ensucia logs con tráfico HTTP del navegador
+
+#integration:
+#  mtc-license:
+#    search-url: https://slcp.mtc.gob.pe/
+#    headless: true
+#    timeout-ms: 30000
+#    session-ttl-seconds: 120
+#    debug-enabled: false
+#    network-log-enabled: false
+#    debug-dir: /var/www/html/logs/mtc-debug
+
 integration:
   mtc-license:
     search-url: https://slcp.mtc.gob.pe/
     headless: false
     timeout-ms: 30000
     session-ttl-seconds: 120
+    debug-enabled: true
+    network-log-enabled: true
     debug-dir: logs/mtc-debug
+
   guide-remission:
     base-url: "http://localhost/API_SUNAT_GUIAS"
     connect-timeout-seconds: 10
