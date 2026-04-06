@@ -34,6 +34,9 @@ public class PostgresCustomerRepository implements CustomerRepository {
                         legal_name,
                         document_type,
                         document_number,
+                        given_names,
+                        last_name,
+                        second_last_name,
                         address,
                         ubigeo,
                         department,
@@ -60,13 +63,16 @@ public class PostgresCustomerRepository implements CustomerRepository {
                         accounting_type,
                         foreign_trade,
                         enabled)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
 
         jdbcClient.sql(insertCustomerSql)
                 .params(customer.getLegalName(),
                         customer.getDocumentType().toString(),
                         customer.getDocumentNumber(),
+                        customer.getGivenNames(),
+                        customer.getLastName(),
+                        customer.getSecondLastName(),
                         customer.getAddress(),
                         customer.getUbigeo(),
                         customer.getDepartment(),
@@ -167,6 +173,9 @@ public class PostgresCustomerRepository implements CustomerRepository {
                         legal_name,
                         document_number,
                         document_type,
+                        given_names,
+                        last_name,
+                        second_last_name,
                         address,
                         ubigeo,
                         department,
@@ -216,6 +225,9 @@ public class PostgresCustomerRepository implements CustomerRepository {
                         legal_name,
                         document_type,
                         document_number,
+                        given_names,
+                        last_name,
+                        second_last_name,
                         address,
                         ubigeo,
                         department,
@@ -300,6 +312,9 @@ public class PostgresCustomerRepository implements CustomerRepository {
                         legal_name,
                         document_type,
                         document_number,
+                        given_names,
+                        last_name,
+                        second_last_name,
                         address,
                         ubigeo,
                         department,
@@ -354,5 +369,25 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 .params(documentType.toString(), documentNumber)
                 .query(Boolean.class)
                 .single();
+    }
+
+    @Override
+    public void updateResolvedData(Long customerId, Customer customer) {
+        String updateResolvedDataSql = """
+                UPDATE customers
+                SET legal_name = ?,
+                    given_names = ?,
+                    last_name = ?,
+                    second_last_name = ?
+                WHERE id = ?
+                """;
+
+        jdbcClient.sql(updateResolvedDataSql)
+                .params(customer.getLegalName(),
+                        customer.getGivenNames(),
+                        customer.getLastName(),
+                        customer.getSecondLastName(),
+                        customerId)
+                .update();
     }
 }

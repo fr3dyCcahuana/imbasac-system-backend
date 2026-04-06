@@ -1,5 +1,7 @@
 package com.paulfernandosr.possystembackend.customer.domain;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
 import java.util.ArrayList;
@@ -15,6 +17,18 @@ public class Customer {
     private String legalName;
     private DocumentType documentType;
     private String documentNumber;
+
+    @JsonProperty("nombres")
+    @JsonAlias("givenNames")
+    private String givenNames;
+
+    @JsonProperty("apellidoPaterno")
+    @JsonAlias("lastName")
+    private String lastName;
+
+    @JsonProperty("apellidoMaterno")
+    @JsonAlias("secondLastName")
+    private String secondLastName;
 
     private String address;
 

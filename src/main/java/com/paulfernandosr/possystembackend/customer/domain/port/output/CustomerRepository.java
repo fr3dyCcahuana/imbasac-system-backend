@@ -17,4 +17,6 @@ public interface CustomerRepository {
     Page<Customer> findPage(String query, Pageable pageable);
 
     boolean existsByDocument(DocumentType documentType, String documentNumber);
+
+    void updateResolvedData(Long customerId, Customer customer);
 }

@@ -9,13 +9,20 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Stream;
 
 public class PersonMapper {
     public static Customer toCustomer(NaturalPerson naturalPerson) {
         return Customer.builder()
-                .legalName(naturalPerson.getGivenNames() + " " + naturalPerson.getLastName() + " " + naturalPerson.getSecondLastName())
+                .legalName(buildLegalName(
+                        naturalPerson.getGivenNames(),
+                        naturalPerson.getLastName(),
+                        naturalPerson.getSecondLastName()))
                 .documentType(DocumentType.DNI)
                 .documentNumber(naturalPerson.getDocumentNumber())
+                .givenNames(naturalPerson.getGivenNames())
+                .lastName(naturalPerson.getLastName())
+                .secondLastName(naturalPerson.getSecondLastName())
                 .build();
     }
 
@@ -101,5 +108,14 @@ public class PersonMapper {
 
         customer.setAddresses(deduped);
         return customer;
+    }
+
+    private static String buildLegalName(String... parts) {
+        return Stream.of(parts)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(part -> !part.isBlank())
+                .reduce((left, right) -> left + " " + right)
+                .orElse(null);
     }
 }

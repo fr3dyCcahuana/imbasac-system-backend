@@ -23,7 +23,9 @@ public class ResolveCustomerService implements ResolveCustomerUseCase {
         Optional<Customer> foundCustomer = customerRepository.findByDocument(customer.getDocumentType(), customer.getDocumentNumber());
 
         if (foundCustomer.isPresent()) {
-            return foundCustomer.get();
+            Customer existingCustomer = foundCustomer.get();
+            refreshMissingResolvedData(existingCustomer);
+            return existingCustomer;
         }
 
         Customer providedCustomer = findCustomerByDocument(customer.getDocumentType(), customer.getDocumentNumber())
@@ -34,6 +36,35 @@ public class ResolveCustomerService implements ResolveCustomerUseCase {
         customerRepository.create(providedCustomer);
 
         return providedCustomer;
+    }
+
+    private void refreshMissingResolvedData(Customer customer) {
+        if (customer == null || customer.getId() == null) {
+            return;
+        }
+
+        boolean shouldRefreshDniData = customer.getDocumentType() == DocumentType.DNI
+                && (isBlank(customer.getLegalName())
+                || isBlank(customer.getGivenNames())
+                || isBlank(customer.getLastName())
+                || isBlank(customer.getSecondLastName()));
+
+        if (!shouldRefreshDniData) {
+            return;
+        }
+
+        findCustomerByDocument(customer.getDocumentType(), customer.getDocumentNumber())
+                .ifPresent(resolvedCustomer -> {
+                    customerRepository.updateResolvedData(customer.getId(), resolvedCustomer);
+                    customer.setLegalName(resolvedCustomer.getLegalName());
+                    customer.setGivenNames(resolvedCustomer.getGivenNames());
+                    customer.setLastName(resolvedCustomer.getLastName());
+                    customer.setSecondLastName(resolvedCustomer.getSecondLastName());
+                });
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private Optional<Customer> findCustomerByDocument(DocumentType documentType, String documentNumber) {
