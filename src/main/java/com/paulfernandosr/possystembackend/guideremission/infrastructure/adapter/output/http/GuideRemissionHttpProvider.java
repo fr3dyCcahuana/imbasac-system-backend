@@ -74,6 +74,11 @@ public class GuideRemissionHttpProvider implements GuideRemissionProvider {
                 request.getItems() != null ? request.getItems().size() : 0);
 
         try {
+            String requestBody = objectMapper.writeValueAsString(payload);
+            log.info("[guide-remission][external-request] path=/2_envio_xml_recibe_ticket.php, contentType={}, body={}",
+                    MediaType.APPLICATION_JSON,
+                    sanitizeForLog(requestBody));
+
             RawExternalResponse raw = postForString("/2_envio_xml_recibe_ticket.php", MediaType.APPLICATION_JSON, payload);
             return parseSubmissionBody(raw);
         } catch (RestClientResponseException ex) {

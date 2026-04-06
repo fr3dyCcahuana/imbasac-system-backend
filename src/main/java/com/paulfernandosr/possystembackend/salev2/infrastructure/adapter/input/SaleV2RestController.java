@@ -78,10 +78,14 @@ public class SaleV2RestController {
             @RequestParam(required = false) String query,
             @RequestParam(required = false) String docType,
             @RequestParam(required = false) String series,
-            @RequestParam(required = false) Long number
+            @RequestParam(required = false) Long number,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String sunatStatus,
+            @RequestParam(required = false) String editStatus,
+            @RequestParam(required = false) String paymentType
     ) {
         return ResponseEntity.ok(SuccessResponse.ok(
-                getSalesV2PageUseCase.findPage(query, docType, series, number, page, size)
+                getSalesV2PageUseCase.findPage(query, docType, series, number, status, sunatStatus, editStatus, paymentType, page, size)
         ));
     }
 

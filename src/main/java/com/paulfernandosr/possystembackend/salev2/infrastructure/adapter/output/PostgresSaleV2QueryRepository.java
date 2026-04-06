@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -17,16 +18,16 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
 
     private final JdbcClient jdbcClient;
 
-    @Override
-    public long countSales(String likeParam, String docType, String series, Long number) {
-        StringBuilder sql = new StringBuilder("""
-        SELECT COUNT(1)
-          FROM sale s
-         WHERE 1 = 1
-    """);
-
-        List<Object> params = new ArrayList<>();
-
+    private void appendCommonSalesFilters(StringBuilder sql,
+                                          List<Object> params,
+                                          String likeParam,
+                                          String docType,
+                                          String series,
+                                          Long number,
+                                          String status,
+                                          String sunatStatus,
+                                          String editStatus,
+                                          String paymentType) {
         if (docType != null && !docType.isBlank()) {
             sql.append(" AND s.doc_type = ? ");
             params.add(docType);
@@ -42,17 +43,81 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
             params.add(number);
         }
 
+        if (status != null && !status.isBlank()) {
+            sql.append(" AND s.status = ? ");
+            params.add(status);
+        }
+
+        if (sunatStatus != null && !sunatStatus.isBlank()) {
+            sql.append(" AND s.sunat_status = ? ");
+            params.add(sunatStatus);
+        }
+
+        if (editStatus != null && !editStatus.isBlank()) {
+            sql.append(" AND COALESCE(s.edit_status, 'NO_EDITADA') = ? ");
+            params.add(editStatus);
+        }
+
+        if (paymentType != null && !paymentType.isBlank()) {
+            sql.append(" AND s.payment_type = ? ");
+            params.add(paymentType);
+        }
+
         sql.append("""
         AND (
             ? = '%'
             OR COALESCE(s.customer_name, '') ILIKE ?
             OR COALESCE(s.customer_doc_number, '') ILIKE ?
+            OR (s.doc_type || ' ' || s.series || '-' || CAST(s.number AS TEXT)) ILIKE ?
+            OR (s.series || '-' || CAST(s.number AS TEXT)) ILIKE ?
         )
     """);
 
         params.add(likeParam);
         params.add(likeParam);
         params.add(likeParam);
+        params.add(likeParam);
+        params.add(likeParam);
+    }
+
+    private boolean isEditableForList(String saleStatus, String sunatStatus) {
+        String normalizedSaleStatus = saleStatus == null ? "" : saleStatus.trim().toUpperCase();
+        String normalizedSunatStatus = sunatStatus == null ? "" : sunatStatus.trim().toUpperCase();
+        return "EMITIDA".equals(normalizedSaleStatus)
+                && ("NO_ENVIADO".equals(normalizedSunatStatus)
+                || "ERROR".equals(normalizedSunatStatus)
+                || "RECHAZADO".equals(normalizedSunatStatus)
+                || "NO_APLICA".equals(normalizedSunatStatus));
+    }
+
+    private boolean isEmittableForList(String saleStatus, String docType, String sunatStatus) {
+        String normalizedSaleStatus = saleStatus == null ? "" : saleStatus.trim().toUpperCase();
+        String normalizedDocType = docType == null ? "" : docType.trim().toUpperCase();
+        String normalizedSunatStatus = sunatStatus == null ? "" : sunatStatus.trim().toUpperCase();
+        return "EMITIDA".equals(normalizedSaleStatus)
+                && ("BOLETA".equals(normalizedDocType) || "FACTURA".equals(normalizedDocType))
+                && ("NO_ENVIADO".equals(normalizedSunatStatus)
+                || "ERROR".equals(normalizedSunatStatus)
+                || "RECHAZADO".equals(normalizedSunatStatus));
+    }
+
+    @Override
+    public long countSales(String likeParam,
+                           String docType,
+                           String series,
+                           Long number,
+                           String status,
+                           String sunatStatus,
+                           String editStatus,
+                           String paymentType) {
+        StringBuilder sql = new StringBuilder("""
+        SELECT COUNT(1)
+          FROM sale s
+         WHERE 1 = 1
+    """);
+
+        List<Object> params = new ArrayList<>();
+        appendCommonSalesFilters(sql, params, likeParam, docType, series, number, status, sunatStatus, editStatus, paymentType);
 
         return jdbcClient.sql(sql.toString())
                 .params(params)
@@ -61,7 +126,16 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
     }
 
     @Override
-    public List<SaleV2SummaryResponse> findSalesPage(String likeParam, String docType, String series, Long number, int limit, int offset) {
+    public List<SaleV2SummaryResponse> findSalesPage(String likeParam,
+                                                     String docType,
+                                                     String series,
+                                                     Long number,
+                                                     String status,
+                                                     String sunatStatus,
+                                                     String editStatus,
+                                                     String paymentType,
+                                                     int limit,
+                                                     int offset) {
         StringBuilder sql = new StringBuilder("""
         SELECT
             s.id          AS sale_id,
@@ -73,57 +147,65 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
             s.customer_name       AS customer_name,
             s.payment_type AS payment_type,
             s.total       AS total,
-            s.status      AS status
+            s.status      AS status,
+            s.sunat_status AS sunat_status,
+            s.sunat_response_code AS sunat_response_code,
+            s.sunat_response_description AS sunat_response_description,
+            s.sunat_sent_at AS sunat_sent_at,
+            COALESCE(s.edit_status, 'NO_EDITADA') AS edit_status,
+            COALESCE(s.edit_count, 0) AS edit_count,
+            s.last_edited_at AS last_edited_at,
+            u_edit.username AS last_edited_by_username,
+            s.created_at AS created_at,
+            s.updated_at AS updated_at
           FROM sale s
+          LEFT JOIN users u_edit
+                 ON u_edit.id = s.last_edited_by
          WHERE 1 = 1
     """);
 
         List<Object> params = new ArrayList<>();
-
-        if (docType != null && !docType.isBlank()) {
-            sql.append(" AND s.doc_type = ? ");
-            params.add(docType);
-        }
-
-        if (series != null && !series.isBlank()) {
-            sql.append(" AND UPPER(TRIM(s.series)) = ? ");
-            params.add(series);
-        }
-
-        if (number != null) {
-            sql.append(" AND s.number = ? ");
-            params.add(number);
-        }
+        appendCommonSalesFilters(sql, params, likeParam, docType, series, number, status, sunatStatus, editStatus, paymentType);
 
         sql.append("""
-        AND (
-            ? = '%'
-            OR COALESCE(s.customer_name, '') ILIKE ?
-            OR COALESCE(s.customer_doc_number, '') ILIKE ?
-        )
         ORDER BY s.issue_date DESC, s.id DESC
         LIMIT ?
         OFFSET ?
     """);
 
-        params.add(likeParam);
-        params.add(likeParam);
-        params.add(likeParam);
         params.add(limit);
         params.add(offset);
 
-        RowMapper<SaleV2SummaryResponse> mapper = (rs, rowNum) -> SaleV2SummaryResponse.builder()
-                .saleId(rs.getLong("sale_id"))
-                .docType(rs.getString("doc_type"))
-                .series(rs.getString("series"))
-                .number(rs.getLong("number"))
-                .issueDate(rs.getDate("issue_date").toLocalDate())
-                .customerDocNumber(rs.getString("customer_doc_number"))
-                .customerName(rs.getString("customer_name"))
-                .paymentType(rs.getString("payment_type"))
-                .total(rs.getBigDecimal("total"))
-                .status(rs.getString("status"))
-                .build();
+        RowMapper<SaleV2SummaryResponse> mapper = (rs, rowNum) -> {
+            String saleStatusValue = rs.getString("status");
+            String docTypeValue = rs.getString("doc_type");
+            String sunatStatusValue = rs.getString("sunat_status");
+
+            return SaleV2SummaryResponse.builder()
+                    .saleId(rs.getLong("sale_id"))
+                    .docType(docTypeValue)
+                    .series(rs.getString("series"))
+                    .number(rs.getLong("number"))
+                    .issueDate(rs.getDate("issue_date").toLocalDate())
+                    .customerDocNumber(rs.getString("customer_doc_number"))
+                    .customerName(rs.getString("customer_name"))
+                    .paymentType(rs.getString("payment_type"))
+                    .total(rs.getBigDecimal("total"))
+                    .status(saleStatusValue)
+                    .sunatStatus(sunatStatusValue)
+                    .sunatResponseCode(rs.getString("sunat_response_code"))
+                    .sunatResponseDescription(rs.getString("sunat_response_description"))
+                    .sunatSentAt(rs.getTimestamp("sunat_sent_at") != null ? rs.getTimestamp("sunat_sent_at").toLocalDateTime() : null)
+                    .editStatus(rs.getString("edit_status"))
+                    .editCount((Integer) rs.getObject("edit_count"))
+                    .lastEditedAt(rs.getTimestamp("last_edited_at") != null ? rs.getTimestamp("last_edited_at").toLocalDateTime() : null)
+                    .lastEditedByUsername(rs.getString("last_edited_by_username"))
+                    .canEditBeforeSunat(isEditableForList(saleStatusValue, sunatStatusValue))
+                    .canEmitSunat(isEmittableForList(saleStatusValue, docTypeValue, sunatStatusValue))
+                    .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null)
+                    .updatedAt(rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toLocalDateTime() : null)
+                    .build();
+        };
 
         return jdbcClient.sql(sql.toString())
                 .params(params)

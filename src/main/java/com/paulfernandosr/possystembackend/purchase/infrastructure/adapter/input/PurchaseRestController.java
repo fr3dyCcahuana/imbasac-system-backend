@@ -4,7 +4,11 @@ import com.paulfernandosr.possystembackend.common.domain.Page;
 import com.paulfernandosr.possystembackend.common.domain.Pageable;
 import com.paulfernandosr.possystembackend.common.infrastructure.mapper.PageMapper;
 import com.paulfernandosr.possystembackend.common.infrastructure.response.SuccessResponse;
+import com.paulfernandosr.possystembackend.product.infrastructure.adapter.input.ProductImagePublicUrlService;
 import com.paulfernandosr.possystembackend.purchase.domain.Purchase;
+import com.paulfernandosr.possystembackend.purchase.domain.PurchaseItem;
+import com.paulfernandosr.possystembackend.purchase.domain.PurchaseProduct;
+import com.paulfernandosr.possystembackend.purchase.domain.PurchaseProductImage;
 import com.paulfernandosr.possystembackend.purchase.domain.port.input.CancelPurchaseUseCase;
 import com.paulfernandosr.possystembackend.purchase.domain.port.input.CreatePurchaseUseCase;
 import com.paulfernandosr.possystembackend.purchase.domain.port.input.GetPageOfPurchasesUseCase;
@@ -26,6 +30,7 @@ public class PurchaseRestController {
     private final GetPageOfPurchasesUseCase getPageOfPurchasesUseCase;
     private final GetPurchaseDetailUseCase getPurchaseDetailUseCase;
     private final CancelPurchaseUseCase cancelPurchaseUseCase;
+    private final ProductImagePublicUrlService imageUrlService;
 
     // POST /purchases
     @PostMapping
@@ -56,6 +61,7 @@ public class PurchaseRestController {
             @PathVariable Long purchaseId
     ) {
         Purchase purchase = getPurchaseDetailUseCase.getPurchaseById(purchaseId);
+        enrichProductImages(purchase);
         return ResponseEntity.ok(SuccessResponse.ok(purchase));
     }
 
@@ -68,5 +74,43 @@ public class PurchaseRestController {
         String username = principal != null ? principal.getName() : null;
         cancelPurchaseUseCase.cancelPurchaseById(purchaseId, username);
         return ResponseEntity.noContent().build();
+    }
+
+
+    private void enrichProductImages(Page<Purchase> purchases) {
+        if (purchases == null || purchases.getContent() == null) {
+            return;
+        }
+
+        for (Purchase purchase : purchases.getContent()) {
+            enrichProductImages(purchase);
+        }
+    }
+
+    private void enrichProductImages(Purchase purchase) {
+        if (purchase == null || purchase.getItems() == null) {
+            return;
+        }
+
+        for (PurchaseItem item : purchase.getItems()) {
+            if (item == null) {
+                continue;
+            }
+
+            PurchaseProduct product = item.getProduct();
+            if (product == null || product.getImages() == null) {
+                continue;
+            }
+
+            for (PurchaseProductImage image : product.getImages()) {
+                if (image == null) {
+                    continue;
+                }
+
+                image.setImageUrl(
+                        imageUrlService.toPublicUrl(image.getImageUrl())
+                );
+            }
+        }
     }
 }

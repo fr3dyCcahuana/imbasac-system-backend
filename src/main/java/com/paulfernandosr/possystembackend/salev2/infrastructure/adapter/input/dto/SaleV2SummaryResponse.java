@@ -23,7 +23,23 @@ public class SaleV2SummaryResponse {
 
     private String paymentType;
     private BigDecimal total;
+
     private String status;
+    private String sunatStatus;
+    private String sunatResponseCode;
+    private String sunatResponseDescription;
+    private java.time.LocalDateTime sunatSentAt;
+
+    private String editStatus;
+    private Integer editCount;
+    private java.time.LocalDateTime lastEditedAt;
+    private String lastEditedByUsername;
+
+    private Boolean canEditBeforeSunat;
+    private Boolean canEmitSunat;
+
+    private java.time.LocalDateTime createdAt;
+    private java.time.LocalDateTime updatedAt;
 
     private List<SaleV2SummaryItemResponse> items;
 }

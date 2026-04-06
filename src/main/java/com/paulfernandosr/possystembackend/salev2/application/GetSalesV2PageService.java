@@ -19,20 +19,46 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class GetSalesV2PageService implements GetSalesV2PageUseCase {
 
-    private static final Set<String> ALLOWED_DOC_TYPES = Set.of("BOLETA", "FACTURA");
+    private static final Set<String> ALLOWED_DOC_TYPES = Set.of("BOLETA", "FACTURA", "SIMPLE");
+    private static final Set<String> ALLOWED_SALE_STATUSES = Set.of("BORRADOR", "EMITIDA", "ANULADA");
+    private static final Set<String> ALLOWED_SUNAT_STATUSES = Set.of("NO_APLICA", "NO_ENVIADO", "ACEPTADO", "RECHAZADO", "ERROR");
+    private static final Set<String> ALLOWED_EDIT_STATUSES = Set.of("NO_EDITADA", "EDITADA");
+    private static final Set<String> ALLOWED_PAYMENT_TYPES = Set.of("CONTADO", "CREDITO");
 
     private final SaleV2QueryRepository saleV2QueryRepository;
 
     @Override
-    public PageResponse<SaleV2SummaryResponse> findPage(String query, String docType, String series, Long number, int page, int size) {
+    public PageResponse<SaleV2SummaryResponse> findPage(String query,
+                                                        String docType,
+                                                        String series,
+                                                        Long number,
+                                                        String status,
+                                                        String sunatStatus,
+                                                        String editStatus,
+                                                        String paymentType,
+                                                        int page,
+                                                        int size) {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 200);
 
         String like = toLike(query);
         String normalizedDocType = normalizeDocType(docType);
         String normalizedSeries = normalizeSeries(series);
+        String normalizedStatus = normalizeEnum(status, ALLOWED_SALE_STATUSES, "status", "BORRADOR, EMITIDA o ANULADA");
+        String normalizedSunatStatus = normalizeEnum(sunatStatus, ALLOWED_SUNAT_STATUSES, "sunatStatus", "NO_APLICA, NO_ENVIADO, ACEPTADO, RECHAZADO o ERROR");
+        String normalizedEditStatus = normalizeEnum(editStatus, ALLOWED_EDIT_STATUSES, "editStatus", "NO_EDITADA o EDITADA");
+        String normalizedPaymentType = normalizeEnum(paymentType, ALLOWED_PAYMENT_TYPES, "paymentType", "CONTADO o CREDITO");
 
-        long total = saleV2QueryRepository.countSales(like, normalizedDocType, normalizedSeries, number);
+        long total = saleV2QueryRepository.countSales(
+                like,
+                normalizedDocType,
+                normalizedSeries,
+                number,
+                normalizedStatus,
+                normalizedSunatStatus,
+                normalizedEditStatus,
+                normalizedPaymentType
+        );
         int totalPages = (int) Math.ceil(total / (double) safeSize);
 
         List<SaleV2SummaryResponse> rows = saleV2QueryRepository.findSalesPage(
@@ -40,6 +66,10 @@ public class GetSalesV2PageService implements GetSalesV2PageUseCase {
                 normalizedDocType,
                 normalizedSeries,
                 number,
+                normalizedStatus,
+                normalizedSunatStatus,
+                normalizedEditStatus,
+                normalizedPaymentType,
                 safeSize,
                 safePage * safeSize
         );
@@ -82,7 +112,20 @@ public class GetSalesV2PageService implements GetSalesV2PageUseCase {
 
         String normalized = docType.trim().toUpperCase();
         if (!ALLOWED_DOC_TYPES.contains(normalized)) {
-            throw new InvalidSaleV2Exception("docType solo permite BOLETA o FACTURA.");
+            throw new InvalidSaleV2Exception("docType solo permite BOLETA, FACTURA o SIMPLE.");
+        }
+
+        return normalized;
+    }
+
+    private String normalizeEnum(String value, Set<String> allowed, String fieldName, String allowedText) {
+        if (value == null || value.trim().isBlank()) {
+            return null;
+        }
+
+        String normalized = value.trim().toUpperCase();
+        if (!allowed.contains(normalized)) {
+            throw new InvalidSaleV2Exception(fieldName + " solo permite " + allowedText + ".");
         }
 
         return normalized;
