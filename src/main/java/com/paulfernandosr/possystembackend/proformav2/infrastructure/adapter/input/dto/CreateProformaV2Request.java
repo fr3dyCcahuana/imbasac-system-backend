@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto;
 
+import com.paulfernandosr.possystembackend.salev2.domain.model.PaymentType;
 import com.paulfernandosr.possystembackend.salev2.domain.model.TaxStatus;
 import lombok.*;
 
@@ -29,6 +30,10 @@ public class CreateProformaV2Request {
     private String customerDocNumber;
     private String customerName;
     private String customerAddress;
+
+    private PaymentType paymentType; // CONTADO | CREDITO (default CONTADO)
+    private Integer creditDays;
+    private String dueDate;         // yyyy-MM-dd (opcional)
 
     private String notes;
     private List<Item> items;

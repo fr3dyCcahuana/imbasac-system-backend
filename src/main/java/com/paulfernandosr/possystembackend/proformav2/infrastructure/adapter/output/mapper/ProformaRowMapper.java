@@ -2,6 +2,7 @@ package com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.ou
 
 import com.paulfernandosr.possystembackend.proformav2.domain.Proforma;
 import com.paulfernandosr.possystembackend.proformav2.domain.model.ProformaStatus;
+import com.paulfernandosr.possystembackend.salev2.domain.model.PaymentType;
 import org.springframework.jdbc.core.RowMapper;
 
 import java.sql.ResultSet;
@@ -46,6 +47,22 @@ public class ProformaRowMapper implements RowMapper<Proforma> {
         }
         if (cols.contains("cashier_last_name")) {
             builder.cashierLastName(rs.getString("cashier_last_name"));
+        }
+
+        if (cols.contains("payment_type")) {
+            String paymentType = rs.getString("payment_type");
+            if (paymentType != null && !paymentType.isBlank()) {
+                builder.paymentType(PaymentType.valueOf(paymentType));
+            }
+        }
+        if (cols.contains("credit_days")) {
+            builder.creditDays((Integer) rs.getObject("credit_days"));
+        }
+        if (cols.contains("due_date")) {
+            java.sql.Date dueDate = rs.getDate("due_date");
+            if (dueDate != null) {
+                builder.dueDate(dueDate.toLocalDate());
+            }
         }
 
         if (cols.contains("tax_status")) {

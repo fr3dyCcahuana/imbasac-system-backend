@@ -13,6 +13,7 @@ import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.inp
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaV2Response;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.output.model.LockedDocumentSeries;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.output.model.ProductSnapshot;
+import com.paulfernandosr.possystembackend.salev2.domain.model.PaymentType;
 import com.paulfernandosr.possystembackend.salev2.domain.model.TaxStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -197,6 +198,12 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
             total = subtotalBase.setScale(4, RoundingMode.HALF_UP);
         }
 
+        PaymentType paymentType = request.getPaymentType() != null ? request.getPaymentType() : PaymentType.CONTADO;
+        Integer creditDays = paymentType == PaymentType.CREDITO ? request.getCreditDays() : null;
+        LocalDate dueDate = (paymentType == PaymentType.CREDITO && request.getDueDate() != null && !request.getDueDate().isBlank())
+                ? LocalDate.parse(request.getDueDate())
+                : null;
+
         Proforma proforma = Proforma.builder()
                 .stationId(request.getStationId())
                 .createdBy(request.getCreatedBy())
@@ -215,6 +222,9 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
                 .customerDocNumber(request.getCustomerDocNumber())
                 .customerName(request.getCustomerName())
                 .customerAddress(request.getCustomerAddress())
+                .paymentType(paymentType)
+                .creditDays(creditDays)
+                .dueDate(dueDate)
                 .notes(request.getNotes())
 
                 .subtotal(money2(subtotalBase))
@@ -244,6 +254,18 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
 
         if (request.getIgvRate() != null && request.getIgvRate().compareTo(BigDecimal.ZERO) < 0) {
             throw new InvalidProformaV2Exception("igvRate inválido");
+        }
+
+        if (request.getCreditDays() != null && request.getCreditDays() < 0) {
+            throw new InvalidProformaV2Exception("creditDays inválido");
+        }
+
+        if (request.getDueDate() != null && !request.getDueDate().isBlank()) {
+            try {
+                LocalDate.parse(request.getDueDate());
+            } catch (Exception ex) {
+                throw new InvalidProformaV2Exception("dueDate inválido. Formato esperado: yyyy-MM-dd");
+            }
         }
 
         // Normalización fiscal

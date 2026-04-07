@@ -20,6 +20,10 @@ public class ProformaV2SummaryResponse {
     private String customerDocNumber;
     private String customerName;
 
+    private String paymentType;
+    private Integer creditDays;
+    private LocalDate dueDate;
+
     private BigDecimal total;
     private String status;
 }

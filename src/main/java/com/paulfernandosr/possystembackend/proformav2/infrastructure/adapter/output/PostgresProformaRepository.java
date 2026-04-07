@@ -27,6 +27,7 @@ public class PostgresProformaRepository implements ProformaRepository {
           tax_status, igv_rate, igv_included, igv_amount,
 
           customer_id, customer_doc_type, customer_doc_number, customer_name, customer_address,
+          payment_type, credit_days, due_date,
           notes,
 
           subtotal, discount_total, total,
@@ -41,10 +42,11 @@ public class PostgresProformaRepository implements ProformaRepository {
           ?, ?, ?, ?,      -- 8-11
 
           ?, ?, ?, ?, ?,   -- 12-16
-          ?,               -- 17
+          ?, ?, ?,         -- 17-19
+          ?,               -- 20
 
-          ?, ?, ?,         -- 18-20
-          ?,               -- 21
+          ?, ?, ?,         -- 21-23
+          ?,               -- 24
 
           NOW(), NOW()
         )
@@ -73,6 +75,9 @@ public class PostgresProformaRepository implements ProformaRepository {
                         proforma.getCustomerDocNumber(),
                         proforma.getCustomerName(),
                         proforma.getCustomerAddress(),
+                        proforma.getPaymentType() != null ? proforma.getPaymentType().name() : null,
+                        proforma.getCreditDays(),
+                        proforma.getDueDate() != null ? java.sql.Date.valueOf(proforma.getDueDate()) : null,
 
                         proforma.getNotes(),
 

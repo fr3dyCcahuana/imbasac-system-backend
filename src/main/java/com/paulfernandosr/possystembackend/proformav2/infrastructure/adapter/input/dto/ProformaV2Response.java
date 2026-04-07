@@ -35,6 +35,10 @@ public class ProformaV2Response {
     private String customerName;
     private String customerAddress;
 
+    private String paymentType;
+    private Integer creditDays;
+    private String dueDate;
+
     private String notes;
 
     private BigDecimal subtotal;

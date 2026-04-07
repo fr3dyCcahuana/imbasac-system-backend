@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.proformav2.domain;
 
 import com.paulfernandosr.possystembackend.proformav2.domain.model.ProformaStatus;
+import com.paulfernandosr.possystembackend.salev2.domain.model.PaymentType;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -32,6 +33,10 @@ public class Proforma {
     private String customerAddress;
 
     private String notes;
+
+    private PaymentType paymentType;
+    private Integer creditDays;
+    private LocalDate dueDate;
 
     private BigDecimal subtotal;
     private BigDecimal discountTotal;

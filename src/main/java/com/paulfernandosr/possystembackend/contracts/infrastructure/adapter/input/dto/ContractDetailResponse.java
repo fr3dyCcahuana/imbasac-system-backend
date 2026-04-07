@@ -47,6 +47,9 @@ public class ContractDetailResponse {
     private String status;
 
     private Long saleId;
+    private String saleDocType;
+    private String saleSeries;
+    private Long saleNumber;
     private String notes;
 
     private ContractItemDetail item;

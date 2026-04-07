@@ -67,6 +67,9 @@ public class PostgresProformaV2QueryRepository implements ProformaV2QueryReposit
                 p.issue_date AS issue_date,
                 p.customer_doc_number AS customer_doc_number,
                 p.customer_name AS customer_name,
+                p.payment_type AS payment_type,
+                p.credit_days AS credit_days,
+                p.due_date AS due_date,
                 p.total AS total,
                 p.status AS status
               FROM proforma p
@@ -110,6 +113,9 @@ public class PostgresProformaV2QueryRepository implements ProformaV2QueryReposit
                 .issueDate(rs.getDate("issue_date").toLocalDate())
                 .customerDocNumber(rs.getString("customer_doc_number"))
                 .customerName(rs.getString("customer_name"))
+                .paymentType(rs.getString("payment_type"))
+                .creditDays((Integer) rs.getObject("credit_days"))
+                .dueDate(rs.getDate("due_date") != null ? rs.getDate("due_date").toLocalDate() : null)
                 .total(rs.getBigDecimal("total"))
                 .status(rs.getString("status"))
                 .build();

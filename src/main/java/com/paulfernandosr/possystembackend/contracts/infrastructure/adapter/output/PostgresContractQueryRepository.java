@@ -32,6 +32,7 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
         sb.append("""
             SELECT COUNT(*)
               FROM contract c
+              LEFT JOIN sale s ON s.id = c.sale_id
               LEFT JOIN contract_item ci ON ci.contract_id = c.id
               LEFT JOIN product_serial_unit psu ON psu.id = ci.serial_unit_id
              WHERE (
@@ -72,10 +73,14 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
                    c.total_amount AS totalAmount,
                    c.status,
                    c.sale_id AS saleId,
+                   s.doc_type AS saleDocType,
+                   s.series AS saleSeries,
+                   s.number AS saleNumber,
                    ci.sku,
                    ci.description,
                    psu.vin
               FROM contract c
+              LEFT JOIN sale s ON s.id = c.sale_id
               LEFT JOIN contract_item ci ON ci.contract_id = c.id
               LEFT JOIN product_serial_unit psu ON psu.id = ci.serial_unit_id
              WHERE (
@@ -106,33 +111,37 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
     @Override
     public ContractDetailResponse findDetail(Long contractId) {
         String sql = """
-            SELECT id AS contractId,
-                   station_id AS stationId,
-                   created_by AS createdBy,
-                   series,
-                   number,
-                   issue_date AS issueDate,
-                   currency,
-                   exchange_rate AS exchangeRate,
-                   price_list AS priceList,
-                   customer_id AS customerId,
-                   customer_doc_type AS customerDocType,
-                   customer_doc_number AS customerDocNumber,
-                   customer_name AS customerName,
-                   customer_address AS customerAddress,
-                   payment_type AS paymentType,
-                   cash_price AS cashPrice,
-                   interest_rate_monthly AS interestRateMonthly,
-                   installments,
-                   initial_amount AS initialAmount,
-                   financed_amount AS financedAmount,
-                   interest_amount AS interestAmount,
-                   total_amount AS totalAmount,
-                   status,
-                   sale_id AS saleId,
-                   notes
-              FROM contract
-             WHERE id = ?
+            SELECT c.id AS contractId,
+                   c.station_id AS stationId,
+                   c.created_by AS createdBy,
+                   c.series,
+                   c.number,
+                   c.issue_date AS issueDate,
+                   c.currency,
+                   c.exchange_rate AS exchangeRate,
+                   c.price_list AS priceList,
+                   c.customer_id AS customerId,
+                   c.customer_doc_type AS customerDocType,
+                   c.customer_doc_number AS customerDocNumber,
+                   c.customer_name AS customerName,
+                   c.customer_address AS customerAddress,
+                   c.payment_type AS paymentType,
+                   c.cash_price AS cashPrice,
+                   c.interest_rate_monthly AS interestRateMonthly,
+                   c.installments,
+                   c.initial_amount AS initialAmount,
+                   c.financed_amount AS financedAmount,
+                   c.interest_amount AS interestAmount,
+                   c.total_amount AS totalAmount,
+                   c.status,
+                   c.sale_id AS saleId,
+                   s.doc_type AS saleDocType,
+                   s.series AS saleSeries,
+                   s.number AS saleNumber,
+                   c.notes
+              FROM contract c
+              LEFT JOIN sale s ON s.id = c.sale_id
+             WHERE c.id = ?
         """;
 
         ContractDetailResponse header = jdbcClient.sql(sql)

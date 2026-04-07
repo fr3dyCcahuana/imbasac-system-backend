@@ -42,7 +42,6 @@ public class ConvertProformaToSaleV2Service implements ConvertProformaToSaleV2Us
         if (request == null) throw new InvalidProformaV2Exception("Request requerido");
         if (request.getDocType() == null) throw new InvalidProformaV2Exception("docType requerido");
         if (request.getSeries() == null || request.getSeries().isBlank()) throw new InvalidProformaV2Exception("series requerido");
-        if (request.getPaymentType() == null) throw new InvalidProformaV2Exception("paymentType requerido");
 
         Proforma p = proformaRepository.lockById(proformaId)
                 .orElseThrow(() -> new InvalidProformaV2Exception("Proforma no encontrada: " + proformaId));
@@ -84,6 +83,23 @@ public class ConvertProformaToSaleV2Service implements ConvertProformaToSaleV2Us
         // ✅ Validación de seriales: solo MOTOR/MOTOCICLETAS con manage_by_serial=true requieren IDs
         validateSerials(items, serialsByLine);
 
+        PaymentType paymentType = request.getPaymentType() != null
+                ? request.getPaymentType()
+                : (p.getPaymentType() != null ? p.getPaymentType() : PaymentType.CONTADO);
+
+        Integer creditDays = paymentType == PaymentType.CREDITO
+                ? (request.getCreditDays() != null ? request.getCreditDays() : p.getCreditDays())
+                : null;
+
+        LocalDate dueDate = null;
+        if (paymentType == PaymentType.CREDITO) {
+            if (request.getDueDate() != null && !request.getDueDate().isBlank()) {
+                dueDate = LocalDate.parse(request.getDueDate());
+            } else {
+                dueDate = p.getDueDate();
+            }
+        }
+
         SaleV2CreateRequest saleReq = SaleV2CreateRequest.builder()
                 .stationId(p.getStationId())
                 .docType(request.getDocType())
@@ -101,16 +117,16 @@ public class ConvertProformaToSaleV2Service implements ConvertProformaToSaleV2Us
                 .taxReason(null)
                 .igvRate(igvRate)
                 .igvIncluded(igvIncluded)
-                .paymentType(request.getPaymentType())
-                .creditDays(request.getCreditDays())
-                .dueDate(request.getDueDate() != null && !request.getDueDate().isBlank() ? LocalDate.parse(request.getDueDate()) : null)
+                .paymentType(paymentType)
+                .creditDays(creditDays)
+                .dueDate(dueDate)
                 .notes(p.getNotes())
                 .items(mapItems(items, serialsByLine, request.getDocType()))
                 .payment(null)
                 .build();
 
         // Pago CONTADO: se requiere method
-        if (request.getPaymentType() == PaymentType.CONTADO) {
+        if (paymentType == PaymentType.CONTADO) {
             PaymentMethod method = request.getMethod() != null ? request.getMethod() : PaymentMethod.EFECTIVO;
             saleReq.setPayment(SaleV2CreateRequest.Payment.builder().method(method).build());
         }
