@@ -12,9 +12,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 
 @Slf4j
 @RestControllerAdvice
@@ -75,5 +79,14 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.internalServerError()
                 .body(ErrorResponse.internalServerError(exception));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", 413);
+        body.put("error", "El archivo supera el tamaño máximo permitido para la carga.");
+        body.put("timestamp", LocalDateTime.now());
+        return ResponseEntity.status(413).body(body);
     }
 }

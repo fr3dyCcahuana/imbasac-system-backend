@@ -10,7 +10,11 @@ spring:
       host: localhost
       port: 6379
       timeout: 10000
-
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+      file-size-threshold: 2MB
 server:
   port: 8091
   address: 0.0.0.0
@@ -100,3 +104,6 @@ app:
   files:
     products-images-dir: src/main/resources/static/images/products
     products-images-base-url: http://localhost:8091/images/products
+
+    manual-pdfs-dir: ./storage/manual-pdfs
+    manual-pdfs-base-url: http://localhost:8091
