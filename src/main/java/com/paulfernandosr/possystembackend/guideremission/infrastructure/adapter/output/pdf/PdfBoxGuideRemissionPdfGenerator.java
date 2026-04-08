@@ -278,10 +278,31 @@ public class PdfBoxGuideRemissionPdfGenerator implements GuideRemissionPdfGenera
 
     private List<FieldRow> buildTransferRows(GuideRemissionDocument document) {
         List<FieldRow> rows = new ArrayList<>();
+        boolean isPrivateTransport = "02".equals(safe(document.getTransferModeCode()));
+
         rows.add(new FieldRow(List.of(new FieldCell("Motivo de traslado", transferReason(document.getTransferReasonCode())))));
         rows.add(new FieldRow(List.of(new FieldCell("Modalidad", transferMode(document.getTransferModeCode())))));
         rows.add(new FieldRow(List.of(new FieldCell("Transportista", resolveTransportDisplay(document)))));
         rows.add(new FieldRow(List.of(new FieldCell("Doc. transportista", resolveTransportDocument(document)))));
+
+        if (isPrivateTransport) {
+            if (notBlank(document.getVehiclePlate()) || notBlank(document.getDriverDni())) {
+                rows.add(new FieldRow(List.of(
+                        new FieldCell("Placa", firstNotBlank(document.getVehiclePlate(), "-")),
+                        new FieldCell("DNI conductor", firstNotBlank(document.getDriverDni(), "-"))
+                )));
+            }
+
+            if (notBlank(document.getDriverLicense())) {
+                rows.add(new FieldRow(List.of(new FieldCell("Licencia", safe(document.getDriverLicense())))));
+            }
+
+            if (notBlank(document.getDriverFullName())) {
+                rows.add(new FieldRow(List.of(new FieldCell("Conductor", safe(document.getDriverFullName())))));
+            }
+
+            return rows;
+        }
 
         if (notBlank(document.getVehiclePlate()) || notBlank(document.getDriverDni()) || notBlank(document.getDriverLicense())) {
             rows.add(new FieldRow(List.of(
