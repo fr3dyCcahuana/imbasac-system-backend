@@ -51,9 +51,6 @@ public class MtcCaptchaService {
             log.info("[mtc][init] navegación completa. sessionId={}, currentUrl={}", sessionId, page.url());
 
             debugSupport.logSelectors(page, sessionId, "after-navigate");
-            debugSupport.logSelectors(page, sessionId, "before-captcha-check");
-            debugSupport.dumpPageState(page, sessionId, "captcha-not-found");
-            debugSupport.dumpPageState(page, sessionId, "init-error");
 
             page.locator("#pnlBusqNroDoc").first().waitFor();
             page.locator("#pnlCaptcha").first().waitFor();

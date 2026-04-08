@@ -3,6 +3,7 @@ package com.paulfernandosr.possystembackend.manualpdf.infrastructure.adapter.out
 import com.paulfernandosr.possystembackend.manualpdf.domain.ManualPdfDocument;
 import com.paulfernandosr.possystembackend.manualpdf.domain.ManualPdfFamily;
 import com.paulfernandosr.possystembackend.manualpdf.domain.ManualPdfModel;
+import com.paulfernandosr.possystembackend.manualpdf.domain.ManualPdfModelStorageContext;
 import com.paulfernandosr.possystembackend.manualpdf.domain.port.output.ManualPdfRepository;
 import com.paulfernandosr.possystembackend.manualpdf.infrastructure.adapter.output.mapper.ManualPdfDocumentRowMapper;
 import com.paulfernandosr.possystembackend.manualpdf.infrastructure.adapter.output.mapper.ManualPdfFamilyRowMapper;
@@ -38,19 +39,19 @@ public class PostgresManualPdfRepository implements ManualPdfRepository {
     @Override
     public List<ManualPdfFamily> findFamiliesByYear(int year) {
         String sql = """
-            select x.id, x.code, x.name
-            from (
-                select distinct f.id, f.code, f.name, f.sort_order
-                from manual_pdf_document d
-                join manual_pdf_model m on m.id = d.model_id
-                join manual_pdf_family f on f.id = m.family_id
-                where d.enabled = true
-                  and m.enabled = true
-                  and f.enabled = true
-                  and :year between d.year_from and d.year_to
-            ) x
-            order by x.sort_order, x.name
-            """;
+                select x.id, x.code, x.name
+                from (
+                    select distinct f.id, f.code, f.name, f.sort_order
+                    from manual_pdf_document d
+                    join manual_pdf_model m on m.id = d.model_id
+                    join manual_pdf_family f on f.id = m.family_id
+                    where d.enabled = true
+                      and m.enabled = true
+                      and f.enabled = true
+                      and :year between d.year_from and d.year_to
+                ) x
+                order by x.sort_order, x.name
+                """;
 
         return jdbcClient.sql(sql)
                 .param("year", year)
@@ -61,18 +62,18 @@ public class PostgresManualPdfRepository implements ManualPdfRepository {
     @Override
     public List<ManualPdfModel> findModelsByYearAndFamily(int year, Long familyId) {
         String sql = """
-            select x.id, x.family_id, x.code, x.name
-            from (
-                select distinct m.id, m.family_id, m.code, m.name, m.sort_order
-                from manual_pdf_document d
-                join manual_pdf_model m on m.id = d.model_id
-                where d.enabled = true
-                  and m.enabled = true
-                  and m.family_id = :familyId
-                  and :year between d.year_from and d.year_to
-            ) x
-            order by x.sort_order, x.name
-            """;
+                select x.id, x.family_id, x.code, x.name
+                from (
+                    select distinct m.id, m.family_id, m.code, m.name, m.sort_order
+                    from manual_pdf_document d
+                    join manual_pdf_model m on m.id = d.model_id
+                    where d.enabled = true
+                      and m.enabled = true
+                      and m.family_id = :familyId
+                      and :year between d.year_from and d.year_to
+                ) x
+                order by x.sort_order, x.name
+                """;
 
         return jdbcClient.sql(sql)
                 .param("year", year)
@@ -91,7 +92,10 @@ public class PostgresManualPdfRepository implements ManualPdfRepository {
                   and d.model_id = :modelId
                   and :year between d.year_from and d.year_to
                 order by
-                    case when d.year_from = :year and d.year_to = :year then 0 else 1 end,
+                    case
+                        when d.year_from = :year and d.year_to = :year then 0
+                        else 1
+                    end,
                     (d.year_to - d.year_from) asc,
                     d.updated_at desc,
                     d.id desc
@@ -122,15 +126,83 @@ public class PostgresManualPdfRepository implements ManualPdfRepository {
     }
 
     @Override
-    public ManualPdfFamily upsertFamily(String code, String name, Integer sortOrder) {
+    public Optional<ManualPdfModelStorageContext> findModelStorageContextById(Long modelId) {
+        String sql = """
+                select m.id as model_id,
+                       m.family_id,
+                       f.code as family_code,
+                       f.name as family_name,
+                       m.code as model_code,
+                       m.name as model_name,
+                       f.enabled as family_enabled,
+                       m.enabled as model_enabled
+                from manual_pdf_model m
+                join manual_pdf_family f on f.id = m.family_id
+                where m.id = :modelId
+                """;
+
+        return jdbcClient.sql(sql)
+                .param("modelId", modelId)
+                .query((rs, rowNum) -> new ManualPdfModelStorageContext(
+                        rs.getLong("model_id"),
+                        rs.getLong("family_id"),
+                        rs.getString("family_code"),
+                        rs.getString("family_name"),
+                        rs.getString("model_code"),
+                        rs.getString("model_name"),
+                        rs.getBoolean("family_enabled"),
+                        rs.getBoolean("model_enabled")
+                ))
+                .optional();
+    }
+
+    @Override
+    public boolean existsOverlappingDocument(Long modelId, Integer yearFrom, Integer yearTo) {
+        String sql = """
+                select exists(
+                    select 1
+                    from manual_pdf_document d
+                    where d.model_id = :modelId
+                      and d.enabled = true
+                      and d.year_from <= :yearTo
+                      and d.year_to >= :yearFrom
+                )
+                """;
+
+        return Boolean.TRUE.equals(jdbcClient.sql(sql)
+                .param("modelId", modelId)
+                .param("yearFrom", yearFrom)
+                .param("yearTo", yearTo)
+                .query(Boolean.class)
+                .single());
+    }
+
+    @Override
+    public boolean familyExists(Long familyId) {
+        String sql = """
+                select exists(
+                    select 1
+                    from manual_pdf_family
+                    where id = :familyId
+                )
+                """;
+
+        return Boolean.TRUE.equals(jdbcClient.sql(sql)
+                .param("familyId", familyId)
+                .query(Boolean.class)
+                .single());
+    }
+
+    @Override
+    public ManualPdfFamily upsertFamily(String code, String name, Integer sortOrder, Boolean enabled) {
         String sql = """
                 insert into manual_pdf_family (code, name, sort_order, enabled)
-                values (:code, :name, :sortOrder, true)
+                values (:code, :name, :sortOrder, :enabled)
                 on conflict (code)
                 do update set
                     name = excluded.name,
                     sort_order = excluded.sort_order,
-                    enabled = true,
+                    enabled = excluded.enabled,
                     updated_at = now()
                 returning id, code, name
                 """;
@@ -139,20 +211,21 @@ public class PostgresManualPdfRepository implements ManualPdfRepository {
                 .param("code", code)
                 .param("name", name)
                 .param("sortOrder", sortOrder != null ? sortOrder : 0)
+                .param("enabled", enabled == null || enabled)
                 .query(new ManualPdfFamilyRowMapper())
                 .single();
     }
 
     @Override
-    public ManualPdfModel upsertModel(Long familyId, String code, String name, Integer sortOrder) {
+    public ManualPdfModel upsertModel(Long familyId, String code, String name, Integer sortOrder, Boolean enabled) {
         String sql = """
                 insert into manual_pdf_model (family_id, code, name, sort_order, enabled)
-                values (:familyId, :code, :name, :sortOrder, true)
+                values (:familyId, :code, :name, :sortOrder, :enabled)
                 on conflict (family_id, code)
                 do update set
                     name = excluded.name,
                     sort_order = excluded.sort_order,
-                    enabled = true,
+                    enabled = excluded.enabled,
                     updated_at = now()
                 returning id, family_id, code, name
                 """;
@@ -162,6 +235,7 @@ public class PostgresManualPdfRepository implements ManualPdfRepository {
                 .param("code", code)
                 .param("name", name)
                 .param("sortOrder", sortOrder != null ? sortOrder : 0)
+                .param("enabled", enabled == null || enabled)
                 .query(new ManualPdfModelRowMapper())
                 .single();
     }

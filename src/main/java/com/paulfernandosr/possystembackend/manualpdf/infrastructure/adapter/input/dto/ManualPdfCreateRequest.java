@@ -1,6 +1,5 @@
 package com.paulfernandosr.possystembackend.manualpdf.infrastructure.adapter.input.dto;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
@@ -13,19 +12,8 @@ public class ManualPdfCreateRequest {
     @NotNull(message = "El archivo PDF es obligatorio.")
     private MultipartFile file;
 
-    private String familyCode;
-
-    @NotBlank(message = "familyName es obligatorio.")
-    private String familyName;
-
-    private Integer familySortOrder = 0;
-
-    private String modelCode;
-
-    @NotBlank(message = "modelName es obligatorio.")
-    private String modelName;
-
-    private Integer modelSortOrder = 0;
+    @NotNull(message = "modelId es obligatorio.")
+    private Long modelId;
 
     private String title;
 

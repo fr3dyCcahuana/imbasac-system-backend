@@ -1,11 +1,11 @@
 package com.paulfernandosr.possystembackend.driverlicense.infrastructure.mtc;
 
+import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.paulfernandosr.possystembackend.driverlicense.domain.DriverLicenseGateway;
 import com.paulfernandosr.possystembackend.driverlicense.domain.DriverLicenseQuery;
 import com.paulfernandosr.possystembackend.driverlicense.domain.DriverLicenseResult;
 import com.paulfernandosr.possystembackend.driverlicense.domain.DriverLicenseStatus;
-import com.paulfernandosr.possystembackend.driverlicense.infrastructure.config.MtcLicenseProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -24,14 +24,11 @@ public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
 
     private final MtcCaptchaService captchaService;
     private final MtcDebugSupport debugSupport;
-    private final MtcLicenseProperties properties;
 
     public MtcPlaywrightDriverLicenseGateway(MtcCaptchaService captchaService,
-                                             MtcDebugSupport debugSupport,
-                                             MtcLicenseProperties properties) {
+                                             MtcDebugSupport debugSupport) {
         this.captchaService = captchaService;
         this.debugSupport = debugSupport;
-        this.properties = properties;
     }
 
     @Override
@@ -54,9 +51,7 @@ public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
             return DriverLicenseResult.error("La página del MTC ya fue cerrada. Genera un nuevo captcha.");
         }
 
-        if (properties.isNetworkLogEnabled()) {
-            attachNetworkLogging(page, query.sessionId());
-        }
+        attachNetworkLogging(page, query.sessionId());
 
         try {
             debugSupport.logSelectors(page, query.sessionId(), "before-fill");
@@ -96,6 +91,7 @@ public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
 
             String body = safeBody(page);
             String bodyUpper = body.toUpperCase(Locale.ROOT);
+            ControlledModalError controlledError = detectControlledError(page, bodyUpper);
 
             debugSupport.logFormState(page, query.sessionId(), "after-submit");
             debugSupport.logBodySummary(page, query.sessionId(), "after-submit");
@@ -103,29 +99,28 @@ public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
             log.info("[mtc][check] body leído. sessionId={}, bodyLength={}",
                     query.sessionId(), body.length());
 
-            log.info("[mtc][check] flags. sessionId={}, hasMainResult={}, hasCaptchaError={}, hasNotFound={}",
+            boolean hasMainResult = hasMainResult(bodyUpper);
+            boolean hasNotFound = hasNotFoundMessage(bodyUpper);
+
+            log.info("[mtc][check] flags. sessionId={}, hasMainResult={}, hasControlledError={}, controlledErrorCode={}, hasNotFound={}",
                     query.sessionId(),
-                    hasMainResult(bodyUpper),
-                    isCaptchaError(bodyUpper),
-                    hasNotFoundMessage(bodyUpper));
+                    hasMainResult,
+                    controlledError != null,
+                    controlledError == null ? null : controlledError.errorCode(),
+                    hasNotFound);
 
-            if (isCaptchaError(bodyUpper)) {
-                debugSupport.dumpPageState(page, query.sessionId(), "captcha-error");
-                captchaService.destroySession(query.sessionId());
-                return DriverLicenseResult.error("Captcha incorrecto.");
-            }
-
-            if (bodyUpper.contains("INGRESE NÚMERO DE DOCUMENTO") || bodyUpper.contains("INGRESE NUMERO DE DOCUMENTO")) {
-                debugSupport.dumpPageState(page, query.sessionId(), "missing-document");
-                captchaService.destroySession(query.sessionId());
-                return DriverLicenseResult.error("El MTC respondió que falta ingresar el número de documento.");
-            }
-
-            if (hasMainResult(bodyUpper)) {
+            if (hasMainResult) {
                 DriverLicenseResult result = buildSuccessResult(query, page, body);
                 debugSupport.dumpPageState(page, query.sessionId(), "success-result");
                 captchaService.destroySession(query.sessionId());
                 return result;
+            }
+
+            if (controlledError != null) {
+                debugSupport.dumpPageState(page, query.sessionId(), "controlled-error-" + controlledError.errorCode());
+                dismissModalIfPresent(page, query.sessionId());
+                captchaService.destroySession(query.sessionId());
+                return toControlledResult(query, controlledError);
             }
 
             if (hasNotFoundMessage(bodyUpper)) {
@@ -147,6 +142,24 @@ public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
             captchaService.destroySession(query.sessionId());
             return DriverLicenseResult.error("Error Playwright/MTC: " + e.getMessage());
         }
+    }
+
+    private DriverLicenseResult toControlledResult(DriverLicenseQuery query, ControlledModalError controlledError) {
+        if (controlledError.status() == DriverLicenseStatus.CAPTCHA_INVALIDO) {
+            return DriverLicenseResult.captchaInvalid(
+                    controlledError.message(),
+                    query.documentType(),
+                    query.documentNumber()
+            );
+        }
+
+        return DriverLicenseResult.controlledError(
+                controlledError.message(),
+                query.documentType(),
+                query.documentNumber(),
+                controlledError.errorCode(),
+                controlledError.captchaRequired()
+        );
     }
 
     private void attachNetworkLogging(Page page, String sessionId) {
@@ -171,19 +184,18 @@ public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
 
             String body = safeBody(page);
             String bodyUpper = body.toUpperCase(Locale.ROOT);
+            ControlledModalError controlledError = detectControlledError(page, bodyUpper);
 
             boolean changed = body.length() != bodyBeforeLength;
-
             boolean hasMain = hasMainResult(bodyUpper);
-            boolean hasCaptcha = isCaptchaError(bodyUpper);
+            boolean hasControlled = controlledError != null;
             boolean hasNotFound = hasNotFoundMessage(bodyUpper);
-            boolean hasMissingDocModal = bodyUpper.contains("INGRESE NÚMERO DE DOCUMENTO")
-                    || bodyUpper.contains("INGRESE NUMERO DE DOCUMENTO");
 
-            log.info("[mtc][check] wait loop. sessionId={}, attempt={}, bodyLength={}, changed={}, hasMainResult={}, hasCaptchaError={}, hasNotFound={}, hasMissingDocModal={}",
-                    sessionId, i, body.length(), changed, hasMain, hasCaptcha, hasNotFound, hasMissingDocModal);
+            log.info("[mtc][check] wait loop. sessionId={}, attempt={}, bodyLength={}, changed={}, hasMainResult={}, hasControlledError={}, controlledErrorCode={}, hasNotFound={}",
+                    sessionId, i, body.length(), changed, hasMain, hasControlled,
+                    controlledError == null ? null : controlledError.errorCode(), hasNotFound);
 
-            if (hasMain || hasCaptcha || hasNotFound || hasMissingDocModal || changed) {
+            if (hasMain || hasControlled || hasNotFound || changed) {
                 break;
             }
         }
@@ -192,20 +204,20 @@ public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
     }
 
     private DriverLicenseResult buildSuccessResult(DriverLicenseQuery query, Page page, String body) {
-        String fullName = extractLineValue(body, "CONSULTA DEL ADMINISTRADO");
+        String fullName = sanitizeFieldValue(extractLineValue(body, "CONSULTA DEL ADMINISTRADO"));
         String documentNumber = firstNonBlank(
-                extractLineValue(body, "NRO. DE DOCUMENTO DE IDENTIDAD"),
+                sanitizeFieldValue(extractLineValue(body, "NRO. DE DOCUMENTO DE IDENTIDAD")),
                 query.documentNumber()
         );
-        String licenseNumber = extractLineValue(body, "NRO. DE LICENCIA");
-        String category = extractLineValue(body, "CLASE Y CATEGORIA");
-        String validUntil = extractLineValue(body, "VIGENTE HASTA");
-        String licenseStatusText = extractLineValue(body, "ESTADO DE LA LICENCIA");
-        String verySeriousFaults = extractLineValue(body, "MUY GRAVE(S)");
-        String seriousFaults = extractLineValue(body, "GRAVE(S)");
-        String accumulatedPoints = extractLineValue(body, "SUS PUNTOS FIRMES ACUMULADOS SON");
-        String remainingPointsToMax = extractRemainingPoints(body);
-        String accumulatedInfractions = extractLineValue(body, "INFRACCIONES ACUMULADAS");
+        String licenseNumber = sanitizeFieldValue(extractLineValue(body, "NRO. DE LICENCIA"));
+        String category = sanitizeFieldValue(extractLineValue(body, "CLASE Y CATEGORIA"));
+        String validUntil = sanitizeFieldValue(extractLineValue(body, "VIGENTE HASTA"));
+        String licenseStatusText = sanitizeFieldValue(extractLineValue(body, "ESTADO DE LA LICENCIA"));
+        String verySeriousFaults = sanitizeFieldValue(extractLineValue(body, "MUY GRAVE(S)"));
+        String seriousFaults = sanitizeFieldValue(extractLineValue(body, "GRAVE(S)"));
+        String accumulatedPoints = sanitizeFieldValue(extractLineValue(body, "SUS PUNTOS FIRMES ACUMULADOS SON"));
+        String remainingPointsToMax = sanitizeFieldValue(extractRemainingPoints(body));
+        String accumulatedInfractions = sanitizeFieldValue(extractLineValue(body, "INFRACCIONES ACUMULADAS"));
 
         List<String> procedures = extractTableRows(page, "#gbtramite");
         List<String> infractions = extractInfractionsTable(page);
@@ -213,10 +225,15 @@ public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
         log.info("[mtc][check] parse success. sessionId={}, fullName={}, licenseNumber={}, category={}, validUntil={}, status={}",
                 query.sessionId(), fullName, licenseNumber, category, validUntil, licenseStatusText);
 
+        DriverLicenseStatus resolvedStatus = mapStatus(licenseStatusText);
+        String resolvedMessage = resolvedStatus == DriverLicenseStatus.SIN_LICENCIA
+                ? "La persona consultada no registra licencia."
+                : "Consulta realizada correctamente.";
+
         return new DriverLicenseResult(
                 true,
-                mapStatus(licenseStatusText),
-                "Consulta realizada correctamente.",
+                resolvedStatus,
+                resolvedMessage,
                 fullName,
                 query.documentType(),
                 documentNumber,
@@ -231,6 +248,8 @@ public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
                 infractions,
                 procedures,
                 "MTC_WEB",
+                false,
+                null,
                 false
         );
     }
@@ -258,11 +277,137 @@ public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
                 || bodyUpper.contains("NO SE ENCONTRO INFORMACION");
     }
 
-    private boolean isCaptchaError(String bodyUpper) {
-        return bodyUpper.contains("CAPTCHA INCORRECTO")
-                || bodyUpper.contains("INGRESE CORRECTAMENTE EL CAPTCHA")
-                || bodyUpper.contains("CODIGO CAPTCHA INCORRECTO")
-                || (bodyUpper.contains("CAPTCHA") && bodyUpper.contains("INCORRECT"));
+    private ControlledModalError detectControlledError(Page page, String bodyUpper) {
+        String modalMessage = extractModalMessage(page);
+        String modalUpper = modalMessage == null ? null : modalMessage.toUpperCase(Locale.ROOT);
+
+        if (containsCaptchaError(bodyUpper) || containsCaptchaError(modalUpper)) {
+            String rawMessage = StringUtils.hasText(modalMessage)
+                    ? modalMessage
+                    : "El código captcha no coincide con la imagen. Genera un nuevo captcha e inténtalo nuevamente.";
+            return new ControlledModalError(
+                    DriverLicenseStatus.CAPTCHA_INVALIDO,
+                    buildFriendlyControlledMessage(rawMessage),
+                    "MTC_CAPTCHA_INVALIDO",
+                    true
+            );
+        }
+
+        if (containsMissingDocumentError(bodyUpper) || containsMissingDocumentError(modalUpper)) {
+            String rawMessage = StringUtils.hasText(modalMessage)
+                    ? modalMessage
+                    : "Ingrese número de documento.";
+            return new ControlledModalError(
+                    DriverLicenseStatus.ERROR_CONTROLADO,
+                    buildFriendlyControlledMessage(rawMessage),
+                    resolveControlledErrorCode(rawMessage),
+                    false
+            );
+        }
+
+        if (StringUtils.hasText(modalMessage)) {
+            String friendlyMessage = buildFriendlyControlledMessage(modalMessage);
+            if (!StringUtils.hasText(friendlyMessage)
+                    || "Aceptar".equalsIgnoreCase(friendlyMessage)
+                    || "OK".equalsIgnoreCase(friendlyMessage)) {
+                return null;
+            }
+            return new ControlledModalError(
+                    DriverLicenseStatus.ERROR_CONTROLADO,
+                    friendlyMessage,
+                    resolveControlledErrorCode(modalMessage),
+                    false
+            );
+        }
+
+        return null;
+    }
+
+    private boolean containsCaptchaError(String value) {
+        if (!StringUtils.hasText(value)) {
+            return false;
+        }
+        return value.contains("CAPTCHA INCORRECTO")
+                || value.contains("INGRESE CORRECTAMENTE EL CAPTCHA")
+                || value.contains("CODIGO CAPTCHA INCORRECTO")
+                || value.contains("CÓDIGO CAPTCHA INCORRECTO")
+                || value.contains("EL CODIGO CAPTCHA NO COINCIDE CON LA IMAGEN")
+                || value.contains("EL CÓDIGO CAPTCHA NO COINCIDE CON LA IMAGEN")
+                || (value.contains("CAPTCHA") && value.contains("INCORRECT"))
+                || (value.contains("CAPTCHA") && value.contains("NO COINCIDE"));
+    }
+
+    private boolean containsMissingDocumentError(String value) {
+        if (!StringUtils.hasText(value)) {
+            return false;
+        }
+        return value.contains("INGRESE NÚMERO DE DOCUMENTO")
+                || value.contains("INGRESE NUMERO DE DOCUMENTO")
+                || value.contains("INGRESE EL NÚMERO DE DOCUMENTO")
+                || value.contains("INGRESE EL NUMERO DE DOCUMENTO");
+    }
+
+    private String extractModalMessage(Page page) {
+        try {
+            Locator modalBodies = page.locator(".modal-body, .bootbox-body, .swal2-html-container");
+            int count = modalBodies.count();
+            for (int i = 0; i < count; i++) {
+                Locator modal = modalBodies.nth(i);
+                try {
+                    if (!modal.isVisible()) {
+                        continue;
+                    }
+                } catch (Exception ignored) {
+                    continue;
+                }
+
+                String text = modal.innerText();
+                if (text != null) {
+                    text = text
+                            .replace(' ', ' ')
+                            .replaceAll("(?i)\baceptar\b", "")
+                            .replaceAll("(?i)\bok\b", "")
+                            .replaceAll("\\s+", " ")
+                            .trim();
+                }
+                if (StringUtils.hasText(text)) {
+                    return text;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[mtc][check] no se pudo leer mensaje modal. error={}", e.getMessage());
+        }
+        return null;
+    }
+
+    private void dismissModalIfPresent(Page page, String sessionId) {
+        try {
+            Locator buttons = page.locator(".modal-footer button, .bootbox .btn, .swal2-confirm, button");
+            int count = buttons.count();
+            for (int i = 0; i < count; i++) {
+                Locator button = buttons.nth(i);
+                try {
+                    if (!button.isVisible()) {
+                        continue;
+                    }
+                } catch (Exception ignored) {
+                    continue;
+                }
+                String text = button.innerText();
+                if (text == null) {
+                    continue;
+                }
+                String upper = text.trim().toUpperCase(Locale.ROOT);
+                if ("ACEPTAR".equals(upper) || "OK".equals(upper)) {
+                    button.click(new Locator.ClickOptions().setTimeout(1500));
+                    log.info("[mtc][check] modal controlado cerrado. sessionId={}", sessionId);
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[mtc][check] no se pudo cerrar el modal controlado. sessionId={}, error={}",
+                    sessionId, e.getMessage());
+        }
     }
 
     private String mapDocumentType(String documentType) {
@@ -283,6 +428,7 @@ public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
 
         String value = raw.toUpperCase(Locale.ROOT);
 
+        if (value.contains("SIN LICENCIA")) return DriverLicenseStatus.SIN_LICENCIA;
         if (value.contains("VIGENTE")) return DriverLicenseStatus.VIGENTE;
         if (value.contains("VENC")) return DriverLicenseStatus.VENCIDA;
         if (value.contains("SUSP")) return DriverLicenseStatus.SUSPENDIDA;
@@ -292,10 +438,74 @@ public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
     }
 
     private String extractLineValue(String text, String label) {
-        String normalized = text.replace("\r", "");
-        Pattern pattern = Pattern.compile(Pattern.quote(label) + "\\s*:?\\s*(.+)");
-        Matcher matcher = pattern.matcher(normalized);
+        if (!StringUtils.hasText(text) || !StringUtils.hasText(label)) {
+            return null;
+        }
+
+        String[] lines = text.split("\n");
+        String normalizedLabel = normalizeLabel(label);
+
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i] == null ? "" : lines[i].replace(' ', ' ').trim();
+            if (!StringUtils.hasText(line)) {
+                continue;
+            }
+
+            String normalizedLine = normalizeLabel(line);
+            if (normalizedLine.startsWith(normalizedLabel)) {
+                int colonIndex = line.indexOf(':');
+                if (colonIndex >= 0 && colonIndex + 1 < line.length()) {
+                    return line.substring(colonIndex + 1).trim();
+                }
+
+                if (i + 1 < lines.length) {
+                    String nextLine = lines[i + 1] == null ? "" : lines[i + 1].replace(' ', ' ').trim();
+                    if (StringUtils.hasText(nextLine)) {
+                        return nextLine;
+                    }
+                }
+            }
+        }
+
+        Pattern pattern = Pattern.compile("(?im)^\\s*" + flexibleLabelPattern(label) + "\\s*:?\\s*(.+?)\\s*$");
+        Matcher matcher = pattern.matcher(text);
         return matcher.find() ? matcher.group(1).trim() : null;
+    }
+
+    private String normalizeLabel(String value) {
+        if (value == null) {
+            return "";
+        }
+        return java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .replaceAll("[^A-Za-z0-9]", "")
+                .toUpperCase(Locale.ROOT);
+    }
+
+    private String flexibleLabelPattern(String label) {
+        String[] tokens = label.trim().split("\\s+");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < tokens.length; i++) {
+            if (i > 0) {
+                sb.append("\\s*");
+            }
+            sb.append(Pattern.quote(tokens[i]));
+        }
+        return sb.toString();
+    }
+
+    private String sanitizeFieldValue(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        String cleaned = value.replace(' ', ' ').replaceAll("\\s+", " ").trim();
+        if (!StringUtils.hasText(cleaned)) {
+            return null;
+        }
+        if ("-".equals(cleaned) || "--".equals(cleaned) || "SIN DATO".equalsIgnoreCase(cleaned)) {
+            return null;
+        }
+        return cleaned;
     }
 
     private String extractRemainingPoints(String body) {
@@ -363,5 +573,97 @@ public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
         }
 
         return result;
+    }
+
+    private record ControlledModalError(
+            DriverLicenseStatus status,
+            String message,
+            String errorCode,
+            boolean captchaRequired
+    ) {
+    }
+
+    private String buildFriendlyControlledMessage(String rawText) {
+        String normalizedKey = normalizeModalKey(rawText);
+
+        if (normalizedKey.contains("elcodigocaptchanocoincideconlaimagen")) {
+            return "El código captcha no coincide con la imagen.";
+        }
+
+        if (normalizedKey.contains("ingresenumerodedocumento")) {
+            return "Ingrese número de documento.";
+        }
+
+        if (normalizedKey.contains("elnumerodedocumentodeidentidaddebeserde8caracteresnumericos")) {
+            return "El número de documento de identidad debe ser de 8 caracteres numéricos.";
+        }
+
+        if (normalizedKey.contains("elnumerodedocumentodebeserde8caracteresnumericos")) {
+            return "El número de documento debe ser de 8 caracteres numéricos.";
+        }
+
+        if (normalizedKey.contains("seleccioneeltipodedocumento")) {
+            return "Seleccione el tipo de documento.";
+        }
+
+        return prettifyRawModalText(rawText);
+    }
+
+    private String resolveControlledErrorCode(String rawText) {
+        String normalizedKey = normalizeModalKey(rawText);
+
+        if (normalizedKey.contains("elcodigocaptchanocoincideconlaimagen")) {
+            return "MTC_CAPTCHA_INVALIDO";
+        }
+
+        if (normalizedKey.contains("ingresenumerodedocumento")) {
+            return "MTC_DOCUMENTO_REQUERIDO";
+        }
+
+        if (normalizedKey.contains("elnumerodedocumentodeidentidaddebeserde8caracteresnumericos")
+                || normalizedKey.contains("elnumerodedocumentodebeserde8caracteresnumericos")) {
+            return "MTC_DOCUMENTO_LONGITUD_INVALIDA";
+        }
+
+        if (normalizedKey.contains("seleccioneeltipodedocumento")) {
+            return "MTC_TIPO_DOCUMENTO_REQUERIDO";
+        }
+
+        return "MTC_MODAL_ERROR";
+    }
+
+    private String normalizeModalKey(String text) {
+        if (text == null) {
+            return "";
+        }
+
+        String cleaned = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                            .replaceAll("(?i)\baceptar\b", "")
+                            .replaceAll("(?i)\bok\b", "")
+                .replaceAll("[^a-zA-Z0-9]", "")
+                .toLowerCase(Locale.ROOT)
+                .trim();
+
+        return cleaned;
+    }
+
+    private String prettifyRawModalText(String text) {
+        if (text == null || text.isBlank()) {
+            return "Se presentó un error controlado en la consulta.";
+        }
+
+        String cleaned = text
+                .replace('\u00A0', ' ')
+                            .replaceAll("(?i)\baceptar\b", "")
+                            .replaceAll("(?i)\bok\b", "")
+                .replaceAll("\\s+", " ")
+                .trim();
+
+        if (cleaned.isBlank()) {
+            return "Se presentó un error controlado en la consulta.";
+        }
+
+        return cleaned;
     }
 }

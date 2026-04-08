@@ -37,7 +37,9 @@ public class DriverLicenseWebMapper {
                 result.infractions(),
                 result.procedures(),
                 result.source(),
-                result.captchaRequired()
+                result.captchaRequired(),
+                result.errorCode(),
+                result.controlledError()
         );
     }
 }

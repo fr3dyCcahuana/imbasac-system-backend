@@ -2,6 +2,7 @@ package com.paulfernandosr.possystembackend.manualpdf.infrastructure.adapter.inp
 
 public record ManualPdfModelResponse(
         Long id,
+        Long familyId,
         String code,
         String name
 ) {

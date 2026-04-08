@@ -20,7 +20,9 @@ public record DriverLicenseResult(
         List<String> infractions,
         List<String> procedures,
         String source,
-        boolean captchaRequired
+        boolean captchaRequired,
+        String errorCode,
+        boolean controlledError
 ) {
     public static DriverLicenseResult error(String message) {
         return new DriverLicenseResult(
@@ -41,7 +43,63 @@ public record DriverLicenseResult(
                 List.of(),
                 List.of(),
                 "MTC_WEB",
+                false,
+                null,
                 false
+        );
+    }
+
+    public static DriverLicenseResult captchaInvalid(String message, String documentType, String documentNumber) {
+        return new DriverLicenseResult(
+                false,
+                DriverLicenseStatus.CAPTCHA_INVALIDO,
+                message,
+                null,
+                documentType,
+                documentNumber,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                List.of(),
+                "MTC_WEB",
+                true,
+                "MTC_CAPTCHA_INVALIDO",
+                true
+        );
+    }
+
+    public static DriverLicenseResult controlledError(String message,
+                                                      String documentType,
+                                                      String documentNumber,
+                                                      String errorCode,
+                                                      boolean captchaRequired) {
+        return new DriverLicenseResult(
+                false,
+                DriverLicenseStatus.ERROR_CONTROLADO,
+                message,
+                null,
+                documentType,
+                documentNumber,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                List.of(),
+                "MTC_WEB",
+                captchaRequired,
+                errorCode,
+                true
         );
     }
 
@@ -64,6 +122,8 @@ public record DriverLicenseResult(
                 List.of(),
                 List.of(),
                 "MTC_WEB",
+                false,
+                null,
                 false
         );
     }

@@ -20,6 +20,8 @@ public record DriverLicenseCheckResponse(
         List<String> infractions,
         List<String> procedures,
         String source,
-        boolean captchaRequired
+        boolean captchaRequired,
+        String errorCode,
+        boolean controlledError
 ) {
 }

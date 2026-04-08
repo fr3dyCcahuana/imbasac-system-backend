@@ -1,12 +1,11 @@
 package com.paulfernandosr.possystembackend.manualpdf.infrastructure.adapter.input;
 
-import com.paulfernandosr.possystembackend.manualpdf.domain.exception.InvalidManualPdfException;
-import com.paulfernandosr.possystembackend.manualpdf.domain.exception.ManualPdfDocumentNotFoundException;
-import com.paulfernandosr.possystembackend.manualpdf.domain.exception.ManualPdfFileNotFoundException;
+import com.paulfernandosr.possystembackend.manualpdf.domain.exception.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -33,10 +32,21 @@ public class ManualPdfExceptionHandler {
 
     @org.springframework.web.bind.annotation.ExceptionHandler({
             ManualPdfDocumentNotFoundException.class,
-            ManualPdfFileNotFoundException.class
+            ManualPdfFileNotFoundException.class,
+            ManualPdfCatalogNotFoundException.class
     })
     public ResponseEntity<Map<String, Object>> handleNotFound(RuntimeException ex) {
         return build(HttpStatus.NOT_FOUND, ex.getMessage());
+    }
+
+    @org.springframework.web.bind.annotation.ExceptionHandler(DuplicateManualPdfException.class)
+    public ResponseEntity<Map<String, Object>> handleConflict(RuntimeException ex) {
+        return build(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @org.springframework.web.bind.annotation.ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex) {
+        return build(HttpStatus.PAYLOAD_TOO_LARGE, "El archivo supera el tamaño máximo permitido para la carga.");
     }
 
     @org.springframework.web.bind.annotation.ExceptionHandler(Exception.class)

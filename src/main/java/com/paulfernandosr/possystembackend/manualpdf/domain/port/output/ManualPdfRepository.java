@@ -3,6 +3,7 @@ package com.paulfernandosr.possystembackend.manualpdf.domain.port.output;
 import com.paulfernandosr.possystembackend.manualpdf.domain.ManualPdfDocument;
 import com.paulfernandosr.possystembackend.manualpdf.domain.ManualPdfFamily;
 import com.paulfernandosr.possystembackend.manualpdf.domain.ManualPdfModel;
+import com.paulfernandosr.possystembackend.manualpdf.domain.ManualPdfModelStorageContext;
 
 import java.util.List;
 import java.util.Optional;
@@ -19,9 +20,15 @@ public interface ManualPdfRepository {
 
     Optional<ManualPdfDocument> findById(Long id);
 
-    ManualPdfFamily upsertFamily(String code, String name, Integer sortOrder);
+    Optional<ManualPdfModelStorageContext> findModelStorageContextById(Long modelId);
 
-    ManualPdfModel upsertModel(Long familyId, String code, String name, Integer sortOrder);
+    boolean existsOverlappingDocument(Long modelId, Integer yearFrom, Integer yearTo);
+
+    boolean familyExists(Long familyId);
+
+    ManualPdfFamily upsertFamily(String code, String name, Integer sortOrder, Boolean enabled);
+
+    ManualPdfModel upsertModel(Long familyId, String code, String name, Integer sortOrder, Boolean enabled);
 
     ManualPdfDocument createDocument(ManualPdfDocument document);
 }

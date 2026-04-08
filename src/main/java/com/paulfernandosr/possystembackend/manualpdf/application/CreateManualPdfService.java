@@ -1,7 +1,12 @@
 package com.paulfernandosr.possystembackend.manualpdf.application;
 
-import com.paulfernandosr.possystembackend.manualpdf.domain.*;
+import com.paulfernandosr.possystembackend.manualpdf.domain.ManualPdfDocument;
+import com.paulfernandosr.possystembackend.manualpdf.domain.ManualPdfModelStorageContext;
+import com.paulfernandosr.possystembackend.manualpdf.domain.ManualPdfRegistrationCommand;
+import com.paulfernandosr.possystembackend.manualpdf.domain.ManualPdfStoredFile;
+import com.paulfernandosr.possystembackend.manualpdf.domain.exception.DuplicateManualPdfException;
 import com.paulfernandosr.possystembackend.manualpdf.domain.exception.InvalidManualPdfException;
+import com.paulfernandosr.possystembackend.manualpdf.domain.exception.ManualPdfCatalogNotFoundException;
 import com.paulfernandosr.possystembackend.manualpdf.domain.port.input.CreateManualPdfUseCase;
 import com.paulfernandosr.possystembackend.manualpdf.domain.port.output.ManualPdfFileRepository;
 import com.paulfernandosr.possystembackend.manualpdf.domain.port.output.ManualPdfRepository;
@@ -10,16 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.text.Normalizer;
-import java.util.Locale;
-import java.util.regex.Pattern;
-
 @Service
 @RequiredArgsConstructor
 public class CreateManualPdfService implements CreateManualPdfUseCase {
-
-    private static final Pattern NON_ALNUM = Pattern.compile("[^A-Z0-9]+");
-    private static final Pattern NON_FILE = Pattern.compile("[^a-z0-9]+");
 
     private final ManualPdfRepository repository;
     private final ManualPdfFileRepository fileRepository;
@@ -29,36 +27,28 @@ public class CreateManualPdfService implements CreateManualPdfUseCase {
     public ManualPdfDocument create(ManualPdfRegistrationCommand command, MultipartFile file) {
         validate(command, file);
 
-        String familyCode = normalizeCode(command.familyCode(), command.familyName());
-        String modelCode = normalizeCode(command.modelCode(), command.modelName());
-        String title = normalizeTitle(command.title(), command.modelName(), command.yearFrom(), command.yearTo());
+        ManualPdfModelStorageContext storageContext = repository.findModelStorageContextById(command.modelId())
+                .orElseThrow(() -> new ManualPdfCatalogNotFoundException("No se encontró el modelo indicado."));
+
+        if (repository.existsOverlappingDocument(command.modelId(), command.yearFrom(), command.yearTo())) {
+            throw new DuplicateManualPdfException("Ya existe un PDF registrado para el mismo modelo y rango de años.");
+        }
+
+        String title = normalizeTitle(command.title(), storageContext.modelName(), command.yearFrom(), command.yearTo());
         boolean enabled = command.enabled() == null || command.enabled();
 
         ManualPdfStoredFile storedFile = fileRepository.store(
-                familyCode,
-                modelCode,
+                storageContext.familyCode(),
+                storageContext.modelCode(),
                 command.yearFrom(),
                 command.yearTo(),
                 file
         );
 
         try {
-            ManualPdfFamily family = repository.upsertFamily(
-                    familyCode,
-                    command.familyName().trim(),
-                    command.familySortOrder() != null ? command.familySortOrder() : 0
-            );
-
-            ManualPdfModel model = repository.upsertModel(
-                    family.id(),
-                    modelCode,
-                    command.modelName().trim(),
-                    command.modelSortOrder() != null ? command.modelSortOrder() : 0
-            );
-
             ManualPdfDocument document = new ManualPdfDocument(
                     null,
-                    model.id(),
+                    storageContext.modelId(),
                     title,
                     command.yearFrom(),
                     command.yearTo(),
@@ -83,11 +73,8 @@ public class CreateManualPdfService implements CreateManualPdfUseCase {
         if (file == null || file.isEmpty()) {
             throw new InvalidManualPdfException("El archivo PDF es obligatorio.");
         }
-        if (command.familyName() == null || command.familyName().isBlank()) {
-            throw new InvalidManualPdfException("familyName es obligatorio.");
-        }
-        if (command.modelName() == null || command.modelName().isBlank()) {
-            throw new InvalidManualPdfException("modelName es obligatorio.");
+        if (command.modelId() == null) {
+            throw new InvalidManualPdfException("modelId es obligatorio.");
         }
         if (command.yearFrom() == null) {
             throw new InvalidManualPdfException("yearFrom es obligatorio.");
@@ -100,27 +87,11 @@ public class CreateManualPdfService implements CreateManualPdfUseCase {
         }
     }
 
-    private String normalizeCode(String code, String fallbackName) {
-        String raw = (code != null && !code.isBlank()) ? code : fallbackName;
-        String normalized = stripAccents(raw == null ? "" : raw.trim()).toUpperCase(Locale.ROOT);
-        normalized = NON_ALNUM.matcher(normalized).replaceAll("-");
-        normalized = normalized.replaceAll("(^-+|-+$)", "");
-        if (normalized.isBlank()) {
-            throw new InvalidManualPdfException("No se pudo generar un código válido para familia/modelo.");
-        }
-        return normalized;
-    }
-
     private String normalizeTitle(String title, String modelName, Integer yearFrom, Integer yearTo) {
         if (title != null && !title.isBlank()) {
             return title.trim();
         }
         String yearPart = yearFrom.equals(yearTo) ? String.valueOf(yearFrom) : yearFrom + "-" + yearTo;
         return modelName.trim() + " " + yearPart;
-    }
-
-    private String stripAccents(String value) {
-        return Normalizer.normalize(value, Normalizer.Form.NFD)
-                .replaceAll("\\p{M}+", "");
     }
 }

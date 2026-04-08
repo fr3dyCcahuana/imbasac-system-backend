@@ -25,7 +25,7 @@ public class MtcDebugSupport {
     }
 
     public void dumpPageState(Page page, String sessionId, String stage) {
-        if (!properties.isDebugEnabled() || page == null) {
+        if (page == null) {
             return;
         }
 
@@ -55,10 +55,6 @@ public class MtcDebugSupport {
     }
 
     public void logSelectors(Page page, String sessionId, String stage) {
-        if (!properties.isDebugEnabled()) {
-            return;
-        }
-
         try {
             log.info(
                     "[mtc][debug] sessionId={}, stage={}, url={}, form1={}, pnlBusqNroDoc={}, pnlCaptcha={}, imgCaptcha={}, txtCaptcha={}, txtNroDocumento={}, ibtnBusqNroDoc={}",
@@ -80,10 +76,6 @@ public class MtcDebugSupport {
     }
 
     public void logFormState(Page page, String sessionId, String stage) {
-        if (!properties.isDebugEnabled()) {
-            return;
-        }
-
         try {
             String txtNroDocumento = inputValue(page, "#txtNroDocumento");
             String txtCaptcha = inputValue(page, "#txtCaptcha");
@@ -112,10 +104,6 @@ public class MtcDebugSupport {
     }
 
     public void logBodySummary(Page page, String sessionId, String stage) {
-        if (!properties.isDebugEnabled()) {
-            return;
-        }
-
         try {
             String body = safeBody(page);
             String snippet = body.length() > 500 ? body.substring(0, 500) : body;

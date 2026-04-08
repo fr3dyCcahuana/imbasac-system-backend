@@ -6,5 +6,8 @@ public enum DriverLicenseStatus {
     SUSPENDIDA,
     CANCELADA,
     NO_ENCONTRADA,
+    SIN_LICENCIA,
+    CAPTCHA_INVALIDO,
+    ERROR_CONTROLADO,
     ERROR
 }
