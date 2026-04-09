@@ -1,7 +1,6 @@
 package com.paulfernandosr.possystembackend.manualpdf.infrastructure.adapter.input.dto;
 
-public record ManualPdfModelResponse(
-        Long id,
+public record CreateManualPdfModelRequest(
         Long familyId,
         String code,
         String name,

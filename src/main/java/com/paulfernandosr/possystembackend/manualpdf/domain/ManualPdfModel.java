@@ -4,6 +4,7 @@ public record ManualPdfModel(
         Long id,
         Long familyId,
         String code,
-        String name
+        String name,
+        Integer sortOrder
 ) {
 }

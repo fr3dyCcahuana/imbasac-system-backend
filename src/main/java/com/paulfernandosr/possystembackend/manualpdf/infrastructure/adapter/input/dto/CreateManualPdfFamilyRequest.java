@@ -1,8 +1,6 @@
 package com.paulfernandosr.possystembackend.manualpdf.infrastructure.adapter.input.dto;
 
-public record ManualPdfModelResponse(
-        Long id,
-        Long familyId,
+public record CreateManualPdfFamilyRequest(
         String code,
         String name,
         Integer sortOrder

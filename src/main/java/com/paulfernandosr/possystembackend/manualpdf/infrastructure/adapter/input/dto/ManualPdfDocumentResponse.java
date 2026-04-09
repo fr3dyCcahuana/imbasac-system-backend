@@ -1,13 +1,16 @@
 package com.paulfernandosr.possystembackend.manualpdf.infrastructure.adapter.input.dto;
 
+import java.util.List;
+
 public record ManualPdfDocumentResponse(
         Long id,
+        Long modelId,
         String title,
         String fileName,
         Integer yearFrom,
         Integer yearTo,
-        Boolean enabled,
         String previewUrl,
-        String downloadUrl
+        String downloadUrl,
+        List<ManualPdfImageResponse> images
 ) {
 }

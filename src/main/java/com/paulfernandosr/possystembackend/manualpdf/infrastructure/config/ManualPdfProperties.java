@@ -8,6 +8,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Setter
 @ConfigurationProperties(prefix = "app.files")
 public class ManualPdfProperties {
-
     private String manualPdfsDir;
+    private String manualPdfsPublicPath;
 }

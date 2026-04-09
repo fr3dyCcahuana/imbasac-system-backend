@@ -40,6 +40,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/images/**").permitAll()
+                        .requestMatchers("/files/manual-pdfs/**").permitAll()
 //                        .requestMatchers("/permissions/**").hasAnyAuthority("MANAGE_PERMISSIONS")
 //                        .requestMatchers("/products/**").hasAnyAuthority("MANAGE_PRODUCTS")
                         .anyRequest().authenticated())

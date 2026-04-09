@@ -3,6 +3,7 @@ package com.paulfernandosr.possystembackend.manualpdf.infrastructure.adapter.inp
 public record ManualPdfFamilyResponse(
         Long id,
         String code,
-        String name
+        String name,
+        Integer sortOrder
 ) {
 }

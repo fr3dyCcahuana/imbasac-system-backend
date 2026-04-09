@@ -1,9 +1,9 @@
 package com.paulfernandosr.possystembackend.manualpdf.domain;
 
-public record ManualPdfStoredFile(
-        String fileKey,
+public record StoredFileResult(
         String fileName,
+        String fileKey,
         String mimeType,
-        Long fileSize
+        long fileSize
 ) {
 }
