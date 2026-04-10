@@ -49,6 +49,21 @@ public class ManualPdfController {
         return ResponseEntity.status(201).body(SuccessResponse.created(mapper.model(model)));
     }
 
+
+    @GetMapping("/manual-pdf-families")
+    public ResponseEntity<SuccessResponse<List<ManualPdfFamilyResponse>>> listAllFamilies() {
+        List<ManualPdfFamilyResponse> payload = service.getAllFamilies().stream().map(mapper::family).toList();
+        return ResponseEntity.ok(SuccessResponse.ok(payload));
+    }
+
+    @GetMapping("/manual-pdf-models")
+    public ResponseEntity<SuccessResponse<List<ManualPdfModelResponse>>> listModelsByFamily(
+            @RequestParam Long familyId
+    ) {
+        List<ManualPdfModelResponse> payload = service.getModelsByFamily(familyId).stream().map(mapper::model).toList();
+        return ResponseEntity.ok(SuccessResponse.ok(payload));
+    }
+
     @GetMapping("/manual-pdfs/years")
     public ResponseEntity<SuccessResponse<List<Integer>>> years() {
         return ResponseEntity.ok(SuccessResponse.ok(service.getYears()));

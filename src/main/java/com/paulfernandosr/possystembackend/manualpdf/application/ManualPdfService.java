@@ -69,6 +69,22 @@ public class ManualPdfService {
         );
     }
 
+
+    public List<ManualPdfFamily> getAllFamilies() {
+        return repository.findAllFamilies();
+    }
+
+    public List<ManualPdfModel> getModelsByFamily(Long familyId) {
+        if (familyId == null) {
+            throw new ManualPdfBadRequestException("El parámetro familyId es obligatorio.");
+        }
+
+        repository.findFamilyById(familyId)
+                .orElseThrow(() -> new ManualPdfNotFoundException("No se encontró la familia seleccionada."));
+
+        return repository.findModelsByFamilyId(familyId);
+    }
+
     public List<Integer> getYears() {
         return repository.findAvailableYears();
     }

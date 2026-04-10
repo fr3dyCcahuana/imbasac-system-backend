@@ -144,6 +144,31 @@ public class ManualPdfRepository {
                 .single();
     }
 
+
+    public List<ManualPdfFamily> findAllFamilies() {
+        String sql = """
+                select id, code, name, sort_order
+                from manual_pdf_family
+                where enabled = true
+                order by sort_order, name
+                """;
+        return jdbcClient.sql(sql).query(familyRowMapper).list();
+    }
+
+    public List<ManualPdfModel> findModelsByFamilyId(Long familyId) {
+        String sql = """
+                select id, family_id, code, name, sort_order
+                from manual_pdf_model
+                where enabled = true
+                  and family_id = :familyId
+                order by sort_order, name
+                """;
+        return jdbcClient.sql(sql)
+                .param("familyId", familyId)
+                .query(modelRowMapper)
+                .list();
+    }
+
     public List<Integer> findAvailableYears() {
         String sql = """
                 select distinct gs.year_value
