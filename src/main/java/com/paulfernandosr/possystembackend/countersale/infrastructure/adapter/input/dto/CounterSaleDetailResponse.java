@@ -39,6 +39,13 @@ public class CounterSaleDetailResponse {
     private BigDecimal giftCostTotal;
     private String notes;
     private String status;
+    private Boolean associatedToSunat;
+    private Long associatedSaleId;
+    private String associatedDocType;
+    private String associatedSeries;
+    private Long associatedNumber;
+    private LocalDateTime associatedAt;
+    private Boolean canVoid;
     private CounterSaleVoidInfoResponse voidInfo;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

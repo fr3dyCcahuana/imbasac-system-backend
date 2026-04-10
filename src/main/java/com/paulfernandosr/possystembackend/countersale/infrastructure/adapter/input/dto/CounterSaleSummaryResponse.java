@@ -21,6 +21,12 @@ public class CounterSaleSummaryResponse {
     private String customerName;
     private BigDecimal total;
     private String status;
+    private Boolean associatedToSunat;
+    private Long associatedSaleId;
+    private String associatedDocType;
+    private String associatedSeries;
+    private Long associatedNumber;
+    private LocalDateTime associatedAt;
     private Boolean canVoid;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

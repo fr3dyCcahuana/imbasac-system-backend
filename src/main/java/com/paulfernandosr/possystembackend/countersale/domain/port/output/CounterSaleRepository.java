@@ -71,6 +71,11 @@ public interface CounterSaleRepository {
         private String status;
         private BigDecimal total;
         private BigDecimal discountTotal;
+        private Boolean associatedToSunat;
+        private Long associatedSaleId;
+        private String associatedDocType;
+        private String associatedSeries;
+        private Long associatedNumber;
     }
 
     @Getter

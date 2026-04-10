@@ -41,6 +41,10 @@ public class VoidCounterSaleService implements VoidCounterSaleUseCase {
         if (!"EMITIDA".equalsIgnoreCase(sale.getStatus())) {
             throw new InvalidCounterSaleException("Solo se puede anular una operación EMITIDA. Estado actual: " + sale.getStatus());
         }
+        if (Boolean.TRUE.equals(sale.getAssociatedToSunat())) {
+            String linkedDoc = buildLinkedDocumentLabel(sale);
+            throw new InvalidCounterSaleException("No se puede anular la operación de ventanilla porque ya fue asociada a un comprobante SUNAT" + linkedDoc + ".");
+        }
 
         List<CounterSaleRepository.CounterSaleItemForVoid> items = counterSaleRepository.findItemsByCounterSaleId(counterSaleId);
         List<Long> itemIds = items.stream().map(CounterSaleRepository.CounterSaleItemForVoid::getId).toList();
@@ -90,5 +94,16 @@ public class VoidCounterSaleService implements VoidCounterSaleUseCase {
                 .counterSaleId(counterSaleId)
                 .status("ANULADA")
                 .build();
+    }
+
+    private String buildLinkedDocumentLabel(CounterSaleRepository.LockedCounterSale sale) {
+        String series = sale.getAssociatedSeries();
+        Long number = sale.getAssociatedNumber();
+        String docType = sale.getAssociatedDocType();
+        if (series == null || series.isBlank() || number == null) {
+            return "";
+        }
+        String prefix = (docType == null || docType.isBlank()) ? "" : (docType.trim().toUpperCase() + " ");
+        return ": " + prefix + series.trim().toUpperCase() + "-" + number;
     }
 }

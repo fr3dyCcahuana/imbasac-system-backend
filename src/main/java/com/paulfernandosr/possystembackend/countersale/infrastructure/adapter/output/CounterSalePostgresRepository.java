@@ -116,7 +116,17 @@ public class CounterSalePostgresRepository implements CounterSaleRepository {
     @Override
     public LockedCounterSale lockById(Long counterSaleId) {
         String sql = """
-            SELECT id, sale_session_id, customer_id, status, total, discount_total
+            SELECT id,
+                   sale_session_id,
+                   customer_id,
+                   status,
+                   total,
+                   discount_total,
+                   associated_to_sunat,
+                   associated_sale_id,
+                   associated_doc_type,
+                   associated_series,
+                   associated_number
               FROM counter_sale
              WHERE id = ?
              FOR UPDATE
@@ -130,6 +140,11 @@ public class CounterSalePostgresRepository implements CounterSaleRepository {
                         .status(rs.getString("status"))
                         .total(rs.getBigDecimal("total"))
                         .discountTotal(rs.getBigDecimal("discount_total"))
+                        .associatedToSunat(rs.getObject("associated_to_sunat", Boolean.class))
+                        .associatedSaleId((Long) rs.getObject("associated_sale_id"))
+                        .associatedDocType(rs.getString("associated_doc_type"))
+                        .associatedSeries(rs.getString("associated_series"))
+                        .associatedNumber((Long) rs.getObject("associated_number"))
                         .build())
                 .optional()
                 .orElse(null);
@@ -193,8 +208,7 @@ public class CounterSalePostgresRepository implements CounterSaleRepository {
                    void_reason = ?,
                    notes = CASE
                              WHEN notes IS NULL OR notes = '' THEN CONCAT('ANULADA: ', ?)
-                             ELSE notes || E'
-' || CONCAT('ANULADA: ', ?)
+                             ELSE notes || E'\n' || CONCAT('ANULADA: ', ?)
                            END,
                    updated_at = NOW()
              WHERE id = ?

@@ -41,8 +41,10 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                 OR COALESCE(cs.customer_name, '') ILIKE ?
                 OR COALESCE(cs.customer_doc_number, '') ILIKE ?
                 OR (cs.series || '-' || CAST(cs.number AS TEXT)) ILIKE ?
+                OR (COALESCE(cs.associated_series, '') || '-' || COALESCE(CAST(cs.associated_number AS TEXT), '')) ILIKE ?
             )
         """);
+        params.add(likeParam);
         params.add(likeParam);
         params.add(likeParam);
         params.add(likeParam);
@@ -73,6 +75,12 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                    cs.customer_name AS customer_name,
                    cs.total AS total,
                    cs.status AS status,
+                   cs.associated_to_sunat AS associated_to_sunat,
+                   cs.associated_sale_id AS associated_sale_id,
+                   cs.associated_doc_type AS associated_doc_type,
+                   cs.associated_series AS associated_series,
+                   cs.associated_number AS associated_number,
+                   cs.associated_at AS associated_at,
                    cs.created_at AS created_at,
                    cs.updated_at AS updated_at
               FROM counter_sale cs
@@ -87,19 +95,29 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
         params.add(limit);
         params.add(offset);
 
-        RowMapper<CounterSaleSummaryResponse> mapper = (rs, rowNum) -> CounterSaleSummaryResponse.builder()
-                .counterSaleId(rs.getLong("counter_sale_id"))
-                .series(rs.getString("series"))
-                .number(rs.getLong("number"))
-                .issueDate(rs.getDate("issue_date").toLocalDate())
-                .customerDocNumber(rs.getString("customer_doc_number"))
-                .customerName(rs.getString("customer_name"))
-                .total(rs.getBigDecimal("total"))
-                .status(rs.getString("status"))
-                .canVoid("EMITIDA".equalsIgnoreCase(rs.getString("status")))
-                .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null)
-                .updatedAt(rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toLocalDateTime() : null)
-                .build();
+        RowMapper<CounterSaleSummaryResponse> mapper = (rs, rowNum) -> {
+            boolean associatedToSunat = Boolean.TRUE.equals(rs.getObject("associated_to_sunat", Boolean.class));
+            String statusValue = rs.getString("status");
+            return CounterSaleSummaryResponse.builder()
+                    .counterSaleId(rs.getLong("counter_sale_id"))
+                    .series(rs.getString("series"))
+                    .number(rs.getLong("number"))
+                    .issueDate(rs.getDate("issue_date").toLocalDate())
+                    .customerDocNumber(rs.getString("customer_doc_number"))
+                    .customerName(rs.getString("customer_name"))
+                    .total(rs.getBigDecimal("total"))
+                    .status(statusValue)
+                    .associatedToSunat(associatedToSunat)
+                    .associatedSaleId((Long) rs.getObject("associated_sale_id"))
+                    .associatedDocType(rs.getString("associated_doc_type"))
+                    .associatedSeries(rs.getString("associated_series"))
+                    .associatedNumber((Long) rs.getObject("associated_number"))
+                    .associatedAt(rs.getTimestamp("associated_at") != null ? rs.getTimestamp("associated_at").toLocalDateTime() : null)
+                    .canVoid("EMITIDA".equalsIgnoreCase(statusValue) && !associatedToSunat)
+                    .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null)
+                    .updatedAt(rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toLocalDateTime() : null)
+                    .build();
+        };
 
         return jdbcClient.sql(sql.toString()).params(params).query(mapper).list();
     }
@@ -157,6 +175,12 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                    cs.gift_cost_total AS gift_cost_total,
                    cs.notes AS notes,
                    cs.status AS status,
+                   cs.associated_to_sunat AS associated_to_sunat,
+                   cs.associated_sale_id AS associated_sale_id,
+                   cs.associated_doc_type AS associated_doc_type,
+                   cs.associated_series AS associated_series,
+                   cs.associated_number AS associated_number,
+                   cs.associated_at AS associated_at,
                    cs.voided_at AS voided_at,
                    cs.voided_by AS voided_by,
                    u_void.username AS voided_by_username,
@@ -168,42 +192,53 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
               LEFT JOIN users u_void ON u_void.id = cs.voided_by
              WHERE cs.id = ?
         """;
-        RowMapper<CounterSaleDetailResponse> mapper = (rs, rowNum) -> CounterSaleDetailResponse.builder()
-                .counterSaleId(rs.getLong("counter_sale_id"))
-                .stationId(rs.getLong("station_id"))
-                .saleSessionId((Long) rs.getObject("sale_session_id"))
-                .createdBy(rs.getLong("created_by"))
-                .createdByUsername(rs.getString("created_by_username"))
-                .series(rs.getString("series"))
-                .number(rs.getLong("number"))
-                .issueDate(rs.getDate("issue_date").toLocalDate())
-                .currency(rs.getString("currency"))
-                .exchangeRate(rs.getBigDecimal("exchange_rate"))
-                .priceList(rs.getString("price_list"))
-                .customerId((Long) rs.getObject("customer_id"))
-                .customerDocType(rs.getString("customer_doc_type"))
-                .customerDocNumber(rs.getString("customer_doc_number"))
-                .customerName(rs.getString("customer_name"))
-                .customerAddress(rs.getString("customer_address"))
-                .taxStatus(rs.getString("tax_status"))
-                .igvRate(rs.getBigDecimal("igv_rate"))
-                .igvIncluded(rs.getObject("igv_included", Boolean.class))
-                .subtotal(rs.getBigDecimal("subtotal"))
-                .discountTotal(rs.getBigDecimal("discount_total"))
-                .igvAmount(rs.getBigDecimal("igv_amount"))
-                .total(rs.getBigDecimal("total"))
-                .giftCostTotal(rs.getBigDecimal("gift_cost_total"))
-                .notes(rs.getString("notes"))
-                .status(rs.getString("status"))
-                .voidInfo(CounterSaleVoidInfoResponse.builder()
-                        .voidedAt(rs.getTimestamp("voided_at") != null ? rs.getTimestamp("voided_at").toLocalDateTime() : null)
-                        .voidedBy((Long) rs.getObject("voided_by"))
-                        .voidedByUsername(rs.getString("voided_by_username"))
-                        .voidReason(rs.getString("void_reason"))
-                        .build())
-                .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null)
-                .updatedAt(rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toLocalDateTime() : null)
-                .build();
+        RowMapper<CounterSaleDetailResponse> mapper = (rs, rowNum) -> {
+            boolean associatedToSunat = Boolean.TRUE.equals(rs.getObject("associated_to_sunat", Boolean.class));
+            String statusValue = rs.getString("status");
+            return CounterSaleDetailResponse.builder()
+                    .counterSaleId(rs.getLong("counter_sale_id"))
+                    .stationId(rs.getLong("station_id"))
+                    .saleSessionId((Long) rs.getObject("sale_session_id"))
+                    .createdBy(rs.getLong("created_by"))
+                    .createdByUsername(rs.getString("created_by_username"))
+                    .series(rs.getString("series"))
+                    .number(rs.getLong("number"))
+                    .issueDate(rs.getDate("issue_date").toLocalDate())
+                    .currency(rs.getString("currency"))
+                    .exchangeRate(rs.getBigDecimal("exchange_rate"))
+                    .priceList(rs.getString("price_list"))
+                    .customerId((Long) rs.getObject("customer_id"))
+                    .customerDocType(rs.getString("customer_doc_type"))
+                    .customerDocNumber(rs.getString("customer_doc_number"))
+                    .customerName(rs.getString("customer_name"))
+                    .customerAddress(rs.getString("customer_address"))
+                    .taxStatus(rs.getString("tax_status"))
+                    .igvRate(rs.getBigDecimal("igv_rate"))
+                    .igvIncluded(rs.getObject("igv_included", Boolean.class))
+                    .subtotal(rs.getBigDecimal("subtotal"))
+                    .discountTotal(rs.getBigDecimal("discount_total"))
+                    .igvAmount(rs.getBigDecimal("igv_amount"))
+                    .total(rs.getBigDecimal("total"))
+                    .giftCostTotal(rs.getBigDecimal("gift_cost_total"))
+                    .notes(rs.getString("notes"))
+                    .status(statusValue)
+                    .associatedToSunat(associatedToSunat)
+                    .associatedSaleId((Long) rs.getObject("associated_sale_id"))
+                    .associatedDocType(rs.getString("associated_doc_type"))
+                    .associatedSeries(rs.getString("associated_series"))
+                    .associatedNumber((Long) rs.getObject("associated_number"))
+                    .associatedAt(rs.getTimestamp("associated_at") != null ? rs.getTimestamp("associated_at").toLocalDateTime() : null)
+                    .canVoid("EMITIDA".equalsIgnoreCase(statusValue) && !associatedToSunat)
+                    .voidInfo(CounterSaleVoidInfoResponse.builder()
+                            .voidedAt(rs.getTimestamp("voided_at") != null ? rs.getTimestamp("voided_at").toLocalDateTime() : null)
+                            .voidedBy((Long) rs.getObject("voided_by"))
+                            .voidedByUsername(rs.getString("voided_by_username"))
+                            .voidReason(rs.getString("void_reason"))
+                            .build())
+                    .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null)
+                    .updatedAt(rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toLocalDateTime() : null)
+                    .build();
+        };
         return jdbcClient.sql(sql).param(counterSaleId).query(mapper).optional().orElse(null);
     }
 
