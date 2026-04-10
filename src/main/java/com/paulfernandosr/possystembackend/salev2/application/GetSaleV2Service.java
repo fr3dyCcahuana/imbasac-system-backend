@@ -35,6 +35,7 @@ public class GetSaleV2Service implements GetSaleV2UseCase {
             }
         }
 
+        header.setCounterSaleAssociations(saleV2QueryRepository.findCounterSaleAssociations(saleId));
         return header;
     }
 }

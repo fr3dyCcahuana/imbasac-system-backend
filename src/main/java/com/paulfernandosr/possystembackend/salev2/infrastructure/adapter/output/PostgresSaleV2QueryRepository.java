@@ -548,6 +548,42 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                 .orElse(null);
     }
 
+
+
+    @Override
+    public List<SaleV2CounterSaleAssociationResponse> findCounterSaleAssociations(Long saleId) {
+        String sql = """
+            SELECT cs.id AS counter_sale_id,
+                   cs.series AS series,
+                   cs.number AS number,
+                   cs.total AS total,
+                   cs.associated_doc_type AS associated_doc_type,
+                   cs.associated_series AS associated_series,
+                   cs.associated_number AS associated_number,
+                   cs.associated_at AS associated_at
+              FROM counter_sale cs
+             WHERE cs.associated_sale_id = ?
+               AND COALESCE(cs.associated_to_sunat, FALSE) = TRUE
+             ORDER BY cs.associated_at ASC NULLS LAST, cs.id ASC
+        """;
+
+        RowMapper<SaleV2CounterSaleAssociationResponse> mapper = (rs, rowNum) -> SaleV2CounterSaleAssociationResponse.builder()
+                .counterSaleId(rs.getLong("counter_sale_id"))
+                .series(rs.getString("series"))
+                .number((Long) rs.getObject("number"))
+                .total(rs.getBigDecimal("total"))
+                .associatedDocType(rs.getString("associated_doc_type"))
+                .associatedSeries(rs.getString("associated_series"))
+                .associatedNumber((Long) rs.getObject("associated_number"))
+                .associatedAt(rs.getTimestamp("associated_at") != null ? rs.getTimestamp("associated_at").toLocalDateTime() : null)
+                .build();
+
+        return jdbcClient.sql(sql)
+                .param(saleId)
+                .query(mapper)
+                .list();
+    }
+
     @Override
     public AccountsReceivableInfoResponse findReceivableBySaleId(Long saleId) {
         String sql = """

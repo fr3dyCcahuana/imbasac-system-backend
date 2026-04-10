@@ -7,9 +7,14 @@ import com.paulfernandosr.possystembackend.salev2.domain.port.input.CreateSaleV2
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetSaleV2UseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetSalesV2PageUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.EmitSaleV2ToSunatUseCase;
+import com.paulfernandosr.possystembackend.salev2.domain.port.input.EmitSaleV2SunatWithCounterSalesUseCase;
+import com.paulfernandosr.possystembackend.salev2.domain.port.input.PreviewSaleV2SunatWithCounterSalesUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.VoidSaleV2UseCase;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.PageResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2AdminEditRequest;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2ComposeSunatEmitResponse;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2ComposeSunatPreviewResponse;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2ComposeSunatRequest;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2CreateRequest;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2DetailResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2DocumentResponse;
@@ -34,6 +39,8 @@ public class SaleV2RestController {
     private final GetSalesV2PageUseCase getSalesV2PageUseCase;
     private final GetSaleV2UseCase getSaleV2UseCase;
     private final EmitSaleV2ToSunatUseCase emitSaleV2ToSunatUseCase;
+    private final PreviewSaleV2SunatWithCounterSalesUseCase previewSaleV2SunatWithCounterSalesUseCase;
+    private final EmitSaleV2SunatWithCounterSalesUseCase emitSaleV2SunatWithCounterSalesUseCase;
 
     @PostMapping
     public ResponseEntity<SuccessResponse<SaleV2DocumentResponse>> create(@RequestBody SaleV2CreateRequest request,
@@ -97,5 +104,22 @@ public class SaleV2RestController {
     @PostMapping("/{saleId}/emit-sunat")
     public ResponseEntity<SuccessResponse<SaleV2SunatEmissionResponse>> emitSunat(@PathVariable Long saleId) {
         return ResponseEntity.ok(SuccessResponse.ok(emitSaleV2ToSunatUseCase.emit(saleId)));
+    }
+
+    @PostMapping("/{saleId}/sunat-counter-sales/preview")
+    public ResponseEntity<SuccessResponse<SaleV2ComposeSunatPreviewResponse>> previewComposeSunat(@PathVariable Long saleId,
+                                                                                                   @RequestBody SaleV2ComposeSunatRequest request) {
+        return ResponseEntity.ok(SuccessResponse.ok(
+                previewSaleV2SunatWithCounterSalesUseCase.preview(saleId, request)
+        ));
+    }
+
+    @PostMapping("/{saleId}/sunat-counter-sales/emit")
+    public ResponseEntity<SuccessResponse<SaleV2ComposeSunatEmitResponse>> emitComposeSunat(@PathVariable Long saleId,
+                                                                                              @RequestBody SaleV2ComposeSunatRequest request,
+                                                                                              Principal principal) {
+        return ResponseEntity.ok(SuccessResponse.ok(
+                emitSaleV2SunatWithCounterSalesUseCase.emit(saleId, request, principal.getName())
+        ));
     }
 }

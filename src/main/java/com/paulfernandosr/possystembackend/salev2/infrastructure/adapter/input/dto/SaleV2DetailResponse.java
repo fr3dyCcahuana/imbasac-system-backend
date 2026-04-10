@@ -70,4 +70,5 @@ public class SaleV2DetailResponse {
 
     private AccountsReceivableInfoResponse receivable;
     private List<AccountsReceivablePaymentInfo> receivablePayments;
+    private List<SaleV2CounterSaleAssociationResponse> counterSaleAssociations;
 }

@@ -34,6 +34,8 @@ public interface SaleV2QueryRepository {
 
     SaleV2PaymentResponse findSalePayment(Long saleId);
 
+    List<SaleV2CounterSaleAssociationResponse> findCounterSaleAssociations(Long saleId);
+
     AccountsReceivableInfoResponse findReceivableBySaleId(Long saleId);
 
     List<AccountsReceivablePaymentInfo> findReceivablePayments(Long arId);
