@@ -130,8 +130,9 @@ public class CreateCounterSaleService implements CreateCounterSaleUseCase {
                 throw new InvalidCounterSaleException("serialUnitIds solo aplica para productos con manage_by_serial=true. productId=" + item.getProductId());
             }
 
-            BigDecimal unitPrice = item.getUnitPriceOverride() != null
-                    ? item.getUnitPriceOverride()
+            BigDecimal manualUnitPrice = item.resolveUnitPrice();
+            BigDecimal unitPrice = manualUnitPrice != null
+                    ? manualUnitPrice
                     : product.priceFor(request.getPriceList());
             unitPrice = nz(unitPrice);
             if (unitPrice.compareTo(BigDecimal.ZERO) < 0) {
@@ -290,7 +291,11 @@ public class CreateCounterSaleService implements CreateCounterSaleUseCase {
         if (request == null) throw new InvalidCounterSaleException("Request vacío.");
         if (request.getStationId() == null) throw new InvalidCounterSaleException("stationId es obligatorio.");
         if (isBlank(request.getSeries())) throw new InvalidCounterSaleException("series es obligatorio.");
-        if (request.getPriceList() == null) throw new InvalidCounterSaleException("priceList es obligatorio.");
+        boolean hasMissingResolvedPrice = request.getItems() != null && request.getItems().stream()
+                .anyMatch(item -> item != null && item.resolveUnitPrice() == null);
+        if (request.getPriceList() == null && hasMissingResolvedPrice) {
+            throw new InvalidCounterSaleException("priceList es obligatorio cuando alguna línea no envía unitPrice.");
+        }
         if (request.getItems() == null || request.getItems().isEmpty()) throw new InvalidCounterSaleException("Debe enviar items.");
         if (request.getPayment() == null || request.getPayment().getMethod() == null) {
             throw new InvalidCounterSaleException("payment.method es obligatorio.");

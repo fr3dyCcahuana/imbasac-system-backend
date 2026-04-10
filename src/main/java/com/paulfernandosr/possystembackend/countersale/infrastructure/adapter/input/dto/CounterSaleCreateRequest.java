@@ -51,8 +51,13 @@ public class CounterSaleCreateRequest {
         private BigDecimal discountPercent;
         private CounterSaleLineKind lineKind;
         private String giftReason;
+        private BigDecimal unitPrice;
         private BigDecimal unitPriceOverride;
         private List<Long> serialUnitIds;
+
+        public BigDecimal resolveUnitPrice() {
+            return unitPrice != null ? unitPrice : unitPriceOverride;
+        }
     }
 
     @Getter
