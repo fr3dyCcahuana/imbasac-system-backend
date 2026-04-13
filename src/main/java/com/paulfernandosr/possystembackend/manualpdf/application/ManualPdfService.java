@@ -98,11 +98,11 @@ public class ManualPdfService {
     }
 
     public List<ManualPdfDocumentDetail> getModelDetails(int year, Long familyId) {
-        return repository.findModelsByYearAndFamily(year, familyId).stream()
-                .map(model -> repository.findBestDocumentByYearAndModel(year, model.id())
-                        .map(document -> new ManualPdfDocumentDetail(document, repository.findImagesByDocumentId(document.id())))
-                        .orElse(null))
-                .filter(java.util.Objects::nonNull)
+        return repository.findDocumentsByYearAndFamily(year, familyId).stream()
+                .map(document -> new ManualPdfDocumentDetail(
+                        document,
+                        repository.findImagesByDocumentId(document.id())
+                ))
                 .toList();
     }
 

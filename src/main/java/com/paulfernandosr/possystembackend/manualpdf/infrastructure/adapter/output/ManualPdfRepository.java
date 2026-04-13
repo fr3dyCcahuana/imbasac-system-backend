@@ -219,6 +219,24 @@ public class ManualPdfRepository {
                 .list();
     }
 
+    public List<ManualPdfDocument> findDocumentsByYearAndFamily(int year, Long familyId) {
+        String sql = """
+                select d.id, d.model_id, d.title, d.year_from, d.year_to, d.file_name, d.file_key, d.mime_type, d.file_size, d.enabled
+                from manual_pdf_document d
+                join manual_pdf_model m on m.id = d.model_id
+                where d.enabled = true
+                  and m.enabled = true
+                  and m.family_id = :familyId
+                  and :year between d.year_from and d.year_to
+                order by m.sort_order, m.name, d.title, d.year_from desc, d.id desc
+                """;
+        return jdbcClient.sql(sql)
+                .param("year", year)
+                .param("familyId", familyId)
+                .query(documentRowMapper)
+                .list();
+    }
+
     public Optional<ManualPdfDocument> findBestDocumentByYearAndModel(int year, Long modelId) {
         String sql = """
                 select id, model_id, title, year_from, year_to, file_name, file_key, mime_type, file_size, enabled
