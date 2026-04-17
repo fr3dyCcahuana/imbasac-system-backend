@@ -9,15 +9,15 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class CounterSaleSummaryItemResponse {
-    private Long counterSaleId;
-    private Long counterSaleItemId;
+public class ElectronicReceiptPrintableItemResponse {
+    private Long saleItemId;
     private Integer lineNumber;
     private Long productId;
-    private BigDecimal quantity;
     private String sku;
     private String description;
     private String presentation;
+    private BigDecimal quantity;
     private BigDecimal unitPrice;
+    private BigDecimal discountAmount;
     private BigDecimal revenueTotal;
 }

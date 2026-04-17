@@ -26,4 +26,8 @@ public interface CounterSaleQueryRepository {
     List<CounterSaleSerialUnitResponse> findCounterSaleItemSerialUnits(Long counterSaleId);
 
     CounterSalePaymentResponse findCounterSalePayment(Long counterSaleId);
+
+    ElectronicReceiptPrintableResponse findElectronicReceiptPrintableHeaderByComboId(Long comboId);
+
+    List<ElectronicReceiptPrintableItemResponse> findElectronicReceiptPrintableItemsBySaleId(Long saleId);
 }

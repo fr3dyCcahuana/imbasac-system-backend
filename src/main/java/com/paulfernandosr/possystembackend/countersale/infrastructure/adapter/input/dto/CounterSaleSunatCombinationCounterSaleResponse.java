@@ -3,33 +3,27 @@ package com.paulfernandosr.possystembackend.countersale.infrastructure.adapter.i
 import lombok.*;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class CounterSaleSummaryResponse {
+public class CounterSaleSunatCombinationCounterSaleResponse {
     private Long counterSaleId;
+    private String sourceDocumentLabel;
     private String series;
     private Long number;
-    private LocalDate issueDate;
-    private String customerDocNumber;
-    private String customerName;
-    private BigDecimal total;
     private String status;
+    private BigDecimal subtotal;
+    private BigDecimal discountTotal;
+    private BigDecimal igvAmount;
+    private BigDecimal total;
     private Boolean associatedToSunat;
-    private Long associatedComboId;
     private Long associatedSaleId;
     private String associatedDocType;
     private String associatedSeries;
     private Long associatedNumber;
     private LocalDateTime associatedAt;
-    private Boolean canVoid;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
-    private List<CounterSaleSummaryItemResponse> items;
 }

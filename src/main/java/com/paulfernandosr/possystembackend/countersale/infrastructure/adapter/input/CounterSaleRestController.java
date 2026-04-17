@@ -3,8 +3,11 @@ package com.paulfernandosr.possystembackend.countersale.infrastructure.adapter.i
 import com.paulfernandosr.possystembackend.common.infrastructure.response.SuccessResponse;
 import com.paulfernandosr.possystembackend.countersale.domain.model.VoidCounterSaleResponse;
 import com.paulfernandosr.possystembackend.countersale.domain.port.input.CreateCounterSaleUseCase;
+import com.paulfernandosr.possystembackend.countersale.domain.port.input.EmitCounterSaleSunatCombinationUseCase;
 import com.paulfernandosr.possystembackend.countersale.domain.port.input.GetCounterSalePageUseCase;
 import com.paulfernandosr.possystembackend.countersale.domain.port.input.GetCounterSaleUseCase;
+import com.paulfernandosr.possystembackend.countersale.domain.port.input.GetElectronicReceiptPrintableUseCase;
+import com.paulfernandosr.possystembackend.countersale.domain.port.input.ValidateCounterSaleSunatCombinationUseCase;
 import com.paulfernandosr.possystembackend.countersale.domain.port.input.VoidCounterSaleUseCase;
 import com.paulfernandosr.possystembackend.countersale.infrastructure.adapter.input.dto.*;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +25,10 @@ public class CounterSaleRestController {
     private final CreateCounterSaleUseCase createCounterSaleUseCase;
     private final GetCounterSalePageUseCase getCounterSalePageUseCase;
     private final GetCounterSaleUseCase getCounterSaleUseCase;
+    private final GetElectronicReceiptPrintableUseCase getElectronicReceiptPrintableUseCase;
     private final VoidCounterSaleUseCase voidCounterSaleUseCase;
+    private final ValidateCounterSaleSunatCombinationUseCase validateCounterSaleSunatCombinationUseCase;
+    private final EmitCounterSaleSunatCombinationUseCase emitCounterSaleSunatCombinationUseCase;
 
     @PostMapping
     public ResponseEntity<SuccessResponse<CounterSaleDocumentResponse>> create(@RequestBody CounterSaleCreateRequest request,
@@ -52,6 +58,11 @@ public class CounterSaleRestController {
         return ResponseEntity.ok(SuccessResponse.ok(getCounterSaleUseCase.getById(counterSaleId)));
     }
 
+    @GetMapping("/sunat-combinations/{comboId}/printable")
+    public ResponseEntity<SuccessResponse<ElectronicReceiptPrintableResponse>> getSunatCombinationPrintable(@PathVariable Long comboId) {
+        return ResponseEntity.ok(SuccessResponse.ok(getElectronicReceiptPrintableUseCase.getByComboId(comboId)));
+    }
+
     @PostMapping("/{counterSaleId}/void")
     public ResponseEntity<SuccessResponse<VoidCounterSaleResponse>> voidSale(@PathVariable Long counterSaleId,
                                                                              @RequestBody(required = false) VoidCounterSaleRequest request,
@@ -61,4 +72,24 @@ public class CounterSaleRestController {
                 voidCounterSaleUseCase.voidSale(counterSaleId, reason, principal.getName())
         ));
     }
+
+    @PostMapping("/{counterSaleId}/sunat-combination/validate")
+    public ResponseEntity<SuccessResponse<CounterSaleSunatCombinationValidationResponse>> validateSunatCombination(
+            @PathVariable Long counterSaleId,
+            @RequestBody(required = false) CounterSaleSunatCombinationRequest request) {
+        return ResponseEntity.ok(SuccessResponse.ok(
+                validateCounterSaleSunatCombinationUseCase.validate(counterSaleId, request)
+        ));
+    }
+
+    @PostMapping("/{counterSaleId}/sunat-combination/emit")
+    public ResponseEntity<SuccessResponse<CounterSaleSunatCombinationEmitResponse>> emitSunatCombination(
+            @PathVariable Long counterSaleId,
+            @RequestBody(required = false) CounterSaleSunatCombinationRequest request,
+            Principal principal) {
+        return ResponseEntity.ok(SuccessResponse.ok(
+                emitCounterSaleSunatCombinationUseCase.emit(counterSaleId, request, principal.getName())
+        ));
+    }
+
 }

@@ -103,11 +103,11 @@ public class SaleV2CounterSaleCompositionCalculator {
                     .status(detail.getStatus())
                     .total(nz(detail.getTotal()).setScale(4, RoundingMode.HALF_UP))
                     .discountTotal(nz(detail.getDiscountTotal()).setScale(4, RoundingMode.HALF_UP))
-                    .associatedToSunat(Boolean.TRUE.equals(detail.getAssociatedToSunat()))
-                    .associatedDocType(detail.getAssociatedDocType())
-                    .associatedSeries(detail.getAssociatedSeries())
-                    .associatedNumber(detail.getAssociatedNumber())
-                    .associatedAt(detail.getAssociatedAt())
+                    .associatedToSunat(isCounterSaleAssociatedToSunat(detail))
+                    .associatedDocType(readString(detail, "getAssociatedDocType"))
+                    .associatedSeries(readString(detail, "getAssociatedSeries"))
+                    .associatedNumber(readLong(detail, "getAssociatedNumber"))
+                    .associatedAt(readLocalDateTime(detail, "getAssociatedAt"))
                     .build());
 
             Map<Long, SaleV2ComposeSunatRequest.CounterSaleItemAdjustment> itemAdjustments =
@@ -314,7 +314,7 @@ public class SaleV2CounterSaleCompositionCalculator {
         if (!"EMITIDA".equalsIgnoreCase(nzs(detail.getStatus()))) {
             throw new InvalidSaleV2Exception("El counter-sale debe estar EMITIDA. counterSaleId=" + detail.getCounterSaleId());
         }
-        if (Boolean.TRUE.equals(detail.getAssociatedToSunat())) {
+        if (isCounterSaleAssociatedToSunat(detail)) {
             throw new InvalidSaleV2Exception("El counter-sale ya está asociado a SUNAT. counterSaleId=" + detail.getCounterSaleId());
         }
     }
@@ -538,6 +538,50 @@ public class SaleV2CounterSaleCompositionCalculator {
                 .igvAmount(igvAmount)
                 .total(total)
                 .build();
+    }
+
+
+    private boolean isCounterSaleAssociatedToSunat(CounterSaleDetailResponse detail) {
+        return Boolean.TRUE.equals(readBoolean(detail, "getAssociatedToSunat"));
+    }
+
+    private Boolean readBoolean(Object target, String methodName) {
+        try {
+            Object value = target.getClass().getMethod(methodName).invoke(target);
+            return value instanceof Boolean b ? b : null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String readString(Object target, String methodName) {
+        try {
+            Object value = target.getClass().getMethod(methodName).invoke(target);
+            return value != null ? value.toString() : null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private Long readLong(Object target, String methodName) {
+        try {
+            Object value = target.getClass().getMethod(methodName).invoke(target);
+            if (value instanceof Number number) {
+                return number.longValue();
+            }
+            return null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private java.time.LocalDateTime readLocalDateTime(Object target, String methodName) {
+        try {
+            Object value = target.getClass().getMethod(methodName).invoke(target);
+            return value instanceof java.time.LocalDateTime ldt ? ldt : null;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private BigDecimal nz(BigDecimal value) {

@@ -49,6 +49,7 @@ public class CounterSaleDetailResponse {
     private CounterSaleVoidInfoResponse voidInfo;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private Long associatedComboId;
     private List<CounterSaleItemResponse> items;
     private CounterSalePaymentResponse payment;
 }
