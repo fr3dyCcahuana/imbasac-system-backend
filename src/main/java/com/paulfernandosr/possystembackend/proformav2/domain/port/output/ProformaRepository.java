@@ -8,6 +8,7 @@ public interface ProformaRepository {
     Proforma create(Proforma proforma);
     Optional<Proforma> lockById(Long proformaId); // FOR UPDATE
     Optional<Proforma> findById(Long proformaId);
+    Optional<Proforma> findByNumber(Long number);
     void updateStatus(Long proformaId, String status);
     void appendNotesAndSetStatus(Long proformaId, String noteToAppend, String status);
     void touchUpdatedAt(Long proformaId);

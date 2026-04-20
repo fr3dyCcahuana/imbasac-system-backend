@@ -133,6 +133,27 @@ public class PostgresProformaRepository implements ProformaRepository {
     }
 
     @Override
+    public Optional<Proforma> findByNumber(Long number) {
+        String sql = """
+            SELECT
+              p.*,
+              u.username   AS cashier_username,
+              u.first_name AS cashier_first_name,
+              u.last_name  AS cashier_last_name
+            FROM proforma p
+            LEFT JOIN users u ON u.id = p.created_by
+            WHERE p.number = ?
+            ORDER BY p.id DESC
+            LIMIT 1
+            """;
+
+        return jdbcClient.sql(sql)
+                .param(number)
+                .query(new ProformaRowMapper())
+                .optional();
+    }
+
+    @Override
     public void updateStatus(Long proformaId, String status) {
         String sql = """
             UPDATE proforma

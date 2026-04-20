@@ -36,13 +36,13 @@ public class ProformaV2Controller {
     public ResponseEntity<SuccessResponse<ProformaV2Response>> create(@RequestBody CreateProformaV2Request request) {
         ProformaV2Response created = createUseCase.create(request);
         return ResponseEntity
-                .created(URI.create("/proformas/v2/" + created.getId()))
+                .created(URI.create("/proformas/v2/" + created.getNumber()))
                 .body(SuccessResponse.ok(created));
     }
 
-    @GetMapping("/{id}")
-    public ResponseEntity<SuccessResponse<ProformaV2Response>> get(@PathVariable("id") Long id) {
-        return ResponseEntity.ok(SuccessResponse.ok(getUseCase.getById(id)));
+    @GetMapping("/{number}")
+    public ResponseEntity<SuccessResponse<ProformaV2Response>> get(@PathVariable("number") Long number) {
+        return ResponseEntity.ok(SuccessResponse.ok(getUseCase.getByNumber(number)));
     }
 
     @PostMapping("/{id}/convert")

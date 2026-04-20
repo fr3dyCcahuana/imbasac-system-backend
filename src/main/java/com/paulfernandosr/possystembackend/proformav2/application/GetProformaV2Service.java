@@ -20,10 +20,10 @@ public class GetProformaV2Service implements GetProformaV2UseCase {
     private final ProformaItemRepository proformaItemRepository;
 
     @Override
-    public ProformaV2Response getById(Long proformaId) {
-        Proforma p = proformaRepository.findById(proformaId)
-                .orElseThrow(() -> new InvalidProformaV2Exception("Proforma no encontrada: " + proformaId));
-        List<ProformaItem> items = proformaItemRepository.findByProformaId(proformaId);
+    public ProformaV2Response getByNumber(Long number) {
+        Proforma p = proformaRepository.findByNumber(number)
+                .orElseThrow(() -> new InvalidProformaV2Exception("Proforma no encontrada con number: " + number));
+        List<ProformaItem> items = proformaItemRepository.findByProformaId(p.getId());
         return ProformaMapper.toResponse(p, items);
     }
 }
