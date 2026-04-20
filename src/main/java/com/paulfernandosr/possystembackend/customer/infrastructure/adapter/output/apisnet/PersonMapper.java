@@ -27,49 +27,51 @@ public class PersonMapper {
     }
 
     public static Customer toCustomer(JuridicalPerson juridicalPerson) {
+        String fiscalAddress = normalizeNullable(juridicalPerson.getAddress());
+
         Customer customer = Customer.builder()
-                .legalName(juridicalPerson.getBusinessName())
+                .legalName(normalizeNullable(juridicalPerson.getBusinessName()))
                 .documentType(DocumentType.RUC)
-                .documentNumber(juridicalPerson.getDocumentNumber())
+                .documentNumber(normalizeNullable(juridicalPerson.getDocumentNumber()))
                 // --- fiscal
-                .address(juridicalPerson.getAddress())
-                .ubigeo(juridicalPerson.getUbigeo())
-                .department(juridicalPerson.getDepartment())
-                .province(juridicalPerson.getProvince())
-                .district(juridicalPerson.getDistrict())
+                .address(fiscalAddress)
+                .ubigeo(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getUbigeo()))
+                .department(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getDepartment()))
+                .province(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getProvince()))
+                .district(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getDistrict()))
                 // --- SUNAT info
-                .sunatStatus(juridicalPerson.getStatus())
-                .sunatCondition(juridicalPerson.getCondition())
-                .streetType(juridicalPerson.getStreetType())
-                .streetName(juridicalPerson.getStreetName())
-                .zoneCode(juridicalPerson.getZoneCode())
-                .zoneType(juridicalPerson.getZoneType())
-                .addressNumber(juridicalPerson.getNumber())
-                .interior(juridicalPerson.getInterior())
-                .lot(juridicalPerson.getLot())
-                .apartment(juridicalPerson.getApartment())
-                .block(juridicalPerson.getBlock())
-                .kilometer(juridicalPerson.getKilometer())
+                .sunatStatus(normalizeNullable(juridicalPerson.getStatus()))
+                .sunatCondition(normalizeNullable(juridicalPerson.getCondition()))
+                .streetType(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getStreetType()))
+                .streetName(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getStreetName()))
+                .zoneCode(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getZoneCode()))
+                .zoneType(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getZoneType()))
+                .addressNumber(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getNumber()))
+                .interior(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getInterior()))
+                .lot(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getLot()))
+                .apartment(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getApartment()))
+                .block(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getBlock()))
+                .kilometer(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getKilometer()))
                 .retentionAgent(juridicalPerson.isRetentionAgent())
                 .goodContributor(juridicalPerson.isGoodContributor())
-                .sunatType(juridicalPerson.getType())
-                .economicActivity(juridicalPerson.getEconomicActivity())
-                .numberOfEmployees(juridicalPerson.getNumberOfEmployees())
-                .billingType(juridicalPerson.getBillingType())
-                .accountingType(juridicalPerson.getAccountingType())
-                .foreignTrade(juridicalPerson.getForeignTrade())
+                .sunatType(normalizeNullable(juridicalPerson.getType()))
+                .economicActivity(normalizeNullable(juridicalPerson.getEconomicActivity()))
+                .numberOfEmployees(normalizeNullable(juridicalPerson.getNumberOfEmployees()))
+                .billingType(normalizeNullable(juridicalPerson.getBillingType()))
+                .accountingType(normalizeNullable(juridicalPerson.getAccountingType()))
+                .foreignTrade(normalizeNullable(juridicalPerson.getForeignTrade()))
                 .build();
 
         // Direcciones (fiscal + anexos)
         List<CustomerAddress> addresses = new ArrayList<>();
 
-        if (juridicalPerson.getAddress() != null && !juridicalPerson.getAddress().isBlank()) {
+        if (fiscalAddress != null) {
             addresses.add(CustomerAddress.builder()
-                    .address(juridicalPerson.getAddress())
-                    .ubigeo(juridicalPerson.getUbigeo())
-                    .department(juridicalPerson.getDepartment())
-                    .province(juridicalPerson.getProvince())
-                    .district(juridicalPerson.getDistrict())
+                    .address(fiscalAddress)
+                    .ubigeo(normalizeNullable(juridicalPerson.getUbigeo()))
+                    .department(normalizeNullable(juridicalPerson.getDepartment()))
+                    .province(normalizeNullable(juridicalPerson.getProvince()))
+                    .district(normalizeNullable(juridicalPerson.getDistrict()))
                     .fiscal(true)
                     .enabled(true)
                     .position(0)
@@ -80,14 +82,16 @@ public class PersonMapper {
             int pos = 1;
             for (JuridicalPersonLocal local : juridicalPerson.getAnnexLocations()) {
                 if (local == null) continue;
-                if (local.getAddress() == null || local.getAddress().isBlank()) continue;
+
+                String annexAddress = normalizeNullable(local.getAddress());
+                if (annexAddress == null) continue;
 
                 addresses.add(CustomerAddress.builder()
-                        .address(local.getAddress())
-                        .ubigeo(local.getUbigeo())
-                        .department(local.getDepartment())
-                        .province(local.getProvince())
-                        .district(local.getDistrict())
+                        .address(annexAddress)
+                        .ubigeo(normalizeNullable(local.getUbigeo()))
+                        .department(normalizeNullable(local.getDepartment()))
+                        .province(normalizeNullable(local.getProvince()))
+                        .district(normalizeNullable(local.getDistrict()))
                         .fiscal(false)
                         .enabled(true)
                         .position(pos++)
@@ -117,5 +121,18 @@ public class PersonMapper {
                 .filter(part -> !part.isBlank())
                 .reduce((left, right) -> left + " " + right)
                 .orElse(null);
+    }
+
+    private static String normalizeNullable(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String normalized = value.trim();
+        if (normalized.isBlank() || "-".equals(normalized)) {
+            return null;
+        }
+
+        return normalized;
     }
 }
