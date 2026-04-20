@@ -5,6 +5,8 @@ import com.paulfernandosr.possystembackend.common.domain.Pageable;
 import com.paulfernandosr.possystembackend.common.infrastructure.mapper.PageMapper;
 import com.paulfernandosr.possystembackend.common.infrastructure.response.SuccessResponse;
 import com.paulfernandosr.possystembackend.customer.domain.Customer;
+import com.paulfernandosr.possystembackend.customer.domain.CustomerAddress;
+import com.paulfernandosr.possystembackend.customer.domain.port.input.CreateCustomerAddressUseCase;
 import com.paulfernandosr.possystembackend.customer.domain.port.input.CreateNewCustomerUseCase;
 import com.paulfernandosr.possystembackend.customer.domain.port.input.GetCustomerInfoUseCase;
 import com.paulfernandosr.possystembackend.customer.domain.port.input.GetPageOfCustomersUseCase;
@@ -20,6 +22,7 @@ import java.util.Collection;
 @RequiredArgsConstructor
 @RequestMapping("/customers")
 public class CustomerRestController {
+    private final CreateCustomerAddressUseCase createCustomerAddressUseCase;
     private final CreateNewCustomerUseCase createNewCustomerUseCase;
     private final ResolveCustomerUseCase resolveCustomerUseCase;
     private final GetCustomerInfoUseCase getCustomerInfoUseCase;
@@ -29,6 +32,14 @@ public class CustomerRestController {
     public ResponseEntity<Void> createNewCustomer(@RequestBody Customer customer) {
         createNewCustomerUseCase.createNewCustomer(customer);
         return new ResponseEntity<>(HttpStatus.CREATED);
+    }
+
+
+    @PostMapping("/{customerId}/addresses")
+    public ResponseEntity<SuccessResponse<CustomerAddress>> createCustomerAddress(@PathVariable Long customerId,
+                                                                                  @RequestBody CustomerAddress customerAddress) {
+        CustomerAddress createdAddress = createCustomerAddressUseCase.createCustomerAddress(customerId, customerAddress);
+        return ResponseEntity.status(HttpStatus.CREATED).body(SuccessResponse.ok(createdAddress));
     }
 
     @PostMapping("/resolve")

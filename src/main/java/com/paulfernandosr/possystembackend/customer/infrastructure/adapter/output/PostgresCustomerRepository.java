@@ -372,6 +372,113 @@ public class PostgresCustomerRepository implements CustomerRepository {
     }
 
     @Override
+    public boolean existsById(Long customerId) {
+        String selectExistsCustomerByIdSql = """
+                    SELECT EXISTS(
+                        SELECT 1 FROM customers
+                        WHERE id = ?
+                    )
+                """;
+
+        return jdbcClient.sql(selectExistsCustomerByIdSql)
+                .param(customerId)
+                .query(Boolean.class)
+                .single();
+    }
+
+    @Override
+    public boolean existsAddress(Long customerId, String address, String ubigeo) {
+        String selectExistsCustomerAddressSql = """
+                    SELECT EXISTS(
+                        SELECT 1
+                        FROM customer_address
+                        WHERE customer_id = ?
+                          AND lower(trim(address)) = lower(trim(?))
+                          AND coalesce(trim(ubigeo), '') = coalesce(trim(?), '')
+                    )
+                """;
+
+        return jdbcClient.sql(selectExistsCustomerAddressSql)
+                .params(customerId, address, ubigeo)
+                .query(Boolean.class)
+                .single();
+    }
+
+    @Override
+    public boolean hasFiscalAddress(Long customerId) {
+        String selectExistsFiscalAddressSql = """
+                    SELECT EXISTS(
+                        SELECT 1
+                        FROM customer_address
+                        WHERE customer_id = ?
+                          AND fiscal = TRUE
+                          AND enabled = TRUE
+                    )
+                """;
+
+        return jdbcClient.sql(selectExistsFiscalAddressSql)
+                .param(customerId)
+                .query(Boolean.class)
+                .single();
+    }
+
+    @Override
+    public CustomerAddress createAddress(Long customerId, CustomerAddress customerAddress) {
+        int position = customerAddress.isFiscal() ? 0 : nextAddressPosition(customerId);
+        customerAddress.setPosition(position);
+
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+
+        String insertAddressSql = """
+                INSERT INTO customer_address(
+                    customer_id,
+                    address,
+                    ubigeo,
+                    department,
+                    province,
+                    district,
+                    fiscal,
+                    enabled,
+                    position
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+
+        jdbcClient.sql(insertAddressSql)
+                .params(customerId,
+                        customerAddress.getAddress(),
+                        customerAddress.getUbigeo(),
+                        customerAddress.getDepartment(),
+                        customerAddress.getProvince(),
+                        customerAddress.getDistrict(),
+                        customerAddress.isFiscal(),
+                        customerAddress.isEnabled(),
+                        customerAddress.getPosition())
+                .update(keyHolder, "id");
+
+        long addressId = Optional.ofNullable(keyHolder.getKey())
+                .map(Number::longValue)
+                .orElseThrow();
+
+        customerAddress.setId(addressId);
+        customerAddress.setCustomerId(customerId);
+
+        return customerAddress;
+    }
+
+    private int nextAddressPosition(Long customerId) {
+        String selectNextPositionSql = """
+                    SELECT COALESCE(MAX(position), 0) + 1
+                    FROM customer_address
+                    WHERE customer_id = ?
+                """;
+
+        return jdbcClient.sql(selectNextPositionSql)
+                .param(customerId)
+                .query(Integer.class)
+                .single();
+    }
+
+    @Override
     public void updateResolvedData(Long customerId, Customer customer) {
         String updateResolvedDataSql = """
                 UPDATE customers
