@@ -55,47 +55,42 @@ integration:
     debug-dir: logs/mtc-debug
 
   guide-remission:
-    base-url: ${GUIDE_REMISSION_BASE_URL:http://127.0.0.1/API_SUNAT_GUIAS}
+    base-url: "http://localhost/API_SUNAT_GUIAS"
     connect-timeout-seconds: 10
-    read-timeout-seconds: 90
-    ticket-query-delay-millis: 3000
-    token-ttl-skew-seconds: 60
-    cached-token-ttl-seconds-fallback: 3300
-
+    read-timeout-seconds: 60
     auth:
       guias-client-id: "f6d277a4-ec59-456e-b6fd-7cb7a06affeb"
-      guias-client-secret: "eda9LAm/0bcz+HktGUK3Cw=="
-      usu-secundario-produccion-user: TICKOCKL
-      usu-secundario-produccion-password: haldlecto
-
+      guias-client-secret: "test-Hty/M6QshYvPgItX2P0+Kw=="
+      usu-secundario-produccion-user: "MODDATOS"
+      usu-secundario-produccion-password: "MODDATOS"
     company:
-      ruc: "20527826358"
-      razon-social: "IMPORTACIONES BAEZ SOCIEDAD ANONIMA CERRADA"
-      nombre-comercial: "IMBA S.A.C."
-      domicilio-fiscal: "AV. TAMBOPATA 854"
-      ubigeo: "170101"
+      ruc: "10481211641"
+      razon-social: "IMPORTACIONES BAEZ S.A.C."
+      nombre-comercial: "IMBASAC"
+      domicilio-fiscal: "AV. LOS EJEMPLOS 123"
+      ubigeo: "150101"
       urbanizacion: "-"
-      distrito: "TAMBOPATA"
-      provincia: "TAMBOPATA"
-      departamento: "MADRE DE DIOS"
+      distrito: "LIMA"
+      provincia: "LIMA"
+      departamento: "LIMA"
       modo: 1
 
 sale:
   sunat:
-    mode: "1"
+    mode: "0"
     url: http://localhost/API_SUNAT/post.php
-    username: "TICKOCKL"
-    password: "haldlecto"
+    username: "MODDATOS"
+    password: "MODDATOS"
     business:
-      ruc: "20527826358"
-      businessName: "IMPORTACIONES BAEZ SOCIEDAD ANONIMA CERRADA"
-      tradeName: "IMBA S.A.C."
-      taxAddress: "AV. TAMBOPATA 854"
-      ubigeo: "170101"
-      neighborhood: "-"
-      district: "TAMBOPATA"
-      province: "TAMBOPATA"
-      department: "MADRE DE DIOS"
+      ruc: "20611603739"
+      businessName: "IMPORTACIONES EL HUECO 365 DIAS DE 1000 OFERTAS S.A.C"
+      tradeName: "IMPORTACIONES EL HUECO"
+      taxAddress: "JR. SAN CRISTOBAL 327"
+      ubigeo: "180101"
+      neighborhood: "CHAUPIMARCA"
+      district: "CHAUPIMARCA"
+      province: "CERRO DE PASCO"
+      department: "PASCO"
 
 common:
   hashedPassword: $2a$12$UJsm7R3LJ0IvFNXuOpxB2OPWBrBp/1kTcivvYXlsji2ZlpA.I./j6

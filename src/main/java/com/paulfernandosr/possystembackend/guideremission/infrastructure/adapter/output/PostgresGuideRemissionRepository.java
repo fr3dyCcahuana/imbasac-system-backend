@@ -10,9 +10,9 @@ import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.OffsetDateTime;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,6 +22,8 @@ import java.util.Optional;
 @Repository
 @RequiredArgsConstructor
 public class PostgresGuideRemissionRepository implements GuideRemissionRepository {
+
+    private static final ZoneId GRE_DEFAULT_ZONE = ZoneId.of("America/Lima");
     private final JdbcClient jdbcClient;
 
     @Override
@@ -921,7 +923,50 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
     }
 
     private OffsetDateTime parseOffsetDateTime(String value) {
-        return value == null || value.isBlank() ? null : OffsetDateTime.parse(value);
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        String raw = value.trim();
+
+        // Por si alguna respuesta llega con espacio en vez de "T"
+        raw = raw.replace(" ", "T");
+
+        // Caso 1: viene con offset: 2026-04-28T00:26:53-05:00 o 2026-04-28T00:26:53Z
+        try {
+            return OffsetDateTime.parse(raw);
+        } catch (DateTimeParseException ignored) {
+            // Continúa con otros formatos
+        }
+
+        // Caso 2: viene con zona completa
+        try {
+            return ZonedDateTime.parse(raw).toOffsetDateTime();
+        } catch (DateTimeParseException ignored) {
+            // Continúa con otros formatos
+        }
+
+        // Caso 3: viene sin zona horaria: 2026-04-28T00:26:53
+        try {
+            return LocalDateTime
+                    .parse(raw, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                    .atZone(GRE_DEFAULT_ZONE)
+                    .toOffsetDateTime();
+        } catch (DateTimeParseException ignored) {
+            // Continúa con fecha simple
+        }
+
+        // Caso 4: por si algún día llega solo fecha: 2026-04-28
+        try {
+            return LocalDate
+                    .parse(raw, DateTimeFormatter.ISO_LOCAL_DATE)
+                    .atStartOfDay(GRE_DEFAULT_ZONE)
+                    .toOffsetDateTime();
+        } catch (DateTimeParseException ignored) {
+            // Error controlado abajo
+        }
+
+        throw new IllegalArgumentException("Fecha/hora GRE inválida: " + value);
     }
 
     private BigDecimal parseBigDecimal(String value) {

@@ -41,9 +41,12 @@ public class GuideRemissionHttpProvider implements GuideRemissionProvider {
         form.add("ruc", properties.getCompany().getRuc());
         form.add("usu_secundario_produccion_user", properties.getAuth().getUsuSecundarioProduccionUser());
         form.add("usu_secundario_produccion_password", properties.getAuth().getUsuSecundarioProduccionPassword());
+        form.add("modo", String.valueOf(properties.resolvedModo()));
 
-        log.info("[guide-remission][token] Solicitud de token. endpoint=/1_solicito_token.php, ruc={}, secondaryUser={}",
-                properties.getCompany().getRuc(), maskUser(properties.getAuth().getUsuSecundarioProduccionUser()));
+        log.info("[guide-remission][token] Solicitud de token. endpoint=/1_solicito_token.php, modo={}, ruc={}, secondaryUser={}",
+                properties.resolvedModoLabel(),
+                properties.getCompany().getRuc(),
+                maskUser(properties.getAuth().getUsuSecundarioProduccionUser()));
 
         try {
             RawExternalResponse raw = postForString("/1_solicito_token.php", MediaType.APPLICATION_FORM_URLENCODED, form);
@@ -65,7 +68,8 @@ public class GuideRemissionHttpProvider implements GuideRemissionProvider {
         payload.put("items", request.getItems());
         payload.put("token", request.getToken());
 
-        log.info("[guide-remission][submit] Enviando guía. endpoint=/2_envio_xml_recibe_ticket.php, ruc={}, serie={}, numero={}, motivo={}, modalidad={}, items={}",
+        log.info("[guide-remission][submit] Enviando guía. endpoint=/2_envio_xml_recibe_ticket.php, modo={}, ruc={}, serie={}, numero={}, motivo={}, modalidad={}, items={}",
+                properties.resolvedModoLabel(),
                 properties.getCompany().getRuc(),
                 request.getGuia() != null ? request.getGuia().getSerie() : null,
                 request.getGuia() != null ? request.getGuia().getNumero() : null,
@@ -98,9 +102,14 @@ public class GuideRemissionHttpProvider implements GuideRemissionProvider {
         form.add("ruc", properties.getCompany().getRuc());
         form.add("serie", request.getSerie());
         form.add("numero", request.getNumero());
+        form.add("modo", String.valueOf(properties.resolvedModo()));
 
-        log.info("[guide-remission][ticket] Consultando ticket. endpoint=/3_envio_ticket.php, ruc={}, serie={}, numero={}, ticket={}",
-                properties.getCompany().getRuc(), request.getSerie(), request.getNumero(), maskTicket(request.getTicket()));
+        log.info("[guide-remission][ticket] Consultando ticket. endpoint=/3_envio_ticket.php, modo={}, ruc={}, serie={}, numero={}, ticket={}",
+                properties.resolvedModoLabel(),
+                properties.getCompany().getRuc(),
+                request.getSerie(),
+                request.getNumero(),
+                maskTicket(request.getTicket()));
 
         try {
             RawExternalResponse raw = postForString("/3_envio_ticket.php", MediaType.APPLICATION_FORM_URLENCODED, form);

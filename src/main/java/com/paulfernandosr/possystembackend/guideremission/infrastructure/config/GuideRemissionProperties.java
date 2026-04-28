@@ -5,6 +5,8 @@ import com.paulfernandosr.possystembackend.guideremission.infrastructure.GuideRe
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -70,12 +72,21 @@ public class GuideRemissionProperties {
                 .distrito(company.getDistrito())
                 .provincia(company.getProvincia())
                 .departamento(company.getDepartamento())
-                .modo(company.getModo())
+                .modo(resolvedModo())
                 .usuSecundarioProduccionUser(auth.getUsuSecundarioProduccionUser())
                 .usuSecundarioProduccionPassword(auth.getUsuSecundarioProduccionPassword())
                 .guiasClientId(auth.getGuiasClientId())
                 .guiasClientSecret(auth.getGuiasClientSecret())
                 .build();
+    }
+
+    public int resolvedModo() {
+        Integer modo = company != null ? company.getModo() : null;
+        return modo != null && modo == 1 ? 1 : 0;
+    }
+
+    public String resolvedModoLabel() {
+        return resolvedModo() == 1 ? "PRODUCCION" : "TEST";
     }
 
     @Getter
@@ -111,6 +122,8 @@ public class GuideRemissionProperties {
         @NotBlank
         private String departamento;
         @NotNull
-        private Integer modo = 1;
+        @Min(0)
+        @Max(1)
+        private Integer modo = 0;
     }
 }

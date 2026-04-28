@@ -89,9 +89,41 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
             JsonNode root = objectMapper.readTree(rawResponse);
             JsonNode data = root != null ? root.path("data") : null;
 
+            String providerError = textValue(data, "error");
+            if (providerError != null && !providerError.isBlank()) {
+                String finalStatus = "ERROR";
+                LocalDateTime emittedAt = LocalDateTime.now();
+
+                saleV2SunatRepository.updateEmissionResult(
+                        saleId,
+                        finalStatus,
+                        null,
+                        providerError,
+                        null,
+                        null,
+                        null,
+                        null,
+                        emittedAt
+                );
+
+                return buildResponse(
+                        saleId,
+                        sale.getDocType(),
+                        sale.getSeries(),
+                        sale.getNumber(),
+                        finalStatus,
+                        null,
+                        providerError,
+                        null,
+                        null,
+                        null,
+                        null,
+                        emittedAt
+                );
+            }
+
             String code = textValue(data, "respuesta_sunat_codigo");
-            String description = defaultIfBlank(textValue(data, "respuesta_sunat_descripcion"), "Respuesta vacía de SUNAT");
-            String hashCode = extractHashCode(data != null ? data.path("codigo_hash") : null);
+            String description = defaultIfBlank(textValue(data, "respuesta_sunat_descripcion"), "Respuesta vacía de SUNAT");String hashCode = extractHashCode(data != null ? data.path("codigo_hash") : null);
             String xmlPath = textValue(data, "ruta_xml");
             String cdrPath = textValue(data, "ruta_cdr");
             String pdfPath = textValue(data, "ruta_pdf");

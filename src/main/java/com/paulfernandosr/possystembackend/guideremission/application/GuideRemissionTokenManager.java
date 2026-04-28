@@ -21,23 +21,27 @@ public class GuideRemissionTokenManager {
         return tokenCacheRepository.findByCompanyRuc(companyRuc())
                 .filter(token -> token.getAccessToken() != null && !token.getAccessToken().isBlank())
                 .map(token -> {
-                    log.info("[guide-remission][token-cache] Token reutilizado desde Redis. ruc={}", companyRuc());
+                    log.info("[guide-remission][token-cache] Token reutilizado desde Redis. modo={}, ruc={}",
+                            properties.resolvedModoLabel(), companyRuc());
                     return new GuideRemissionTokenResolution(token, "CACHE");
                 })
                 .orElseGet(this::forceRefreshToken);
     }
 
     public GuideRemissionTokenResolution forceRefreshToken() {
-        log.info("[guide-remission][token-cache] Solicitando nuevo token. ruc={}", companyRuc());
+        log.info("[guide-remission][token-cache] Solicitando nuevo token. modo={}, ruc={}",
+                properties.resolvedModoLabel(), companyRuc());
         GuideRemissionTokenResponse response = guideRemissionProvider.requestToken();
         responseEvaluator.assertValidTokenResponse(response);
         tokenCacheRepository.save(companyRuc(), response);
-        log.info("[guide-remission][token-cache] Token nuevo guardado en Redis. ruc={}, expiresIn={}", companyRuc(), response.getExpiresIn());
+        log.info("[guide-remission][token-cache] Token nuevo guardado en Redis. modo={}, ruc={}, expiresIn={}",
+                properties.resolvedModoLabel(), companyRuc(), response.getExpiresIn());
         return new GuideRemissionTokenResolution(response, "NEW");
     }
 
     public void invalidateCachedToken() {
-        log.warn("[guide-remission][token-cache] Invalidando token cacheado. ruc={}", companyRuc());
+        log.warn("[guide-remission][token-cache] Invalidando token cacheado. modo={}, ruc={}",
+                properties.resolvedModoLabel(), companyRuc());
         tokenCacheRepository.delete(companyRuc());
     }
 

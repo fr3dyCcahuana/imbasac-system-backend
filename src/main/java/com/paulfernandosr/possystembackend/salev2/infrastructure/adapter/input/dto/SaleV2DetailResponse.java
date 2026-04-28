@@ -19,6 +19,7 @@ public class SaleV2DetailResponse {
     private Long stationId;
     private Long saleSessionId;
     private Long createdBy;
+    private SaleV2UserInfoResponse createdByUser;
 
     private String docType;
     private String series;

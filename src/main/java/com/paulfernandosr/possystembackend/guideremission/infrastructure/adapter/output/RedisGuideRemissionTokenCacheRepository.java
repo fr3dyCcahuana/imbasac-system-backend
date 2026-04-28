@@ -51,7 +51,8 @@ public class RedisGuideRemissionTokenCacheRepository implements GuideRemissionTo
         if (prefix == null || prefix.isBlank()) {
             prefix = GuideRemissionRedisConstants.DEFAULT_TOKEN_PREFIX;
         }
-        return prefix + companyRuc;
+
+        return prefix + "modo:" + properties.resolvedModo() + ":ruc:" + companyRuc;
     }
 
     private String serialize(GuideRemissionTokenResponse tokenResponse) {

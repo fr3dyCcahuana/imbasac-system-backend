@@ -101,6 +101,12 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                 || "RECHAZADO".equals(normalizedSunatStatus));
     }
 
+    private String buildFullName(String firstName, String lastName) {
+        String fullName = ((firstName == null ? "" : firstName.trim()) + " "
+                + (lastName == null ? "" : lastName.trim())).trim();
+        return fullName.isBlank() ? null : fullName;
+    }
+
     @Override
     public long countSales(String likeParam,
                            String docType,
@@ -258,6 +264,10 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                 s.station_id      AS station_id,
                 s.sale_session_id AS sale_session_id,
                 s.created_by      AS created_by,
+                u_created.id      AS created_by_user_id,
+                u_created.username AS created_by_username,
+                u_created.first_name AS created_by_first_name,
+                u_created.last_name  AS created_by_last_name,
                 s.doc_type        AS doc_type,
                 s.series          AS series,
                 s.number          AS number,
@@ -310,12 +320,29 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
               FROM sale s
               LEFT JOIN sale_reference sr
                      ON sr.sale_id = s.id
+              LEFT JOIN users u_created
+                     ON u_created.id = s.created_by
               LEFT JOIN users u_edit
                      ON u_edit.id = s.last_edited_by
              WHERE s.id = ?
         """;
 
         RowMapper<SaleV2DetailResponse> mapper = (rs, rowNum) -> {
+            SaleV2UserInfoResponse createdByUser = null;
+            Object createdByUserId = rs.getObject("created_by_user_id");
+            if (createdByUserId != null) {
+                String firstName = rs.getString("created_by_first_name");
+                String lastName = rs.getString("created_by_last_name");
+
+                createdByUser = SaleV2UserInfoResponse.builder()
+                        .id(((Number) createdByUserId).longValue())
+                        .username(rs.getString("created_by_username"))
+                        .firstName(firstName)
+                        .lastName(lastName)
+                        .fullName(buildFullName(firstName, lastName))
+                        .build();
+            }
+
             SaleV2ReferenceResponse reference = null;
             Object refProformaId = rs.getObject("reference_proforma_id");
             if (refProformaId != null) {
@@ -356,6 +383,7 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                     .stationId(rs.getLong("station_id"))
                     .saleSessionId((Long) rs.getObject("sale_session_id"))
                     .createdBy(rs.getLong("created_by"))
+                    .createdByUser(createdByUser)
                     .docType(rs.getString("doc_type"))
                     .series(rs.getString("series"))
                     .number(rs.getLong("number"))
