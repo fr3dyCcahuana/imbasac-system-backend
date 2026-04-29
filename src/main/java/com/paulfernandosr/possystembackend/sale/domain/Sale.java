@@ -31,11 +31,6 @@ public class Sale {
     }
 
     public boolean isElectronic() {
-        return SaleType.ELECTRONIC_INVOICE.equals(type)
-                || SaleType.ELECTRONIC_RECEIPT.equals(type);
-    }
-
-    public String getSerial() {
-        return type.getSerial();
+        return type != null && type.isElectronic();
     }
 }

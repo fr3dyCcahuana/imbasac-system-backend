@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.sale.application;
 
+import com.paulfernandosr.possystembackend.common.infrastructure.documentseries.DocumentSeriesPolicy;
 import com.paulfernandosr.possystembackend.customer.domain.Customer;
 import com.paulfernandosr.possystembackend.customer.domain.port.output.CustomerRepository;
 import com.paulfernandosr.possystembackend.product.domain.Product;
@@ -27,6 +28,7 @@ public class CreateNewSaleService implements CreateNewSaleUseCase {
     private final UserRepository userRepository;
     private final CustomerRepository customerRepository;
     private final ProductRepository productRepository;
+    private final DocumentSeriesPolicy documentSeriesPolicy;
 
     @Override
     @Transactional
@@ -52,7 +54,11 @@ public class CreateNewSaleService implements CreateNewSaleUseCase {
             saleItem.setProduct(foundProduct);
         });
 
-        sale.setSerial(sale.getType().getSerial());
+        sale.setSerial(documentSeriesPolicy.resolveOrDefault(
+                sale.getType().getDocType(),
+                sale.getSerial(),
+                InvalidSaleException::new
+        ));
         sale.setNumber(saleRepository.getNextNumberByType(sale.getType()));
         sale.setIssuedAt(LocalDateTime.now());
         sale.setStatus(SaleStatus.PAID);

@@ -89,7 +89,7 @@ public class SunatDocumentIssuer implements DocumentIssuer {
         BigDecimal totalIgv = DocumentIssuerMapper.calculateTotalIgv(totalBasePrice.subtract(globalDiscount));
 
         return SaleDocument.builder()
-                .serial(sale.getType().getSerial())
+                .serial(sale.getSerial())
                 .number(sale.getNumber().toString())
                 .saleType(sale.getType())
                 .issuedAt(sale.getIssuedAt())

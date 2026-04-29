@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.mapper;
 
+import com.paulfernandosr.possystembackend.common.infrastructure.documentseries.DocumentSeriesPolicy;
 import com.paulfernandosr.possystembackend.customer.domain.Customer;
 import com.paulfernandosr.possystembackend.customer.domain.DocumentType;
 import com.paulfernandosr.possystembackend.role.domain.Role;
@@ -14,13 +15,21 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 public class SaleRowMapper implements RowMapper<Sale> {
+
+    private final DocumentSeriesPolicy documentSeriesPolicy;
+
+    public SaleRowMapper(DocumentSeriesPolicy documentSeriesPolicy) {
+        this.documentSeriesPolicy = documentSeriesPolicy;
+    }
+
     @Override
     public Sale mapRow(ResultSet rs, int rowNum) throws SQLException {
+        SaleType type = SaleType.valueOf(rs.getString("type"));
         return Sale.builder()
                 .id(rs.getLong("sale_id"))
-                .serial(SaleType.valueOf(rs.getString("type")).getSerial())
+                .serial(documentSeriesPolicy.resolveOrDefault(type.getDocType(), null, IllegalStateException::new))
                 .number(rs.getLong("number"))
-                .type(SaleType.valueOf(rs.getString("type")))
+                .type(type)
                 .discount(rs.getBigDecimal("discount"))
                 .status(SaleStatus.valueOf(rs.getString("status")))
                 .comment(rs.getString("comment"))

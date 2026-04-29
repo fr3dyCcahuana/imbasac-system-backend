@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.salev2.application;
 
+import com.paulfernandosr.possystembackend.common.infrastructure.documentseries.DocumentSeriesPolicy;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
 import com.paulfernandosr.possystembackend.salev2.domain.model.*;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.CreateSaleV2UseCase;
@@ -25,6 +26,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
 
     private final DocumentSeriesRepository documentSeriesRepository;
     private final ProductSnapshotRepository productSnapshotRepository;
+    private final DocumentSeriesPolicy documentSeriesPolicy;
 
     private final SaleV2Repository saleV2Repository;
     private final SalePaymentRepository salePaymentRepository;
@@ -472,7 +474,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         if (request == null) throw new InvalidSaleV2Exception("Request vacío.");
         if (request.getStationId() == null) throw new InvalidSaleV2Exception("stationId es obligatorio.");
         if (request.getDocType() == null) throw new InvalidSaleV2Exception("docType es obligatorio.");
-        if (request.getSeries() == null || request.getSeries().trim().isEmpty()) throw new InvalidSaleV2Exception("series es obligatorio.");
+        request.setSeries(resolveSeriesForRequest(request.getDocType(), request.getSeries()));
         if (request.getPriceList() == null) throw new InvalidSaleV2Exception("priceList es obligatorio.");
         if (request.getTaxStatus() == null) request.setTaxStatus(TaxStatus.NO_GRAVADA);
         if (request.getTaxStatus() == TaxStatus.NO_GRAVADA
@@ -483,6 +485,13 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         if (request.getTaxStatus() != TaxStatus.GRAVADA) request.setIgvIncluded(Boolean.FALSE);
         if (request.getPaymentType() == null) throw new InvalidSaleV2Exception("paymentType es obligatorio.");
         if (request.getItems() == null || request.getItems().isEmpty()) throw new InvalidSaleV2Exception("Debe enviar items.");
+    }
+
+    private String resolveSeriesForRequest(DocType docType, String series) {
+        if (docType == DocType.BOLETA || docType == DocType.FACTURA) {
+            return documentSeriesPolicy.requireAllowed(docType.name(), series, InvalidSaleV2Exception::new);
+        }
+        return documentSeriesPolicy.normalizeSeries(series, InvalidSaleV2Exception::new);
     }
 
     private Totals calculateTotals(SaleV2CreateRequest request, List<ComputedLine> lines) {

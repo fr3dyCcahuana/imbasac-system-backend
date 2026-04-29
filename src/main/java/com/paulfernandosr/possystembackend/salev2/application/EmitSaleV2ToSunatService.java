@@ -2,6 +2,7 @@ package com.paulfernandosr.possystembackend.salev2.application;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.paulfernandosr.possystembackend.common.infrastructure.documentseries.DocumentSeriesPolicy;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.DocumentRequest;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.SunatProps;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
@@ -26,6 +27,7 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
     private static final String SUCCESS_RESPONSE = "0";
 
     private final SaleV2SunatRepository saleV2SunatRepository;
+    private final DocumentSeriesPolicy documentSeriesPolicy;
     private final RestClient sunatRestClient;
     private final SunatProps sunatProps;
     private final ObjectMapper objectMapper;
@@ -164,6 +166,7 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
         if (!"BOLETA".equals(docType) && !"FACTURA".equals(docType)) {
             throw new InvalidSaleV2Exception("Solo BOLETA/FACTURA se envían a SUNAT. docType=" + sale.getDocType());
         }
+        documentSeriesPolicy.requireAllowed(docType, sale.getSeries(), InvalidSaleV2Exception::new);
     }
 
 

@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output;
 
 import com.paulfernandosr.possystembackend.common.domain.Page;
+import com.paulfernandosr.possystembackend.common.infrastructure.documentseries.DocumentSeriesPolicy;
 import com.paulfernandosr.possystembackend.common.domain.Pageable;
 import com.paulfernandosr.possystembackend.common.infrastructure.mapper.QueryMapper;
 import com.paulfernandosr.possystembackend.sale.domain.Sale;
@@ -30,6 +31,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class PostgresSaleRepository implements SaleRepository {
     private final JdbcClient jdbcClient;
+    private final DocumentSeriesPolicy documentSeriesPolicy;
 
     @Override
     @Transactional
@@ -145,7 +147,7 @@ public class PostgresSaleRepository implements SaleRepository {
 
         return jdbcClient.sql(selectSaleByIdSql)
                 .param(saleId)
-                .query(new SaleRowMapper())
+                .query(new SaleRowMapper(documentSeriesPolicy))
                 .optional();
     }
 
@@ -275,7 +277,7 @@ public class PostgresSaleRepository implements SaleRepository {
 
         Collection<Sale> sales = jdbcClient.sql(selectSql)
                 .params(pageParams.toArray())
-                .query(new SaleRowMapper())
+                .query(new SaleRowMapper(documentSeriesPolicy))
                 .list();
 
         BigDecimal totalPages = BigDecimal.valueOf(totalElements)

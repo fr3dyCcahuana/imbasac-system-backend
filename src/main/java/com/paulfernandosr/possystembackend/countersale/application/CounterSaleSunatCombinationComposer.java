@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.countersale.application;
 
+import com.paulfernandosr.possystembackend.common.infrastructure.documentseries.DocumentSeriesPolicy;
 import com.paulfernandosr.possystembackend.countersale.domain.exception.InvalidCounterSaleException;
 import com.paulfernandosr.possystembackend.countersale.domain.port.input.GetCounterSaleUseCase;
 import com.paulfernandosr.possystembackend.countersale.infrastructure.adapter.input.dto.*;
@@ -19,6 +20,7 @@ class CounterSaleSunatCombinationComposer {
     static final String CUSTOMER_MODE_VENTA_DIARIA = "VENTA_DIARIA";
 
     private final GetCounterSaleUseCase getCounterSaleUseCase;
+    private final DocumentSeriesPolicy documentSeriesPolicy;
 
     ComposedResult compose(Long anchorCounterSaleId, CounterSaleSunatCombinationRequest request) {
         if (anchorCounterSaleId == null) {
@@ -101,7 +103,7 @@ class CounterSaleSunatCombinationComposer {
         return ComposedResult.builder()
                 .anchor(anchor)
                 .customerMode(customerMode)
-                .series(normalizeSeries(safeRequest.getSeries()))
+                .series(resolveDocumentSeries(safeRequest.getSeries()))
                 .issueDate(safeRequest.getIssueDate() != null ? safeRequest.getIssueDate() : LocalDate.now())
                 .paymentMethod(normalizePaymentMethod(safeRequest.getPaymentMethod()))
                 .notes(trimToNull(safeRequest.getNotes()))
@@ -261,9 +263,8 @@ class CounterSaleSunatCombinationComposer {
         return "GRAVADA".equalsIgnoreCase(blank(detail.getTaxStatus()));
     }
 
-    private String normalizeSeries(String series) {
-        String normalized = trimToNull(series);
-        return normalized == null ? "B003" : normalized.toUpperCase();
+    private String resolveDocumentSeries(String series) {
+        return documentSeriesPolicy.resolveOrDefault("BOLETA", series, InvalidCounterSaleException::new);
     }
 
     private String normalizePaymentMethod(String paymentMethod) {

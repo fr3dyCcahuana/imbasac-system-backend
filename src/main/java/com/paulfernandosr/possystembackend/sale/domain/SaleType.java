@@ -4,18 +4,23 @@ import lombok.Getter;
 
 @Getter
 public enum SaleType {
-    SIMPLE_RECEIPT("B003"),
-    ELECTRONIC_RECEIPT("B003"),
-    ELECTRONIC_INVOICE("F003");
+    SIMPLE_RECEIPT("SIMPLE"),
+    ELECTRONIC_RECEIPT("BOLETA"),
+    ELECTRONIC_INVOICE("FACTURA");
 
-    private final String serial;
+    private final String docType;
 
-    SaleType(String serial) {
-        this.serial = serial;
+    SaleType(String docType) {
+        this.docType = docType;
     }
 
     public boolean isReceipt() {
         return SIMPLE_RECEIPT.equals(this)
                 || ELECTRONIC_RECEIPT.equals(this);
+    }
+
+    public boolean isElectronic() {
+        return ELECTRONIC_RECEIPT.equals(this)
+                || ELECTRONIC_INVOICE.equals(this);
     }
 }

@@ -18,7 +18,7 @@ public class SaleV2CreateRequest {
     private Long saleSessionId;
 
     private DocType docType;          // SIMPLE/BOLETA/FACTURA
-    private String series;            // e.g. B001
+    private String series;            // serie configurada en app.document-series y document_series
     private LocalDate issueDate;
 
     private String currency;          // PEN
