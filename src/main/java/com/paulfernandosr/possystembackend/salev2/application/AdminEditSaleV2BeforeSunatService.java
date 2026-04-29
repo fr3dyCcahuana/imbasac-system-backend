@@ -191,14 +191,22 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
                 BigDecimal qty = nz(item.getQuantity());
                 if (qty.signum() <= 0) continue;
 
-                productStockRepository.increaseOnHand(item.getProductId(), qty);
+                StockMovementBalance balance = productStockRepository.increaseOnHand(item.getProductId(), qty);
 
                 BigDecimal unitCost = nz(item.getUnitCostSnapshot());
                 BigDecimal totalCost = item.getTotalCostSnapshot() != null
                         ? item.getTotalCostSnapshot()
-                        : unitCost.multiply(qty);
+                        : unitCost.multiply(qty).setScale(4, RoundingMode.HALF_UP);
 
-                productStockMovementRepository.createInEdit(item.getProductId(), qty, item.getId(), unitCost, totalCost);
+                productStockMovementRepository.createInEdit(
+                        item.getProductId(),
+                        qty,
+                        item.getId(),
+                        unitCost,
+                        totalCost,
+                        balance.getQuantityOnHand(),
+                        nz(balance.getAverageCost(), unitCost)
+                );
             }
         }
 
@@ -228,8 +236,20 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
             );
 
             if (Boolean.TRUE.equals(line.getProduct().getAffectsStock())) {
-                productStockRepository.decreaseOnHandOrFail(line.getProduct().getId(), line.getQuantity());
-                productStockMovementRepository.createOutSale(line.getProduct().getId(), line.getQuantity(), saleItemId);
+                StockMovementBalance balance = productStockRepository.decreaseOnHandOrFail(line.getProduct().getId(), line.getQuantity());
+                BigDecimal unitCost = nz(line.getUnitCostSnapshot());
+                BigDecimal totalCost = line.getTotalCostSnapshot() != null
+                        ? line.getTotalCostSnapshot()
+                        : unitCost.multiply(line.getQuantity()).setScale(4, RoundingMode.HALF_UP);
+                productStockMovementRepository.createOutEdit(
+                        line.getProduct().getId(),
+                        line.getQuantity(),
+                        saleItemId,
+                        unitCost,
+                        totalCost,
+                        balance.getQuantityOnHand(),
+                        nz(balance.getAverageCost(), unitCost)
+                );
             }
 
             if (Boolean.TRUE.equals(line.getProduct().getManageBySerial())) {

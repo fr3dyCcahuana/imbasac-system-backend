@@ -1,8 +1,10 @@
 package com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output;
 
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
+import com.paulfernandosr.possystembackend.salev2.domain.model.StockMovementBalance;
 import com.paulfernandosr.possystembackend.salev2.domain.port.output.ProductStockRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -13,6 +15,12 @@ import java.math.BigDecimal;
 public class PostgresProductStockRepository implements ProductStockRepository {
 
     private final JdbcClient jdbcClient;
+
+    private static final RowMapper<StockMovementBalance> STOCK_BALANCE_ROW_MAPPER = (rs, rowNum) -> StockMovementBalance.builder()
+            .quantityOnHand(rs.getBigDecimal("quantity_on_hand"))
+            .averageCost(rs.getBigDecimal("average_cost"))
+            .lastUnitCost(rs.getBigDecimal("last_unit_cost"))
+            .build();
 
     @Override
     public BigDecimal getOnHand(Long productId) {
@@ -45,36 +53,37 @@ public class PostgresProductStockRepository implements ProductStockRepository {
     }
 
     @Override
-    public void decreaseOnHandOrFail(Long productId, BigDecimal quantity) {
+    public StockMovementBalance decreaseOnHandOrFail(Long productId, BigDecimal quantity) {
         String sql = """
             UPDATE product_stock
-               SET quantity_on_hand = quantity_on_hand - ?
+               SET quantity_on_hand = quantity_on_hand - ?,
+                   last_movement_at = NOW()
              WHERE product_id = ?
                AND quantity_on_hand >= ?
+            RETURNING quantity_on_hand, average_cost, last_unit_cost
         """;
 
-        int updated = jdbcClient.sql(sql)
+        return jdbcClient.sql(sql)
                 .params(quantity, productId, quantity)
-                .update();
-
-        if (updated == 0) {
-            throw new InvalidSaleV2Exception("Stock insuficiente para productId=" + productId);
-        }
+                .query(STOCK_BALANCE_ROW_MAPPER)
+                .optional()
+                .orElseThrow(() -> new InvalidSaleV2Exception("Stock insuficiente para productId=" + productId));
     }
 
     @Override
-    public void increaseOnHand(Long productId, BigDecimal quantity) {
-        // UPSERT para cubrir el caso en que aún no exista fila en product_stock.
+    public StockMovementBalance increaseOnHand(Long productId, BigDecimal quantity) {
         String sql = """
             INSERT INTO product_stock(product_id, quantity_on_hand, last_movement_at)
             VALUES (?, ?, NOW())
             ON CONFLICT (product_id)
             DO UPDATE SET quantity_on_hand = product_stock.quantity_on_hand + EXCLUDED.quantity_on_hand,
                           last_movement_at = NOW()
+            RETURNING quantity_on_hand, average_cost, last_unit_cost
         """;
 
-        jdbcClient.sql(sql)
+        return jdbcClient.sql(sql)
                 .params(productId, quantity)
-                .update();
+                .query(STOCK_BALANCE_ROW_MAPPER)
+                .single();
     }
 }

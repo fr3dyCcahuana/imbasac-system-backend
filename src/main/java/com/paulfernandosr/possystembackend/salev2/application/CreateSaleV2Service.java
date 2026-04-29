@@ -356,8 +356,20 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
             );
 
             if (Boolean.TRUE.equals(line.getProduct().getAffectsStock())) {
-                productStockRepository.decreaseOnHandOrFail(line.getProduct().getId(), line.getQuantity());
-                productStockMovementRepository.createOutSale(line.getProduct().getId(), line.getQuantity(), saleItemId);
+                StockMovementBalance balance = productStockRepository.decreaseOnHandOrFail(line.getProduct().getId(), line.getQuantity());
+                BigDecimal unitCost = nz(line.getUnitCostSnapshot());
+                BigDecimal totalCost = line.getTotalCostSnapshot() != null
+                        ? line.getTotalCostSnapshot()
+                        : unitCost.multiply(line.getQuantity()).setScale(4, RoundingMode.HALF_UP);
+                productStockMovementRepository.createOutSale(
+                        line.getProduct().getId(),
+                        line.getQuantity(),
+                        saleItemId,
+                        unitCost,
+                        totalCost,
+                        balance.getQuantityOnHand(),
+                        nz(balance.getAverageCost(), unitCost)
+                );
             }
 
             if (Boolean.TRUE.equals(line.getProduct().getManageBySerial())) {

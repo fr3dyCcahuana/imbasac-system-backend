@@ -240,8 +240,20 @@ public class CreateCounterSaleService implements CreateCounterSaleUseCase {
             );
 
             if (Boolean.TRUE.equals(line.getProduct().getAffectsStock())) {
-                productStockRepository.decreaseOnHandOrFail(line.getProduct().getId(), line.getQuantity());
-                productStockMovementRepository.createOutCounterSale(line.getProduct().getId(), line.getQuantity(), counterSaleItemId);
+                StockMovementBalance balance = productStockRepository.decreaseOnHandOrFail(line.getProduct().getId(), line.getQuantity());
+                BigDecimal unitCost = nz(line.getUnitCostSnapshot());
+                BigDecimal totalCost = line.getTotalCostSnapshot() != null
+                        ? line.getTotalCostSnapshot()
+                        : unitCost.multiply(line.getQuantity()).setScale(4, RoundingMode.HALF_UP);
+                productStockMovementRepository.createOutCounterSale(
+                        line.getProduct().getId(),
+                        line.getQuantity(),
+                        counterSaleItemId,
+                        unitCost,
+                        totalCost,
+                        balance.getQuantityOnHand(),
+                        nz(balance.getAverageCost(), unitCost)
+                );
             }
 
             if (Boolean.TRUE.equals(line.getProduct().getManageBySerial()) && line.getSerialUnitIds() != null) {

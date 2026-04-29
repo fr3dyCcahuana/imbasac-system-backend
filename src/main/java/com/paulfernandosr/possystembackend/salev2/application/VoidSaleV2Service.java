@@ -2,6 +2,7 @@ package com.paulfernandosr.possystembackend.salev2.application;
 
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
 import com.paulfernandosr.possystembackend.salev2.domain.model.OpenSaleSession;
+import com.paulfernandosr.possystembackend.salev2.domain.model.StockMovementBalance;
 import com.paulfernandosr.possystembackend.salev2.domain.model.VoidSaleV2Response;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.VoidSaleV2UseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.output.*;
@@ -64,7 +65,7 @@ public class VoidSaleV2Service implements VoidSaleV2UseCase {
                 BigDecimal qty = it.getQuantity() == null ? BigDecimal.ZERO : it.getQuantity();
                 if (qty.signum() <= 0) continue;
 
-                productStockRepository.increaseOnHand(it.getProductId(), qty);
+                StockMovementBalance balance = productStockRepository.increaseOnHand(it.getProductId(), qty);
 
                 BigDecimal unitCost = it.getUnitCostSnapshot();
                 if (unitCost == null) unitCost = BigDecimal.ZERO;
@@ -73,7 +74,15 @@ public class VoidSaleV2Service implements VoidSaleV2UseCase {
                     totalCost = unitCost.multiply(qty);
                 }
 
-                productStockMovementRepository.createInReturn(it.getProductId(), qty, it.getId(), unitCost, totalCost);
+                productStockMovementRepository.createInReturn(
+                        it.getProductId(),
+                        qty,
+                        it.getId(),
+                        unitCost,
+                        totalCost,
+                        balance.getQuantityOnHand(),
+                        nz(balance.getAverageCost(), unitCost)
+                );
             }
         }
 
@@ -128,4 +137,8 @@ public class VoidSaleV2Service implements VoidSaleV2UseCase {
                 .status("ANULADA")
                 .build();
     }
+    private static BigDecimal nz(BigDecimal value, BigDecimal fallback) {
+        return value == null ? fallback : value;
+    }
+
 }

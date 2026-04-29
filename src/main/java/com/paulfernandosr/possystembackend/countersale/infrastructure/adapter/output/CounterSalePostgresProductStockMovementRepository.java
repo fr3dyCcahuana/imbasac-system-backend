@@ -14,24 +14,39 @@ public class CounterSalePostgresProductStockMovementRepository implements Produc
     private final JdbcClient jdbcClient;
 
     @Override
-    public void createOutCounterSale(Long productId, BigDecimal quantityOut, Long counterSaleItemId) {
-        String sql = """
-            INSERT INTO product_stock_movement(
-              product_id,
-              movement_type,
-              source_table,
-              source_id,
-              quantity_out,
-              created_at
-            ) VALUES (?, 'OUT_COUNTER_SALE', 'counter_sale_item', ?, ?, NOW())
-        """;
-        jdbcClient.sql(sql)
-                .params(productId, counterSaleItemId, quantityOut)
-                .update();
+    public void createOutCounterSale(Long productId,
+                                     BigDecimal quantityOut,
+                                     Long counterSaleItemId,
+                                     BigDecimal unitCost,
+                                     BigDecimal totalCost,
+                                     BigDecimal balanceQty,
+                                     BigDecimal balanceCost) {
+        createMovement(productId, "OUT_COUNTER_SALE", "counter_sale_item", counterSaleItemId,
+                BigDecimal.ZERO, quantityOut, unitCost, totalCost, balanceQty, balanceCost);
     }
 
     @Override
-    public void createInCounterSaleVoid(Long productId, BigDecimal quantityIn, Long counterSaleItemId, BigDecimal unitCost, BigDecimal totalCost) {
+    public void createInCounterSaleVoid(Long productId,
+                                        BigDecimal quantityIn,
+                                        Long counterSaleItemId,
+                                        BigDecimal unitCost,
+                                        BigDecimal totalCost,
+                                        BigDecimal balanceQty,
+                                        BigDecimal balanceCost) {
+        createMovement(productId, "IN_COUNTER_SALE_VOID", "counter_sale_item", counterSaleItemId,
+                quantityIn, BigDecimal.ZERO, unitCost, totalCost, balanceQty, balanceCost);
+    }
+
+    private void createMovement(Long productId,
+                                String movementType,
+                                String sourceTable,
+                                Long sourceId,
+                                BigDecimal quantityIn,
+                                BigDecimal quantityOut,
+                                BigDecimal unitCost,
+                                BigDecimal totalCost,
+                                BigDecimal balanceQty,
+                                BigDecimal balanceCost) {
         String sql = """
             INSERT INTO product_stock_movement(
               product_id,
@@ -39,13 +54,18 @@ public class CounterSalePostgresProductStockMovementRepository implements Produc
               source_table,
               source_id,
               quantity_in,
+              quantity_out,
               unit_cost,
               total_cost,
+              balance_qty,
+              balance_cost,
               created_at
-            ) VALUES (?, 'IN_COUNTER_SALE_VOID', 'counter_sale_item', ?, ?, ?, ?, NOW())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         """;
+
         jdbcClient.sql(sql)
-                .params(productId, counterSaleItemId, quantityIn, unitCost, totalCost)
+                .params(productId, movementType, sourceTable, sourceId,
+                        quantityIn, quantityOut, unitCost, totalCost, balanceQty, balanceCost)
                 .update();
     }
 }

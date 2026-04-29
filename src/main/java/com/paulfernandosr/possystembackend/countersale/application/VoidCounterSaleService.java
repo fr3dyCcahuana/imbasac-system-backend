@@ -2,6 +2,7 @@ package com.paulfernandosr.possystembackend.countersale.application;
 
 import com.paulfernandosr.possystembackend.countersale.domain.exception.InvalidCounterSaleException;
 import com.paulfernandosr.possystembackend.countersale.domain.model.OpenSaleSession;
+import com.paulfernandosr.possystembackend.countersale.domain.model.StockMovementBalance;
 import com.paulfernandosr.possystembackend.countersale.domain.model.VoidCounterSaleResponse;
 import com.paulfernandosr.possystembackend.countersale.domain.port.input.VoidCounterSaleUseCase;
 import com.paulfernandosr.possystembackend.countersale.domain.port.output.*;
@@ -58,11 +59,19 @@ public class VoidCounterSaleService implements VoidCounterSaleUseCase {
                 BigDecimal qty = item.getQuantity() == null ? BigDecimal.ZERO : item.getQuantity();
                 if (qty.signum() <= 0) continue;
 
-                productStockRepository.increaseOnHand(item.getProductId(), qty);
+                StockMovementBalance balance = productStockRepository.increaseOnHand(item.getProductId(), qty);
 
                 BigDecimal unitCost = item.getUnitCostSnapshot() == null ? BigDecimal.ZERO : item.getUnitCostSnapshot();
                 BigDecimal totalCost = item.getTotalCostSnapshot() == null ? unitCost.multiply(qty) : item.getTotalCostSnapshot();
-                productStockMovementRepository.createInCounterSaleVoid(item.getProductId(), qty, item.getId(), unitCost, totalCost);
+                productStockMovementRepository.createInCounterSaleVoid(
+                        item.getProductId(),
+                        qty,
+                        item.getId(),
+                        unitCost,
+                        totalCost,
+                        balance.getQuantityOnHand(),
+                        nz(balance.getAverageCost(), unitCost)
+                );
             }
         }
 
@@ -106,4 +115,8 @@ public class VoidCounterSaleService implements VoidCounterSaleUseCase {
         String prefix = (docType == null || docType.isBlank()) ? "" : (docType.trim().toUpperCase() + " ");
         return ": " + prefix + series.trim().toUpperCase() + "-" + number;
     }
+    private static BigDecimal nz(BigDecimal value, BigDecimal fallback) {
+        return value == null ? fallback : value;
+    }
+
 }

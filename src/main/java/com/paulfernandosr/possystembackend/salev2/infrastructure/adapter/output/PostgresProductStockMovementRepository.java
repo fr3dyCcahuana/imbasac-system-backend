@@ -14,60 +14,82 @@ public class PostgresProductStockMovementRepository implements ProductStockMovem
     private final JdbcClient jdbcClient;
 
     @Override
-    public void createOutSale(Long productId, BigDecimal quantityOut, Long saleItemId) {
+    public void createOutSale(Long productId,
+                              BigDecimal quantityOut,
+                              Long saleItemId,
+                              BigDecimal unitCost,
+                              BigDecimal totalCost,
+                              BigDecimal balanceQty,
+                              BigDecimal balanceCost) {
+        createMovement(productId, "OUT_SALE", "sale_item", saleItemId,
+                BigDecimal.ZERO, quantityOut, unitCost, totalCost, balanceQty, balanceCost);
+    }
+
+    @Override
+    public void createOutEdit(Long productId,
+                              BigDecimal quantityOut,
+                              Long saleItemId,
+                              BigDecimal unitCost,
+                              BigDecimal totalCost,
+                              BigDecimal balanceQty,
+                              BigDecimal balanceCost) {
+        createMovement(productId, "OUT_SALE_EDIT", "sale_item", saleItemId,
+                BigDecimal.ZERO, quantityOut, unitCost, totalCost, balanceQty, balanceCost);
+    }
+
+    @Override
+    public void createInReturn(Long productId,
+                               BigDecimal quantityIn,
+                               Long saleItemId,
+                               BigDecimal unitCost,
+                               BigDecimal totalCost,
+                               BigDecimal balanceQty,
+                               BigDecimal balanceCost) {
+        createMovement(productId, "IN_RETURN", "sale_item", saleItemId,
+                quantityIn, BigDecimal.ZERO, unitCost, totalCost, balanceQty, balanceCost);
+    }
+
+    @Override
+    public void createInEdit(Long productId,
+                             BigDecimal quantityIn,
+                             Long saleItemId,
+                             BigDecimal unitCost,
+                             BigDecimal totalCost,
+                             BigDecimal balanceQty,
+                             BigDecimal balanceCost) {
+        createMovement(productId, "IN_SALE_EDIT", "sale_item", saleItemId,
+                quantityIn, BigDecimal.ZERO, unitCost, totalCost, balanceQty, balanceCost);
+    }
+
+    private void createMovement(Long productId,
+                                String movementType,
+                                String sourceTable,
+                                Long sourceId,
+                                BigDecimal quantityIn,
+                                BigDecimal quantityOut,
+                                BigDecimal unitCost,
+                                BigDecimal totalCost,
+                                BigDecimal balanceQty,
+                                BigDecimal balanceCost) {
         String sql = """
             INSERT INTO product_stock_movement(
               product_id,
               movement_type,
               source_table,
               source_id,
+              quantity_in,
               quantity_out,
-              created_at
-            ) VALUES (?, 'OUT_SALE', 'sale_item', ?, ?, NOW())
-        """;
-
-        jdbcClient.sql(sql)
-                .params(productId, saleItemId, quantityOut)
-                .update();
-    }
-
-    @Override
-    public void createInReturn(Long productId, BigDecimal quantityIn, Long saleItemId, BigDecimal unitCost, BigDecimal totalCost) {
-        String sql = """
-            INSERT INTO product_stock_movement(
-              product_id,
-              movement_type,
-              source_table,
-              source_id,
-              quantity_in,
               unit_cost,
               total_cost,
+              balance_qty,
+              balance_cost,
               created_at
-            ) VALUES (?, 'IN_RETURN', 'sale_item', ?, ?, ?, ?, NOW())
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         """;
 
         jdbcClient.sql(sql)
-                .params(productId, saleItemId, quantityIn, unitCost, totalCost)
-                .update();
-    }
-
-    @Override
-    public void createInEdit(Long productId, BigDecimal quantityIn, Long saleItemId, BigDecimal unitCost, BigDecimal totalCost) {
-        String sql = """
-            INSERT INTO product_stock_movement(
-              product_id,
-              movement_type,
-              source_table,
-              source_id,
-              quantity_in,
-              unit_cost,
-              total_cost,
-              created_at
-            ) VALUES (?, 'IN_SALE_EDIT', 'sale_item', ?, ?, ?, ?, NOW())
-        """;
-
-        jdbcClient.sql(sql)
-                .params(productId, saleItemId, quantityIn, unitCost, totalCost)
+                .params(productId, movementType, sourceTable, sourceId,
+                        quantityIn, quantityOut, unitCost, totalCost, balanceQty, balanceCost)
                 .update();
     }
 }
