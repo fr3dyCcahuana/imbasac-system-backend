@@ -84,8 +84,8 @@ sale:
   sunat:
     mode: "1"
     url: http://localhost/API_SUNAT/post.php
-    username: "TICKOCKL"
-    password: "haldlecto"
+    username: "CPEIMBA2"
+    password: "Haldlecto26"
     business:
       ruc: "20527826358"
       businessName: "IMPORTACIONES BAEZ SOCIEDAD ANONIMA CERRADA"

@@ -76,12 +76,8 @@ public class CompetitiveImportBuilder {
                 continue;
             }
 
-            // ✅ NUEVO: validar Marca/Modelo solo si la plantilla trae listas (no vacías)
-            if (row.getBrand() != null && workbook.getAllowedBrands() != null && !workbook.getAllowedBrands().isEmpty()
-                    && !workbook.getAllowedBrands().contains(row.getBrand())) {
-                addError(result, row, sku, "Marca", "NOT_ALLOWED", row.getBrand(), "Marca no permitida.");
-                continue;
-            }
+            // Marca puede venir desde la lista desplegable o puede ser nueva.
+            // Si es nueva, se registra primero en brand_catalog antes del upsert del producto.
             if (row.getModel() != null && workbook.getAllowedModels() != null && !workbook.getAllowedModels().isEmpty()
                     && !workbook.getAllowedModels().contains(row.getModel())) {
                 addError(result, row, sku, "Modelo", "NOT_ALLOWED", row.getModel(), "Modelo no permitido.");

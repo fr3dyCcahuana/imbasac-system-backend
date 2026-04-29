@@ -15,7 +15,6 @@ public class CompetitiveImportExcelParser {
     private static final String SHEET_PRODUCTS = "PRODUCTOS";
     private static final String SHEET_LISTS = "LISTAS";
 
-    // Plantilla v1 (legacy): sin Marca/Modelo
     private static final List<String> EXPECTED_HEADERS_V1 = List.of(
             "Código (SKU)*",
             "Nombre / Descripción*",
@@ -35,7 +34,6 @@ public class CompetitiveImportExcelParser {
             "Costo referencial"
     );
 
-    // Plantilla v2 (2026): agrega Marca/Modelo después de Categoría
     private static final List<String> EXPECTED_HEADERS_V2 = List.of(
             "Código (SKU)*",
             "Nombre / Descripción*",
@@ -57,7 +55,27 @@ public class CompetitiveImportExcelParser {
             "Costo referencial"
     );
 
-    private enum TemplateVersion { V1, V2 }
+    private static final List<String> EXPECTED_HEADERS_V3 = List.of(
+            "Código (SKU)*",
+            "Nombre / Descripción*",
+            "Categoría",
+            "Presentación",
+            "Factor",
+            "Tipo de origen",
+            "País de origen",
+            "Compatibilidad",
+            "Ubicación en almacén",
+            "CROSLAND PUBLICO",
+            "Precio A",
+            "Precio B",
+            "CROSLAND MAYORISTA",
+            "Precio C",
+            "Precio D",
+            "Costo referencial",
+            "Marca"
+    );
+
+    private enum TemplateVersion { V1, V2, V3 }
 
     public static CompetitiveImportWorkbook parse(ProductCompetitiveImportCommand command, ProductCompetitiveImportResult result) {
         try (Workbook wb = new XSSFWorkbook(new ByteArrayInputStream(command.getFileBytes()))) {
@@ -79,8 +97,6 @@ public class CompetitiveImportExcelParser {
             TemplateVersion version = validateHeader(products, result);
             if (result.hasErrors() || version == null) return null;
 
-            // LISTAS: columnas (1-based en Excel)
-            // 0: Categorías, 1: Presentación, 2: Tipo origen, 3: País, 4: Marcas, 5: Modelos
             Set<String> allowedCategories = readListColumnUpper(lists, 0);
             Set<String> allowedPresentations = readListColumnUpper(lists, 1);
             Set<String> allowedOriginTypes = readListColumnUpper(lists, 2);
@@ -88,8 +104,10 @@ public class CompetitiveImportExcelParser {
 
             Set<String> allowedBrands = Set.of();
             Set<String> allowedModels = Set.of();
-            if (version == TemplateVersion.V2) {
+            if (version == TemplateVersion.V2 || version == TemplateVersion.V3) {
                 allowedBrands = readListColumnTrim(lists, 4);
+            }
+            if (version == TemplateVersion.V2) {
                 allowedModels = readListColumnTrim(lists, 5);
             }
 
@@ -124,14 +142,16 @@ public class CompetitiveImportExcelParser {
             return null;
         }
 
+        int mismV3 = countHeaderMismatches(header, EXPECTED_HEADERS_V3);
+        if (mismV3 == 0) return TemplateVersion.V3;
+
         int mismV2 = countHeaderMismatches(header, EXPECTED_HEADERS_V2);
         if (mismV2 == 0) return TemplateVersion.V2;
 
         int mismV1 = countHeaderMismatches(header, EXPECTED_HEADERS_V1);
         if (mismV1 == 0) return TemplateVersion.V1;
 
-        // Si no coincide con ninguna, reporta en base a la plantilla más cercana
-        List<String> expected = mismV2 <= mismV1 ? EXPECTED_HEADERS_V2 : EXPECTED_HEADERS_V1;
+        List<String> expected = closestExpectedHeaders(mismV1, mismV2, mismV3);
         for (int i = 0; i < expected.size(); i++) {
             String exp = expected.get(i);
             String got = getString(header.getCell(i));
@@ -151,6 +171,12 @@ public class CompetitiveImportExcelParser {
         return null;
     }
 
+    private static List<String> closestExpectedHeaders(int mismV1, int mismV2, int mismV3) {
+        if (mismV3 <= mismV2 && mismV3 <= mismV1) return EXPECTED_HEADERS_V3;
+        if (mismV2 <= mismV1) return EXPECTED_HEADERS_V2;
+        return EXPECTED_HEADERS_V1;
+    }
+
     private static int countHeaderMismatches(Row header, List<String> expected) {
         int mismatches = 0;
         for (int i = 0; i < expected.size(); i++) {
@@ -165,7 +191,6 @@ public class CompetitiveImportExcelParser {
     private static boolean headerCellMatches(String expected, String gotTrim) {
         if (expected == null) return gotTrim == null || gotTrim.isBlank();
 
-        // Compatibilidad con plantillas antiguas: CROSLAND vs CROLANDO
         if ("CROSLAND PUBLICO".equalsIgnoreCase(expected)) {
             return "CROSLAND PUBLICO".equalsIgnoreCase(gotTrim) || "CROLANDO PUBLICO".equalsIgnoreCase(gotTrim);
         }
@@ -204,7 +229,11 @@ public class CompetitiveImportExcelParser {
         List<CompetitiveImportRow> rows = new ArrayList<>();
         int last = products.getLastRowNum();
 
-        int colCount = (version == TemplateVersion.V2) ? EXPECTED_HEADERS_V2.size() : EXPECTED_HEADERS_V1.size();
+        int colCount = switch (version) {
+            case V3 -> EXPECTED_HEADERS_V3.size();
+            case V2 -> EXPECTED_HEADERS_V2.size();
+            case V1 -> EXPECTED_HEADERS_V1.size();
+        };
 
         for (int r = 1; r <= last; r++) {
             Row row = products.getRow(r);
@@ -255,6 +284,10 @@ public class CompetitiveImportExcelParser {
                  .priceC(getDecimal(row.getCell(13)))
                  .priceD(getDecimal(row.getCell(14)))
                  .costReference(getDecimal(row.getCell(15)));
+
+                if (version == TemplateVersion.V3) {
+                    b.brand(normalizeTrim(getString(row.getCell(16))));
+                }
             }
 
             rows.add(b.build());

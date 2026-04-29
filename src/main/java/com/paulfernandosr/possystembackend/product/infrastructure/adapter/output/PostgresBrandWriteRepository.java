@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Set;
 
 @Repository
@@ -22,5 +23,19 @@ public class PostgresBrandWriteRepository implements BrandWriteRepository {
             if (b == null || b.isBlank()) continue;
             jdbcClient.sql(sql).param(b).update();
         }
+    }
+
+    @Override
+    public List<String> findAllNames() {
+        String sql = """
+                SELECT name
+                FROM brand_catalog
+                WHERE NULLIF(TRIM(name), '') IS NOT NULL
+                ORDER BY name ASC
+                """;
+
+        return jdbcClient.sql(sql)
+                .query((rs, rowNum) -> rs.getString("name"))
+                .list();
     }
 }

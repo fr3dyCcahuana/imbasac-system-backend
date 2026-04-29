@@ -3,9 +3,11 @@ package com.paulfernandosr.possystembackend.product.infrastructure.adapter.input
 import com.paulfernandosr.possystembackend.common.infrastructure.response.SuccessResponse;
 import com.paulfernandosr.possystembackend.product.domain.ProductCompetitiveImportCommand;
 import com.paulfernandosr.possystembackend.product.domain.ProductCompetitiveImportResult;
+import com.paulfernandosr.possystembackend.product.domain.port.input.GetCompetitiveImportTemplateUseCase;
 import com.paulfernandosr.possystembackend.product.domain.port.input.ImportCompetitiveProductsUseCase;
 import com.paulfernandosr.possystembackend.product.infrastructure.adapter.input.dto.CompetitiveImportErrorResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,7 +24,23 @@ import static org.springframework.http.HttpStatus.BAD_REQUEST;
 @RequestMapping("/products")
 public class ProductCompetitiveImportRestController {
 
+    private static final MediaType XLSX_MEDIA_TYPE = MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
     private final ImportCompetitiveProductsUseCase useCase;
+    private final GetCompetitiveImportTemplateUseCase templateUseCase;
+
+    @GetMapping(
+            value = "/imports/competitive/template",
+            produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    public ResponseEntity<byte[]> downloadCompetitiveTemplate() {
+        byte[] bytes = templateUseCase.generateTemplate();
+
+        return ResponseEntity.ok()
+                .contentType(XLSX_MEDIA_TYPE)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"plantilla_import_productos_competitiva.xlsx\"")
+                .body(bytes);
+    }
 
     @PostMapping(
             value = "/imports/competitive",
