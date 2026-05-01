@@ -1,24 +1,30 @@
 spring:
   application:
     name: pos-system-backend
+
   datasource:
-    url: jdbc:postgresql://localhost:5432/imbasac
+    url: jdbc:postgresql://127.0.0.1:5432/imbasac_prod
     username: imbasac
-    password: imbasac
+    password: MyNewPass123FCP
+
   data:
     redis:
-      host: localhost
+      host: 127.0.0.1
       port: 6379
       timeout: 10000
+
   servlet:
     multipart:
       max-file-size: 50MB
       max-request-size: 50MB
       file-size-threshold: 2MB
+
 server:
   port: 8091
-  address: 0.0.0.0
+  address: 127.0.0.1
+  forward-headers-strategy: framework
 
+logging:
   level:
     root: INFO
 
@@ -29,81 +35,99 @@ security:
   session:
     ttl: 1800
 
-
-#headless: true → no intenta abrir UI
-#debug-enabled: false → no guarda evidencias ni logs debug
-#network-log-enabled: false → no ensucia logs con tráfico HTTP del navegador
-
-#integration:
-#  mtc-license:
-#    search-url: https://slcp.mtc.gob.pe/
-#    headless: true
-#    timeout-ms: 30000
-#    session-ttl-seconds: 120
-#    debug-enabled: false
-#    network-log-enabled: false
-#    debug-dir: /var/www/html/logs/mtc-debug
-
 integration:
   mtc-license:
     search-url: https://slcp.mtc.gob.pe/
-    headless: false
+    headless: true
     timeout-ms: 30000
     session-ttl-seconds: 120
-    debug-enabled: true
-    network-log-enabled: true
-    debug-dir: logs/mtc-debug
+    debug-enabled: false
+    network-log-enabled: false
+    debug-dir: /var/log/pos-backend/mtc-debug
 
   guide-remission:
-    base-url: "http://localhost/API_SUNAT_GUIAS"
+    base-url: http://127.0.0.1/API_SUNAT_GUIAS
     connect-timeout-seconds: 10
-    read-timeout-seconds: 60
+    read-timeout-seconds: 90
+    ticket-query-delay-millis: 3000
+    token-ttl-skew-seconds: 60
+    cached-token-ttl-seconds-fallback: 3300
+
     auth:
       guias-client-id: "f6d277a4-ec59-456e-b6fd-7cb7a06affeb"
-      guias-client-secret: "test-Hty/M6QshYvPgItX2P0+Kw=="
-      usu-secundario-produccion-user: "MODDATOS"
-      usu-secundario-produccion-password: "MODDATOS"
+      guias-client-secret: "eda9LAm/0bcz+HktGUK3Cw=="
+      usu-secundario-produccion-user: TICKOCKL
+      usu-secundario-produccion-password: haldlecto
+
     company:
-      ruc: "10481211641"
-      razon-social: "IMPORTACIONES BAEZ S.A.C."
-      nombre-comercial: "IMBASAC"
-      domicilio-fiscal: "AV. LOS EJEMPLOS 123"
-      ubigeo: "150101"
+      ruc: "20527826358"
+      razon-social: "IMPORTACIONES BAEZ SOCIEDAD ANONIMA CERRADA"
+      nombre-comercial: "IMBA S.A.C."
+      domicilio-fiscal: "AV. TAMBOPATA 854"
+      ubigeo: "170101"
       urbanizacion: "-"
-      distrito: "LIMA"
-      provincia: "LIMA"
-      departamento: "LIMA"
+      distrito: "TAMBOPATA"
+      provincia: "TAMBOPATA"
+      departamento: "MADRE DE DIOS"
       modo: 1
 
 sale:
   sunat:
-    mode: "0"
-    url: http://localhost/API_SUNAT/post.php
-    username: "MODDATOS"
-    password: "MODDATOS"
+    mode: "1"
+    url: http://127.0.0.1/API_SUNAT/post.php
+    username: "CPEIMBA2"
+    password: "Haldlecto26"
     business:
-      ruc: "20611603739"
-      businessName: "IMPORTACIONES EL HUECO 365 DIAS DE 1000 OFERTAS S.A.C"
-      tradeName: "IMPORTACIONES EL HUECO"
-      taxAddress: "JR. SAN CRISTOBAL 327"
-      ubigeo: "180101"
-      neighborhood: "CHAUPIMARCA"
-      district: "CHAUPIMARCA"
-      province: "CERRO DE PASCO"
-      department: "PASCO"
+      ruc: "20527826358"
+      businessName: "IMPORTACIONES BAEZ SOCIEDAD ANONIMA CERRADA"
+      tradeName: "IMBA S.A.C."
+      taxAddress: "AV. TAMBOPATA 854"
+      ubigeo: "170101"
+      neighborhood: "-"
+      district: "TAMBOPATA"
+      province: "TAMBOPATA"
+      department: "MADRE DE DIOS"
 
 common:
   hashedPassword: $2a$12$UJsm7R3LJ0IvFNXuOpxB2OPWBrBp/1kTcivvYXlsji2ZlpA.I./j6
 
-#app:
-#  files:
-#    products-images-dir: /var/www/altoquik/images/products
-#    products-images-base-url: http://localhost:8091
-
 app:
   files:
-    products-images-dir: src/main/resources/static/images/products
-    products-images-base-url: http://localhost:8091/images/products
-
-    manual-pdfs-dir: ./storage/manual-pdfs
+    products-images-dir: /var/www/images/products
+    products-images-public-path: /images/products
+    products-images-base-url: http://imbasac.cloud/images/products
+    manual-pdfs-dir: /var/www/files/manual-pdfs
     manual-pdfs-public-path: /files/manual-pdfs
+  document-series:
+    documents:
+      SIMPLE:
+        default-series: S001
+        allowed-series:
+          - S001
+      VENTANILLA:
+        default-series: V001
+        allowed-series:
+          - V001
+      PROFORMA:
+        default-series: P001
+        allowed-series:
+          - P001
+      CONTRACT:
+        default-series: C001
+        allowed-series:
+          - C001
+          - C002
+      GUIDE_REMISSION:
+        default-series: T001
+        allowed-series:
+          - T001
+      BOLETA:
+        default-series: B003
+        allowed-series:
+          - B003
+          - B004
+      FACTURA:
+        default-series: F003
+        allowed-series:
+          - F003
+          - F004
