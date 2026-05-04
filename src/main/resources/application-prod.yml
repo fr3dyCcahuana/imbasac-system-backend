@@ -46,7 +46,7 @@ integration:
     debug-dir: /var/log/pos-backend/mtc-debug
 
   guide-remission:
-    base-url: http://127.0.0.1/API_SUNAT_GUIAS
+    base-url: http://127.0.0.1:8093/API_SUNAT_GUIAS
     connect-timeout-seconds: 10
     read-timeout-seconds: 90
     ticket-query-delay-millis: 3000
@@ -74,7 +74,7 @@ integration:
 sale:
   sunat:
     mode: "1"
-    url: http://127.0.0.1/API_SUNAT/post.php
+    url: http://127.0.0.1:8093/API_SUNAT/post.php
     username: "CPEIMBA2"
     password: "Haldlecto26"
     business:

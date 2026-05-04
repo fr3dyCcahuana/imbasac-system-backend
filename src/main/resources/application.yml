@@ -113,3 +113,36 @@ app:
 
     manual-pdfs-dir: ./storage/manual-pdfs
     manual-pdfs-public-path: /files/manual-pdfs
+  document-series:
+    documents:
+      SIMPLE:
+        default-series: S001
+        allowed-series:
+          - S001
+      VENTANILLA:
+        default-series: V001
+        allowed-series:
+          - V001
+      PROFORMA:
+        default-series: P001
+        allowed-series:
+          - P001
+      CONTRACT:
+        default-series: C001
+        allowed-series:
+          - C001
+          - C002
+      GUIDE_REMISSION:
+        default-series: T001
+        allowed-series:
+          - T001
+      BOLETA:
+        default-series: B003
+        allowed-series:
+          - B003
+          - B004
+      FACTURA:
+        default-series: F003
+        allowed-series:
+          - F003
+          - F004

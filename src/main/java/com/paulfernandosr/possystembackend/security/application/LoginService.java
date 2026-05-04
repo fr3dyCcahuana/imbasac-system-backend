@@ -33,8 +33,8 @@ public class LoginService implements LoginUseCase {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UserNotFoundException("User not found with identification: " + username));
 
-        if (user.isCashier() && user.isNotOnRegister()) {
-            throw new InvalidCredentialsException("User is cashier and is not on register with identification: " + username);
+        if (user.requiresCashSession() && user.isNotOnRegister()) {
+            throw new InvalidCredentialsException("User requires cash session and is not on register with identification: " + username);
         }
 
         sessionRepository.deleteByUsername(username);

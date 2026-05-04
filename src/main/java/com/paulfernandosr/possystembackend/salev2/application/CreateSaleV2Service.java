@@ -53,24 +53,30 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new InvalidSaleV2Exception("Usuario inválido: " + username));
 
-        if (user.isNotOnRegister()) {
-            throw new InvalidSaleV2Exception("El usuario no tiene una sesión de caja abierta.");
-        }
-
         validateRequest(request);
 
-        OpenSaleSession openSession = saleSessionControlRepository.findOpenByUserId(user.getId());
-        if (openSession == null) {
-            throw new InvalidSaleV2Exception("El usuario no tiene una sesión de caja abierta.");
-        }
-        if (!Objects.equals(openSession.getStationId(), request.getStationId())) {
-            throw new InvalidSaleV2Exception("La estación de la venta no coincide con la sesión de caja abierta del usuario.");
-        }
-        if (request.getSaleSessionId() != null && !Objects.equals(request.getSaleSessionId(), openSession.getId())) {
-            throw new InvalidSaleV2Exception("saleSessionId no coincide con la sesión de caja abierta del usuario.");
-        }
+        Long resolvedSaleSessionId = null;
 
-        Long resolvedSaleSessionId = openSession.getId();
+        if (user.requiresCashSession()) {
+            if (user.isNotOnRegister()) {
+                throw new InvalidSaleV2Exception("El usuario no tiene una sesión de caja abierta.");
+            }
+
+            OpenSaleSession openSession = saleSessionControlRepository.findOpenByUserId(user.getId());
+            if (openSession == null) {
+                throw new InvalidSaleV2Exception("El usuario no tiene una sesión de caja abierta.");
+            }
+            if (!Objects.equals(openSession.getStationId(), request.getStationId())) {
+                throw new InvalidSaleV2Exception("La estación de la venta no coincide con la sesión de caja abierta del usuario.");
+            }
+            if (request.getSaleSessionId() != null && !Objects.equals(request.getSaleSessionId(), openSession.getId())) {
+                throw new InvalidSaleV2Exception("saleSessionId no coincide con la sesión de caja abierta del usuario.");
+            }
+
+            resolvedSaleSessionId = openSession.getId();
+        } else if (request.getSaleSessionId() != null) {
+            throw new InvalidSaleV2Exception("Este rol no debe enviar saleSessionId porque no trabaja con apertura de caja.");
+        }
 
         LocalDate issueDate = request.getIssueDate() != null ? request.getIssueDate() : LocalDate.now();
 
@@ -413,7 +419,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
             customerAccountRepository.recalculate(request.getCustomerId());
         }
 
-        if (request.getPaymentType() == PaymentType.CONTADO) {
+        if (request.getPaymentType() == PaymentType.CONTADO && resolvedSaleSessionId != null) {
             saleSessionAccumulatorRepository.addSaleIncomeAndDiscount(resolvedSaleSessionId, totals.total, totals.discountTotal);
         }
 

@@ -40,6 +40,17 @@ public class User {
     }
 
     public boolean isCashier() {
-        return RoleName.CASHIER.equals(role.getName());
+        return role != null
+                && RoleName.CASHIER.equals(role.getName());
+    }
+
+    public boolean requiresCashSession() {
+        return role != null
+                && role.getName() != null
+                && role.getName().requiresCashSession();
+    }
+
+    public boolean doesNotRequireCashSession() {
+        return !requiresCashSession();
     }
 }

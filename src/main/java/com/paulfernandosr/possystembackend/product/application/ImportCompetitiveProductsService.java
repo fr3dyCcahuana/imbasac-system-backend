@@ -22,7 +22,7 @@ public class ImportCompetitiveProductsService implements ImportCompetitiveProduc
     private final BrandWriteRepository brandWriteRepository;
     private final ModelWriteRepository modelWriteRepository;
 
-    private static final BigDecimal MIN_PRICE = new BigDecimal("0.10");
+    private static final BigDecimal MIN_PRICE = new BigDecimal("0.00");
 
     @Override
     public ProductCompetitiveImportResult importCompetitive(ProductCompetitiveImportCommand command) {
