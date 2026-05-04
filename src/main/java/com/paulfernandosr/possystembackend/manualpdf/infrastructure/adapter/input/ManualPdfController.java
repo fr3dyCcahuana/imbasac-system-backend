@@ -70,17 +70,26 @@ public class ManualPdfController {
     }
 
     @GetMapping("/manual-pdfs/families")
-    public ResponseEntity<SuccessResponse<List<ManualPdfFamilyResponse>>> families(@RequestParam int year) {
-        List<ManualPdfFamilyResponse> payload = service.getFamilies(year).stream().map(mapper::family).toList();
+    public ResponseEntity<SuccessResponse<List<ManualPdfFamilyResponse>>> families() {
+        List<ManualPdfFamilyResponse> payload = service.getFamilies().stream().map(mapper::family).toList();
         return ResponseEntity.ok(SuccessResponse.ok(payload));
     }
 
     @GetMapping("/manual-pdfs/models")
     public ResponseEntity<SuccessResponse<List<ManualPdfDocumentResponse>>> models(
-            @RequestParam int year,
             @RequestParam Long familyId
     ) {
-        List<ManualPdfDocumentResponse> payload = service.getModelDetails(year, familyId).stream()
+        List<ManualPdfDocumentResponse> payload = service.getModelDetailsByFamily(familyId).stream()
+                .map(mapper::documentDetail)
+                .toList();
+        return ResponseEntity.ok(SuccessResponse.ok(payload));
+    }
+
+    @GetMapping("/manual-pdfs")
+    public ResponseEntity<SuccessResponse<List<ManualPdfDocumentResponse>>> documentsByModel(
+            @RequestParam Long modelId
+    ) {
+        List<ManualPdfDocumentResponse> payload = service.getDocumentsByModel(modelId).stream()
                 .map(mapper::documentDetail)
                 .toList();
         return ResponseEntity.ok(SuccessResponse.ok(payload));

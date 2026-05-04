@@ -89,16 +89,35 @@ public class ManualPdfService {
         return repository.findAvailableYears();
     }
 
-    public List<ManualPdfFamily> getFamilies(int year) {
-        return repository.findFamiliesByYear(year);
+    public List<ManualPdfFamily> getFamilies() {
+        return repository.findAllFamilies();
     }
 
-    public List<ManualPdfModel> getModels(int year, Long familyId) {
-        return repository.findModelsByYearAndFamily(year, familyId);
+    public List<ManualPdfDocumentDetail> getModelDetailsByFamily(Long familyId) {
+        if (familyId == null) {
+            throw new ManualPdfBadRequestException("El parámetro familyId es obligatorio.");
+        }
+
+        repository.findFamilyById(familyId)
+                .orElseThrow(() -> new ManualPdfNotFoundException("No se encontró la familia seleccionada."));
+
+        return repository.findDocumentsByFamilyId(familyId).stream()
+                .map(document -> new ManualPdfDocumentDetail(
+                        document,
+                        repository.findImagesByDocumentId(document.id())
+                ))
+                .toList();
     }
 
-    public List<ManualPdfDocumentDetail> getModelDetails(int year, Long familyId) {
-        return repository.findDocumentsByYearAndFamily(year, familyId).stream()
+    public List<ManualPdfDocumentDetail> getDocumentsByModel(Long modelId) {
+        if (modelId == null) {
+            throw new ManualPdfBadRequestException("El parámetro modelId es obligatorio.");
+        }
+
+        repository.findModelById(modelId)
+                .orElseThrow(() -> new ManualPdfNotFoundException("No se encontró el modelo seleccionado."));
+
+        return repository.findDocumentsByModelId(modelId).stream()
                 .map(document -> new ManualPdfDocumentDetail(
                         document,
                         repository.findImagesByDocumentId(document.id())
@@ -130,12 +149,14 @@ public class ManualPdfService {
     ) {
         validateCreateOrUpdate(modelId, title, yearFrom, yearTo, file, images, false);
 
-        if (repository.existsDocumentByModelAndRange(modelId, yearFrom, yearTo)) {
-            throw new ManualPdfConflictException("Ya existe un PDF registrado para el mismo modelo y rango de años.");
+        String safeTitle = title.trim();
+
+        if (repository.existsDocumentByModelRangeAndTitle(modelId, yearFrom, yearTo, safeTitle)) {
+            throw new ManualPdfConflictException("Ya existe un PDF registrado para el mismo modelo, rango de años y título.");
         }
 
         ManualPdfModelSummary summary = repository.getModelSummary(modelId);
-        Long documentId = repository.insertDocumentPlaceholder(modelId, title.trim(), yearFrom, yearTo);
+        Long documentId = repository.insertDocumentPlaceholder(modelId, safeTitle, yearFrom, yearTo);
 
         String pdfName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "document_" + documentId + ".pdf";
         StoredFileResult storedPdf = storage.save(
@@ -197,8 +218,14 @@ public class ManualPdfService {
 
         validateCreateOrUpdate(targetModelId, targetTitle, targetYearFrom, targetYearTo, file, newImages, true);
 
-        if (repository.existsAnotherDocumentByModelAndRange(documentId, targetModelId, targetYearFrom, targetYearTo)) {
-            throw new ManualPdfConflictException("Ya existe un PDF registrado para el mismo modelo y rango de años.");
+        if (repository.existsAnotherDocumentByModelRangeAndTitle(
+                documentId,
+                targetModelId,
+                targetYearFrom,
+                targetYearTo,
+                targetTitle
+        )) {
+            throw new ManualPdfConflictException("Ya existe un PDF registrado para el mismo modelo, rango de años y título.");
         }
 
         ManualPdfModelSummary currentSummary = repository.getModelSummary(current.modelId());

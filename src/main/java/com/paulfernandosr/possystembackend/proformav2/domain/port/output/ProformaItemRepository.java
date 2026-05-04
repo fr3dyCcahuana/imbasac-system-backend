@@ -7,4 +7,5 @@ import java.util.List;
 public interface ProformaItemRepository {
     void batchCreate(List<ProformaItem> items);
     List<ProformaItem> findByProformaId(Long proformaId);
+    void deleteByProformaId(Long proformaId);
 }

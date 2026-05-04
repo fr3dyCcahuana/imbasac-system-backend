@@ -11,5 +11,6 @@ public interface ProformaRepository {
     Optional<Proforma> findByNumber(Long number);
     void updateStatus(Long proformaId, String status);
     void appendNotesAndSetStatus(Long proformaId, String noteToAppend, String status);
+    void updateEditable(Proforma proforma);
     void touchUpdatedAt(Long proformaId);
 }

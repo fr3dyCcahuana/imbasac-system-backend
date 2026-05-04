@@ -25,7 +25,7 @@ server:
 security:
   token:
     secret: bSZWQDl3ZDVtUW0memhHNEc3ME82ZlYmYms5enVFSmU=
-    expiration: 1200
+    expiration: 300
   session:
     ttl: 1800
 

@@ -68,4 +68,15 @@ public class PostgresProformaItemRepository implements ProformaItemRepository {
                 .query(new ProformaItemRowMapper())
                 .list();
     }
+    @Override
+    public void deleteByProformaId(Long proformaId) {
+        String sql = """
+            DELETE FROM proforma_item
+            WHERE proforma_id = ?
+            """;
+        jdbcClient.sql(sql)
+                .param(proformaId)
+                .update();
+    }
+
 }

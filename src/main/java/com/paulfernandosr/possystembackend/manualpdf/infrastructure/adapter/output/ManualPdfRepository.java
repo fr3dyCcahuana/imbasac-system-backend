@@ -237,6 +237,38 @@ public class ManualPdfRepository {
                 .list();
     }
 
+    public List<ManualPdfDocument> findDocumentsByFamilyId(Long familyId) {
+        String sql = """
+                select d.id, d.model_id, d.title, d.year_from, d.year_to, d.file_name, d.file_key, d.mime_type, d.file_size, d.enabled
+                from manual_pdf_document d
+                join manual_pdf_model m on m.id = d.model_id
+                join manual_pdf_family f on f.id = m.family_id
+                where d.enabled = true
+                  and m.enabled = true
+                  and f.enabled = true
+                  and m.family_id = :familyId
+                order by m.sort_order, m.name, d.title, d.year_from desc, d.year_to desc, d.id desc
+                """;
+        return jdbcClient.sql(sql)
+                .param("familyId", familyId)
+                .query(documentRowMapper)
+                .list();
+    }
+
+    public List<ManualPdfDocument> findDocumentsByModelId(Long modelId) {
+        String sql = """
+                select id, model_id, title, year_from, year_to, file_name, file_key, mime_type, file_size, enabled
+                from manual_pdf_document
+                where enabled = true
+                  and model_id = :modelId
+                order by title, year_from desc, year_to desc, id desc
+                """;
+        return jdbcClient.sql(sql)
+                .param("modelId", modelId)
+                .query(documentRowMapper)
+                .list();
+    }
+
     public Optional<ManualPdfDocument> findBestDocumentByYearAndModel(int year, Long modelId) {
         String sql = """
                 select id, model_id, title, year_from, year_to, file_name, file_key, mime_type, file_size, enabled
@@ -290,7 +322,7 @@ public class ManualPdfRepository {
                 .orElseThrow(() -> new ManualPdfNotFoundException("No se encontró el modelo seleccionado."));
     }
 
-    public boolean existsDocumentByModelAndRange(Long modelId, Integer yearFrom, Integer yearTo) {
+    public boolean existsDocumentByModelRangeAndTitle(Long modelId, Integer yearFrom, Integer yearTo, String title) {
         String sql = """
                 select count(*)
                 from manual_pdf_document
@@ -298,17 +330,25 @@ public class ManualPdfRepository {
                   and model_id = :modelId
                   and year_from = :yearFrom
                   and year_to = :yearTo
+                  and lower(trim(title)) = lower(trim(:title))
                 """;
         Integer count = jdbcClient.sql(sql)
                 .param("modelId", modelId)
                 .param("yearFrom", yearFrom)
                 .param("yearTo", yearTo)
+                .param("title", title)
                 .query(Integer.class)
                 .single();
         return count != null && count > 0;
     }
 
-    public boolean existsAnotherDocumentByModelAndRange(Long documentId, Long modelId, Integer yearFrom, Integer yearTo) {
+    public boolean existsAnotherDocumentByModelRangeAndTitle(
+            Long documentId,
+            Long modelId,
+            Integer yearFrom,
+            Integer yearTo,
+            String title
+    ) {
         String sql = """
                 select count(*)
                 from manual_pdf_document
@@ -317,12 +357,14 @@ public class ManualPdfRepository {
                   and model_id = :modelId
                   and year_from = :yearFrom
                   and year_to = :yearTo
+                  and lower(trim(title)) = lower(trim(:title))
                 """;
         Integer count = jdbcClient.sql(sql)
                 .param("documentId", documentId)
                 .param("modelId", modelId)
                 .param("yearFrom", yearFrom)
                 .param("yearTo", yearTo)
+                .param("title", title)
                 .query(Integer.class)
                 .single();
         return count != null && count > 0;

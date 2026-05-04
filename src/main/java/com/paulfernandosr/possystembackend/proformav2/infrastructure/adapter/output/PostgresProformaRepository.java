@@ -103,7 +103,7 @@ public class PostgresProformaRepository implements ProformaRepository {
             FROM proforma p
             LEFT JOIN users u ON u.id = p.created_by
             WHERE p.id = ?
-            FOR UPDATE
+            FOR UPDATE OF p
             """;
 
         return jdbcClient.sql(sql)
@@ -179,6 +179,63 @@ public class PostgresProformaRepository implements ProformaRepository {
 
         jdbcClient.sql(sql)
                 .params(status, noteToAppend, noteToAppend, noteToAppend, noteToAppend, proformaId)
+                .update();
+    }
+
+    @Override
+    public void updateEditable(Proforma proforma) {
+        String sql = """
+            UPDATE proforma
+               SET issue_date = ?,
+                   price_list = ?,
+                   currency = ?,
+                   tax_status = ?,
+                   igv_rate = ?,
+                   igv_included = ?,
+                   igv_amount = ?,
+                   customer_id = ?,
+                   customer_doc_type = ?,
+                   customer_doc_number = ?,
+                   customer_name = ?,
+                   customer_address = ?,
+                   payment_type = ?,
+                   credit_days = ?,
+                   due_date = ?,
+                   notes = ?,
+                   subtotal = ?,
+                   discount_total = ?,
+                   total = ?,
+                   updated_at = NOW()
+             WHERE id = ?
+            """;
+
+        jdbcClient.sql(sql)
+                .params(
+                        java.sql.Date.valueOf(proforma.getIssueDate()),
+                        String.valueOf(proforma.getPriceList()),
+                        proforma.getCurrency(),
+                        proforma.getTaxStatus(),
+                        proforma.getIgvRate(),
+                        proforma.getIgvIncluded() != null ? proforma.getIgvIncluded() : Boolean.FALSE,
+                        proforma.getIgvAmount(),
+
+                        proforma.getCustomerId(),
+                        proforma.getCustomerDocType(),
+                        proforma.getCustomerDocNumber(),
+                        proforma.getCustomerName(),
+                        proforma.getCustomerAddress(),
+
+                        proforma.getPaymentType() != null ? proforma.getPaymentType().name() : null,
+                        proforma.getCreditDays(),
+                        proforma.getDueDate() != null ? java.sql.Date.valueOf(proforma.getDueDate()) : null,
+                        proforma.getNotes(),
+
+                        proforma.getSubtotal(),
+                        proforma.getDiscountTotal(),
+                        proforma.getTotal(),
+
+                        proforma.getId()
+                )
                 .update();
     }
 
