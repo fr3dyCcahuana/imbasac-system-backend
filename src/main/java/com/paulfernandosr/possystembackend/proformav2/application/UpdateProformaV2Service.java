@@ -240,18 +240,21 @@ public class UpdateProformaV2Service implements UpdateProformaV2UseCase {
         int line = 1;
         for (UpdateProformaV2Request.Item reqItem : requestItems) {
             ProductSnapshot product = productSnapshotRepository.getById(reqItem.getProductId());
+            if (product == null) {
+                throw new InvalidProformaV2Exception("Producto no encontrado: " + reqItem.getProductId());
+            }
 
             validateSerializableProduct(product);
 
             BigDecimal quantity = parsePositive(reqItem.getQuantity(), "Cantidad inválida en línea " + line);
             validateQuantityForSerializableProduct(product, quantity);
 
-            BigDecimal unitPrice = resolvePriceByList(product, priceList);
-            if (unitPrice == null) {
-                throw new InvalidProformaV2Exception(
-                        "El producto " + product.getSku() + " no tiene precio para lista " + priceList
-                );
-            }
+            BigDecimal unitPrice = resolveUnitPrice(
+                    reqItem.getUnitPriceOverride(),
+                    product,
+                    priceList,
+                    line
+            );
 
             BigDecimal discountPercent = parseOrZero(reqItem.getDiscountPercent());
             if (discountPercent.compareTo(BigDecimal.ZERO) < 0) {
@@ -348,6 +351,29 @@ public class UpdateProformaV2Service implements UpdateProformaV2UseCase {
                     "Cantidad debe ser entera para productos serializados (MOTOR/MOTOCICLETAS). SKU=" + product.getSku()
             );
         }
+    }
+
+    private BigDecimal resolveUnitPrice(
+            BigDecimal unitPriceOverride,
+            ProductSnapshot product,
+            Character priceList,
+            int line
+    ) {
+        BigDecimal unitPrice = unitPriceOverride != null
+                ? unitPriceOverride
+                : resolvePriceByList(product, priceList);
+
+        if (unitPrice == null) {
+            throw new InvalidProformaV2Exception(
+                    "El producto " + product.getSku() + " no tiene precio para lista " + priceList
+            );
+        }
+
+        if (unitPrice.compareTo(BigDecimal.ZERO) < 0) {
+            throw new InvalidProformaV2Exception("Precio unitario inválido en línea " + line);
+        }
+
+        return unitPrice;
     }
 
     private BigDecimal parsePositive(String value, String message) {

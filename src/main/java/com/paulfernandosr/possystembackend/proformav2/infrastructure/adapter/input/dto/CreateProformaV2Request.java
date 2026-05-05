@@ -50,5 +50,11 @@ public class CreateProformaV2Request {
         private String factor;           // opcional
         private String quantity;         // requerido
         private String discountPercent;  // opcional
+
+        /**
+         * Precio unitario editado desde frontend.
+         * Si no se envía, se toma el precio según priceList A/B/C/D.
+         */
+        private BigDecimal unitPriceOverride;
     }
 }

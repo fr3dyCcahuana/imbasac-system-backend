@@ -81,5 +81,11 @@ public class UpdateProformaV2Request {
         private String factor;
         private String quantity;
         private String discountPercent;
+
+        /**
+         * Precio unitario editado desde frontend.
+         * Si no se envía, se toma el precio según priceList A/B/C/D.
+         */
+        private BigDecimal unitPriceOverride;
     }
 }

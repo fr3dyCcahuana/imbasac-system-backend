@@ -101,10 +101,12 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
                 }
             }
 
-            BigDecimal unitPrice = resolvePriceByList(p, request.getPriceList());
-            if (unitPrice == null) {
-                throw new InvalidProformaV2Exception("El producto " + p.getSku() + " no tiene precio para lista " + request.getPriceList());
-            }
+            BigDecimal unitPrice = resolveUnitPrice(
+                    reqItem.getUnitPriceOverride(),
+                    p,
+                    request.getPriceList(),
+                    line
+            );
 
             BigDecimal discountPercent = parseOrZero(reqItem.getDiscountPercent());
             if (discountPercent.compareTo(BigDecimal.ZERO) < 0) {
@@ -280,6 +282,29 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
             if (it.getProductId() == null) throw new InvalidProformaV2Exception("productId requerido en items");
             if (it.getQuantity() == null || it.getQuantity().isBlank()) throw new InvalidProformaV2Exception("quantity requerido en items");
         }
+    }
+
+    private BigDecimal resolveUnitPrice(
+            BigDecimal unitPriceOverride,
+            ProductSnapshot product,
+            Character priceList,
+            int line
+    ) {
+        BigDecimal unitPrice = unitPriceOverride != null
+                ? unitPriceOverride
+                : resolvePriceByList(product, priceList);
+
+        if (unitPrice == null) {
+            throw new InvalidProformaV2Exception(
+                    "El producto " + product.getSku() + " no tiene precio para lista " + priceList
+            );
+        }
+
+        if (unitPrice.compareTo(BigDecimal.ZERO) < 0) {
+            throw new InvalidProformaV2Exception("Precio unitario inválido en línea " + line);
+        }
+
+        return unitPrice;
     }
 
     private BigDecimal parseOrZero(String value) {
