@@ -71,7 +71,8 @@ public class PostgresProformaV2QueryRepository implements ProformaV2QueryReposit
                 p.credit_days AS credit_days,
                 p.due_date AS due_date,
                 p.total AS total,
-                p.status AS status
+                p.status AS status,
+                p.converted_sale_id AS converted_sale_id
               FROM proforma p
              WHERE 1=1
         """);
@@ -118,6 +119,7 @@ public class PostgresProformaV2QueryRepository implements ProformaV2QueryReposit
                 .dueDate(rs.getDate("due_date") != null ? rs.getDate("due_date").toLocalDate() : null)
                 .total(rs.getBigDecimal("total"))
                 .status(rs.getString("status"))
+                .convertedSaleId((Long) rs.getObject("converted_sale_id"))
                 .build();
 
         return jdbcClient.sql(sql.toString())

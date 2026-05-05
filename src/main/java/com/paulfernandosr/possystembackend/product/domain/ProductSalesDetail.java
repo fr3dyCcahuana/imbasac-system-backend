@@ -14,6 +14,7 @@ public class ProductSalesDetail {
     private String barcode;
     private String name;
     private String category;
+    private String warehouseLocation;
     private String presentation;
     private java.math.BigDecimal factor;
 

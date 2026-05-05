@@ -77,6 +77,19 @@ public class ProformaRowMapper implements RowMapper<Proforma> {
         if (cols.contains("igv_included")) {
             builder.igvIncluded((Boolean) rs.getObject("igv_included"));
         }
+
+        if (cols.contains("converted_sale_id")) {
+            builder.convertedSaleId((Long) rs.getObject("converted_sale_id"));
+        }
+        if (cols.contains("converted_at")) {
+            java.sql.Timestamp convertedAt = rs.getTimestamp("converted_at");
+            if (convertedAt != null) {
+                builder.convertedAt(convertedAt.toLocalDateTime());
+            }
+        }
+        if (cols.contains("converted_by")) {
+            builder.convertedBy((Long) rs.getObject("converted_by"));
+        }
         return builder.build();
     }
 

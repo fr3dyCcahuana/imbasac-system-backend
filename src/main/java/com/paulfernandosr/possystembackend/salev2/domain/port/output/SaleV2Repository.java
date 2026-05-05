@@ -7,6 +7,9 @@ import java.util.List;
 import lombok.*;
 
 public interface SaleV2Repository {
+
+    int updateSourceProformaId(Long saleId, Long proformaId);
+
     Long insertSale(Long stationId,
                     Long saleSessionId,
                     Long createdBy,

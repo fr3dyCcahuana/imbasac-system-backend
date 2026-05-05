@@ -51,8 +51,8 @@ public final class SaleV2SunatMapper {
                         .build())
                 .customer(DocumentRequest.Customer.builder()
                         .fullName(required(sale.getCustomerName(), "customerName"))
-                        .documentNumber(required(sale.getCustomerDocNumber(), "customerDocNumber"))
-                        .entityTypeCode(mapIdentityDocumentCode(required(sale.getCustomerDocType(), "customerDocType")))
+                        .documentNumber(mapCustomerDocumentNumber(sale.getCustomerDocType(), sale.getCustomerDocNumber()))
+                        .entityTypeCode(mapIdentityDocumentCode(sale.getDocType(), sale.getCustomerDocType()))
                         .address(blankIfNull(sale.getCustomerAddress()))
                         .build())
                 .sale(DocumentRequest.Sale.builder()
@@ -120,14 +120,39 @@ public final class SaleV2SunatMapper {
         };
     }
 
-    private static String mapIdentityDocumentCode(String docType) {
-        String v = docType.trim().toUpperCase();
-        return switch (v) {
+    private static String mapIdentityDocumentCode(String saleDocType, String customerDocType) {
+        String saleDoc = required(saleDocType, "docType").trim().toUpperCase();
+        String customerDoc = required(customerDocType, "customerDocType").trim().toUpperCase();
+
+        if (isGenericCustomerDocumentType(customerDoc)) {
+            if ("FACTURA".equals(saleDoc)) {
+                throw new InvalidSaleV2Exception("FACTURA no permite customerDocType=GEN/0. Debe usar RUC.");
+            }
+            return "0";
+        }
+
+        return switch (customerDoc) {
             case "DNI" -> "1";
-            case "CE", "CARNET DE EXTRANJERIA" -> "4";
+            case "CE", "CARNET DE EXTRANJERIA", "CARNET DE EXTRANJERÍA" -> "4";
             case "RUC" -> "6";
             case "PASSPORT", "PASAPORTE" -> "7";
-            default -> throw new InvalidSaleV2Exception("Tipo de documento de cliente no soportado para SUNAT: " + docType);
+            default -> throw new InvalidSaleV2Exception("Tipo de documento de cliente no soportado para SUNAT: " + customerDocType);
+        };
+    }
+
+    private static String mapCustomerDocumentNumber(String customerDocType, String customerDocNumber) {
+        if (isGenericCustomerDocumentType(customerDocType)) {
+            return "0";
+        }
+        return required(customerDocNumber, "customerDocNumber").trim();
+    }
+
+    private static boolean isGenericCustomerDocumentType(String value) {
+        String v = blankIfNull(value).trim().toUpperCase();
+        return switch (v) {
+            case "GEN", "GENERICO", "GENÉRICO", "GENERAL", "0",
+                 "OTROS", "SIN_DOCUMENTO", "SIN DOCUMENTO" -> true;
+            default -> false;
         };
     }
 

@@ -49,6 +49,24 @@ public class SaleV2CreateRequest {
 
     private String notes;
 
+    /**
+     * NÚMERO VISIBLE de la proforma usada por el facturador.
+     * Regla actual del negocio: el frontend busca/carga por número de proforma,
+     * pero el backend resuelve internamente el ID real de tabla para guardar la relación.
+     *
+     * Ejemplo: si el usuario carga Proforma Nro 34, enviar sourceProformaNumber=34.
+     */
+    private Long sourceProformaNumber;
+
+    /**
+     * DEPRECADO para el flujo de ventas desde proforma.
+     * No usar desde el frontend porque se presta a confundir número visible con ID interno.
+     * Se deja temporalmente solo para compatibilidad, pero CreateSaleV2Service lo rechaza
+     * si llega sin sourceProformaNumber.
+     */
+    @Deprecated
+    private Long sourceProformaId;
+
     private List<Item> items;
     private Payment payment;
 

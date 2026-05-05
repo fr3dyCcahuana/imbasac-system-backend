@@ -4,5 +4,5 @@ import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.inp
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ConvertProformaV2Response;
 
 public interface ConvertProformaToSaleV2UseCase {
-    ConvertProformaV2Response convert(Long proformaId, ConvertProformaV2Request request, String username);
+    ConvertProformaV2Response convert(Long proformaNumber, ConvertProformaV2Request request, String username);
 }

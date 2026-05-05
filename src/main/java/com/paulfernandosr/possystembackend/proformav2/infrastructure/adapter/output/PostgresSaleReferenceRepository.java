@@ -15,7 +15,11 @@ public class PostgresSaleReferenceRepository implements SaleReferenceRepository 
     public void create(Long saleId, Long proformaId) {
         String sql = """
             INSERT INTO sale_reference(sale_id, proforma_id, imported_at)
-            VALUES (?,?, NOW())
+            VALUES (?, ?, NOW())
+            ON CONFLICT (sale_id)
+            DO UPDATE SET
+                proforma_id = EXCLUDED.proforma_id,
+                imported_at = NOW()
             """;
         jdbcClient.sql(sql)
                 .params(saleId, proformaId)

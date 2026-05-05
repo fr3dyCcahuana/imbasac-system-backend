@@ -8,7 +8,6 @@ import com.paulfernandosr.possystembackend.proformav2.domain.port.input.ConvertP
 import com.paulfernandosr.possystembackend.proformav2.domain.port.output.ProformaItemRepository;
 import com.paulfernandosr.possystembackend.proformav2.domain.port.output.ProformaRepository;
 import com.paulfernandosr.possystembackend.proformav2.domain.port.output.ProductSnapshotRepository;
-import com.paulfernandosr.possystembackend.proformav2.domain.port.output.SaleReferenceRepository;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ConvertProformaV2Request;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ConvertProformaV2Response;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.output.model.ProductSnapshot;
@@ -31,26 +30,25 @@ public class ConvertProformaToSaleV2Service implements ConvertProformaToSaleV2Us
 
     private final ProformaRepository proformaRepository;
     private final ProformaItemRepository proformaItemRepository;
-    private final SaleReferenceRepository saleReferenceRepository;
     private final ProductSnapshotRepository productSnapshotRepository;
     private final CreateSaleV2Service createSaleV2Service;
 
     @Override
     @Transactional
-    public ConvertProformaV2Response convert(Long proformaId, ConvertProformaV2Request request, String username) {
+    public ConvertProformaV2Response convert(Long proformaNumber, ConvertProformaV2Request request, String username) {
 
         if (request == null) throw new InvalidProformaV2Exception("Request requerido");
         if (request.getDocType() == null) throw new InvalidProformaV2Exception("docType requerido");
         if (request.getSeries() == null || request.getSeries().isBlank()) throw new InvalidProformaV2Exception("series requerido");
 
-        Proforma p = proformaRepository.lockById(proformaId)
-                .orElseThrow(() -> new InvalidProformaV2Exception("Proforma no encontrada: " + proformaId));
+        Proforma p = proformaRepository.lockByNumber(proformaNumber)
+                .orElseThrow(() -> new InvalidProformaV2Exception("Proforma no encontrada con número: " + proformaNumber));
 
         if (p.getStatus() != ProformaStatus.PENDIENTE) {
             throw new InvalidProformaV2Exception("La proforma no está PENDIENTE. Estado actual: " + p.getStatus());
         }
 
-        List<ProformaItem> items = proformaItemRepository.findByProformaId(proformaId);
+        List<ProformaItem> items = proformaItemRepository.findByProformaId(p.getId());
         if (items.isEmpty()) {
             throw new InvalidProformaV2Exception("La proforma no tiene items");
         }
@@ -121,6 +119,9 @@ public class ConvertProformaToSaleV2Service implements ConvertProformaToSaleV2Us
                 .creditDays(creditDays)
                 .dueDate(dueDate)
                 .notes(p.getNotes())
+                // La venta desde proforma se resuelve por NÚMERO visible.
+                // CreateSaleV2Service bloqueará por p.number y guardará relación por p.id.
+                .sourceProformaNumber(p.getNumber())
                 .items(mapItems(items, serialsByLine, request.getDocType()))
                 .payment(null)
                 .build();
@@ -133,8 +134,9 @@ public class ConvertProformaToSaleV2Service implements ConvertProformaToSaleV2Us
 
         SaleV2DocumentResponse createdSale = createSaleV2Service.create(saleReq, username);
 
-        saleReferenceRepository.create(createdSale.getSaleId(), p.getId());
-        proformaRepository.updateStatus(p.getId(), ProformaStatus.CONVERTIDA.name());
+        // No insertar sale_reference ni cambiar estado aquí.
+        // CreateSaleV2Service centraliza la conversión y actualiza:
+        // sale.source_proforma_id, sale_reference y proforma.converted_sale_id/status.
 
         return ConvertProformaV2Response.builder()
                 .proformaId(p.getId())

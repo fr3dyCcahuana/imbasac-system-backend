@@ -30,6 +30,7 @@ import java.util.Set;
 public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeSunatUseCase {
 
     private static final Set<String> SUNAT_EDITABLE_STATUSES = Set.of("", "NO_ENVIADO", "ERROR", "RECHAZADO", "NO_APLICA");
+    private static final BigDecimal GENERIC_CUSTOMER_TOTAL_LIMIT = new BigDecimal("700.00");
 
     private final UserRepository userRepository;
     private final ProductSnapshotRepository productSnapshotRepository;
@@ -125,6 +126,14 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
 
         List<ComputedLine> computedLines = buildComputedLines(request, docType, priceList, taxStatus, igvIncluded, igvRate);
         Totals totals = calculateTotals(taxStatus, igvIncluded, igvRate, computedLines);
+
+        CustomerDocument normalizedCustomer = normalizeCustomerForDocumentRules(
+                docType, customerDocType, customerDocNumber, customerName, totals
+        );
+        customerDocType = normalizedCustomer.docType;
+        customerDocNumber = normalizedCustomer.docNumber;
+        customerName = normalizedCustomer.name;
+
         validateDocumentRules(docType, customerDocType, customerDocNumber, totals, taxStatus, taxReason, computedLines);
 
         Integer creditDays = current.getCreditDays();
@@ -498,6 +507,37 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
         return computedLines;
     }
 
+    private CustomerDocument normalizeCustomerForDocumentRules(DocType docType,
+                                                               String customerDocType,
+                                                               String customerDocNumber,
+                                                               String customerName,
+                                                               Totals totals) {
+        boolean genericCustomer = isGenericCustomerDocumentType(customerDocType);
+
+        if (docType == DocType.FACTURA && genericCustomer) {
+            throw new InvalidSaleV2Exception("FACTURA no permite cliente genérico. Debe usar RUC.");
+        }
+
+        if (genericCustomer) {
+            if (totals == null || totals.total == null) {
+                throw new InvalidSaleV2Exception("No se pudo validar el total de la venta.");
+            }
+            if (totals.total.compareTo(GENERIC_CUSTOMER_TOTAL_LIMIT) > 0) {
+                throw new InvalidSaleV2Exception("Ventas mayores a S/ 700.00 requieren cliente identificado. No se permite GEN/0.");
+            }
+            String normalizedName = customerName == null || customerName.trim().isEmpty()
+                    ? "VENTA RAPIDA"
+                    : customerName.trim();
+            return new CustomerDocument("GEN", "0", normalizedName);
+        }
+
+        return new CustomerDocument(
+                customerDocType == null ? null : customerDocType.trim(),
+                customerDocNumber == null ? null : customerDocNumber.trim(),
+                customerName == null ? null : customerName.trim()
+        );
+    }
+
     private void validateDocumentRules(DocType docType,
                                        String customerDocType,
                                        String customerDocNumber,
@@ -514,10 +554,12 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
             }
         }
 
-        if (totals != null && totals.total != null && totals.total.compareTo(new BigDecimal("700")) >= 0) {
+        if (totals != null && totals.total != null
+                && totals.total.compareTo(GENERIC_CUSTOMER_TOTAL_LIMIT) > 0) {
             if (customerDocType == null || customerDocType.trim().isEmpty()
-                    || customerDocNumber == null || customerDocNumber.trim().isEmpty()) {
-                throw new InvalidSaleV2Exception("Ventas >= 700 requieren documento (customerDocType y customerDocNumber).");
+                    || customerDocNumber == null || customerDocNumber.trim().isEmpty()
+                    || isGenericCustomerDocumentType(customerDocType)) {
+                throw new InvalidSaleV2Exception("Ventas mayores a S/ 700.00 requieren cliente identificado. No se permite GEN/0.");
             }
         }
 
@@ -610,6 +652,27 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
     private boolean isAlreadySentToSunat(String sunatStatus) {
         String normalized = nzs(sunatStatus).trim().toUpperCase();
         return !SUNAT_EDITABLE_STATUSES.contains(normalized);
+    }
+
+    private static boolean isGenericCustomerDocumentType(String value) {
+        String v = nzs(value).trim().toUpperCase();
+        return switch (v) {
+            case "GEN", "GENERICO", "GENÉRICO", "GENERAL", "0",
+                 "OTROS", "SIN_DOCUMENTO", "SIN DOCUMENTO" -> true;
+            default -> false;
+        };
+    }
+
+    private static class CustomerDocument {
+        private final String docType;
+        private final String docNumber;
+        private final String name;
+
+        private CustomerDocument(String docType, String docNumber, String name) {
+            this.docType = docType;
+            this.docNumber = docNumber;
+            this.name = name;
+        }
     }
 
     private static BigDecimal nz(BigDecimal value) {

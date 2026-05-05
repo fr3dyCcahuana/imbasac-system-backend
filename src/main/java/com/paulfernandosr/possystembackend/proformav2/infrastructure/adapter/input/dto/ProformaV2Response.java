@@ -47,6 +47,10 @@ public class ProformaV2Response {
 
     private String status;
 
+    private Long convertedSaleId;
+    private String convertedAt;
+    private Long convertedBy;
+
     private List<Item> items;
 
     @Getter

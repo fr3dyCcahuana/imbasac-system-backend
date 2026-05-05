@@ -56,14 +56,16 @@ public class ProformaV2Controller {
         return ResponseEntity.ok(SuccessResponse.ok(updateUseCase.update(id, request)));
     }
 
-    @PostMapping("/{id}/convert")
+    @PostMapping("/{number}/convert")
     public ResponseEntity<SuccessResponse<ConvertProformaV2Response>> convert(
-            @PathVariable("id") Long id,
+            @PathVariable("number") Long number,
             @RequestBody ConvertProformaV2Request request,
             Principal principal
     ) {
         String username = principal != null ? principal.getName() : null;
-        ConvertProformaV2Response response = convertUseCase.convert(id, request, username);
+        // Regla de negocio: el facturador convierte por NÚMERO visible de proforma.
+        // El service resuelve internamente p.id para guardar la relación por ID real.
+        ConvertProformaV2Response response = convertUseCase.convert(number, request, username);
         return ResponseEntity.ok(SuccessResponse.ok(response));
     }
 

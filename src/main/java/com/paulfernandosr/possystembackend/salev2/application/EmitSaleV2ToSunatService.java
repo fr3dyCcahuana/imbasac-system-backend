@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -25,6 +26,7 @@ import java.util.List;
 public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
 
     private static final String SUCCESS_RESPONSE = "0";
+    private static final BigDecimal GENERIC_CUSTOMER_TOTAL_LIMIT = new BigDecimal("700.00");
 
     private final SaleV2SunatRepository saleV2SunatRepository;
     private final DocumentSeriesPolicy documentSeriesPolicy;
@@ -167,6 +169,27 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
             throw new InvalidSaleV2Exception("Solo BOLETA/FACTURA se envían a SUNAT. docType=" + sale.getDocType());
         }
         documentSeriesPolicy.requireAllowed(docType, sale.getSeries(), InvalidSaleV2Exception::new);
+
+        if (isGenericCustomerDocumentType(sale.getCustomerDocType())) {
+            if ("FACTURA".equals(docType)) {
+                throw new InvalidSaleV2Exception("FACTURA no permite cliente genérico. Debe usar RUC.");
+            }
+            if (sale.getTotal() == null) {
+                throw new InvalidSaleV2Exception("No se pudo validar el total de la venta antes de SUNAT.");
+            }
+            if (sale.getTotal().compareTo(GENERIC_CUSTOMER_TOTAL_LIMIT) > 0) {
+                throw new InvalidSaleV2Exception("No se puede enviar a SUNAT una venta diaria o venta rápida mayor a S/ 700.00 con cliente genérico.");
+            }
+        }
+    }
+
+    private boolean isGenericCustomerDocumentType(String value) {
+        String v = blankIfNull(value).trim().toUpperCase();
+        return switch (v) {
+            case "GEN", "GENERICO", "GENÉRICO", "GENERAL", "0",
+                 "OTROS", "SIN_DOCUMENTO", "SIN DOCUMENTO" -> true;
+            default -> false;
+        };
     }
 
 

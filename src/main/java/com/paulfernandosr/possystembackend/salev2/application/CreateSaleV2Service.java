@@ -1,6 +1,10 @@
 package com.paulfernandosr.possystembackend.salev2.application;
 
 import com.paulfernandosr.possystembackend.common.infrastructure.documentseries.DocumentSeriesPolicy;
+import com.paulfernandosr.possystembackend.proformav2.domain.Proforma;
+import com.paulfernandosr.possystembackend.proformav2.domain.model.ProformaStatus;
+import com.paulfernandosr.possystembackend.proformav2.domain.port.output.ProformaRepository;
+import com.paulfernandosr.possystembackend.proformav2.domain.port.output.SaleReferenceRepository;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
 import com.paulfernandosr.possystembackend.salev2.domain.model.*;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.CreateSaleV2UseCase;
@@ -21,6 +25,8 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class CreateSaleV2Service implements CreateSaleV2UseCase {
+
+    private static final BigDecimal GENERIC_CUSTOMER_TOTAL_LIMIT = new BigDecimal("700.00");
 
     private final UserRepository userRepository;
 
@@ -43,6 +49,10 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
     private final AccountsReceivableRepository accountsReceivableRepository;
     private final CustomerAccountRepository customerAccountRepository;
 
+    // Proforma origen (Opción B): POST /sales/v2 con sourceProformaId
+    private final ProformaRepository proformaRepository;
+    private final SaleReferenceRepository saleReferenceRepository;
+
     // Política de costo snapshot (Regla #8)
     private final CostPolicy costPolicy = CostPolicy.PROMEDIO;
 
@@ -54,6 +64,12 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                 .orElseThrow(() -> new InvalidSaleV2Exception("Usuario inválido: " + username));
 
         validateRequest(request);
+
+        // Si viene de proforma, bloquearla desde el inicio de la transacción
+        // para evitar doble conversión concurrente.
+        // IMPORTANTE: ahora el frontend envía sourceProformaNumber (número visible),
+        // y el backend resuelve el ID interno real para guardar la relación.
+        Proforma sourceProforma = lockAndValidateSourceProforma(request);
 
         Long resolvedSaleSessionId = null;
 
@@ -420,8 +436,14 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         }
 
         if (request.getPaymentType() == PaymentType.CONTADO && resolvedSaleSessionId != null) {
-            saleSessionAccumulatorRepository.addSaleIncomeAndDiscount(resolvedSaleSessionId, totals.total, totals.discountTotal);
+            saleSessionAccumulatorRepository.addSaleIncomeAndDiscount(
+                    resolvedSaleSessionId,
+                    totals.total,
+                    totals.discountTotal
+            );
         }
+
+        markSourceProformaAsConverted(sourceProforma, saleId, user.getId());
 
         documentSeriesRepository.incrementNextNumber(locked.getId());
 
@@ -442,6 +464,72 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                 .build();
     }
 
+    private Proforma lockAndValidateSourceProforma(SaleV2CreateRequest request) {
+        Long sourceProformaNumber = request.getSourceProformaNumber();
+        Long deprecatedSourceProformaId = request.getSourceProformaId();
+
+        if (sourceProformaNumber == null && deprecatedSourceProformaId == null) {
+            return null;
+        }
+
+        if (sourceProformaNumber == null && deprecatedSourceProformaId != null) {
+            throw new InvalidSaleV2Exception(
+                    "No envíes sourceProformaId desde el módulo de ventas. " +
+                    "El facturador carga por número visible; envía sourceProformaNumber. " +
+                    "Valor recibido en sourceProformaId=" + deprecatedSourceProformaId
+            );
+        }
+
+        if (sourceProformaNumber == null || sourceProformaNumber <= 0) {
+            throw new InvalidSaleV2Exception("sourceProformaNumber inválido.");
+        }
+
+        Proforma proforma = proformaRepository.lockByNumber(sourceProformaNumber)
+                .orElseThrow(() -> new InvalidSaleV2Exception(
+                        "Proforma origen no encontrada con número: " + sourceProformaNumber
+                ));
+
+        // Si algún cliente interno manda ambos campos, se valida que no haya cruce accidental.
+        if (deprecatedSourceProformaId != null && !Objects.equals(deprecatedSourceProformaId, proforma.getId())) {
+            throw new InvalidSaleV2Exception(
+                    "Inconsistencia de proforma: sourceProformaNumber=" + sourceProformaNumber +
+                    " corresponde al ID interno " + proforma.getId() +
+                    ", pero sourceProformaId=" + deprecatedSourceProformaId + "."
+            );
+        }
+
+        if (proforma.getStatus() != ProformaStatus.PENDIENTE) {
+            throw new InvalidSaleV2Exception("La proforma Nro " + sourceProformaNumber
+                    + " no está PENDIENTE. Estado actual: " + proforma.getStatus());
+        }
+
+        return proforma;
+    }
+
+    private void markSourceProformaAsConverted(Proforma sourceProforma, Long saleId, Long convertedBy) {
+        if (sourceProforma == null) return;
+
+        Long proformaId = sourceProforma.getId();
+
+        // 1) Relación directa en sale
+        int saleUpdated = saleV2Repository.updateSourceProformaId(saleId, proformaId);
+        if (saleUpdated != 1) {
+            throw new InvalidSaleV2Exception("No se pudo registrar source_proforma_id en la venta " + saleId + ".");
+        }
+
+        // 2) Relación histórica / compatibilidad
+        saleReferenceRepository.create(saleId, proformaId);
+
+        // 3) Relación directa en proforma + estado
+        int proformaUpdated = proformaRepository.markAsConverted(proformaId, saleId, convertedBy);
+        if (proformaUpdated != 1) {
+            throw new InvalidSaleV2Exception(
+                    "No se pudo marcar la proforma " + proformaId + " como CONVERTIDA. " +
+                    "Probablemente ya fue convertida o anulada."
+            );
+        }
+    }
+
     private void validateDocumentRules(SaleV2CreateRequest request, Totals totals, List<ComputedLine> lines) {
         if (request.getDocType() == DocType.FACTURA) {
             if (request.getCustomerDocType() == null || !"RUC".equalsIgnoreCase(request.getCustomerDocType())) {
@@ -452,10 +540,22 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
             }
         }
 
-        if (totals != null && totals.total != null && totals.total.compareTo(new BigDecimal("700")) >= 0) {
+        boolean genericCustomer = isGenericCustomerDocumentType(request.getCustomerDocType());
+
+        if (totals != null && totals.total != null
+                && totals.total.compareTo(GENERIC_CUSTOMER_TOTAL_LIMIT) > 0) {
             if (request.getCustomerDocType() == null || request.getCustomerDocType().trim().isEmpty()
-                    || request.getCustomerDocNumber() == null || request.getCustomerDocNumber().trim().isEmpty()) {
-                throw new InvalidSaleV2Exception("Ventas >= 700 requieren documento (customerDocType y customerDocNumber)." );
+                    || request.getCustomerDocNumber() == null || request.getCustomerDocNumber().trim().isEmpty()
+                    || genericCustomer) {
+                throw new InvalidSaleV2Exception("Ventas mayores a S/ 700.00 requieren cliente identificado. No se permite GEN/0.");
+            }
+        }
+
+        if (genericCustomer) {
+            request.setCustomerDocType("GEN");
+            request.setCustomerDocNumber("0");
+            if (request.getCustomerName() == null || request.getCustomerName().trim().isEmpty()) {
+                request.setCustomerName("VENTA RAPIDA");
             }
         }
 
@@ -557,6 +657,15 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         }
 
         return new Totals(subtotal, discountTotal, igvAmount, total, giftCostTotal);
+    }
+
+    private static boolean isGenericCustomerDocumentType(String value) {
+        String v = nzs(value).trim().toUpperCase();
+        return switch (v) {
+            case "GEN", "GENERICO", "GENÉRICO", "GENERAL", "0",
+                 "OTROS", "SIN_DOCUMENTO", "SIN DOCUMENTO" -> true;
+            default -> false;
+        };
     }
 
     private static BigDecimal nz(BigDecimal v) {

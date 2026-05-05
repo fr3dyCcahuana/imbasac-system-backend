@@ -29,11 +29,10 @@ public class CustomerRestController {
     private final GetPageOfCustomersUseCase getPageOfCustomersUseCase;
 
     @PostMapping
-    public ResponseEntity<Void> createNewCustomer(@RequestBody Customer customer) {
-        createNewCustomerUseCase.createNewCustomer(customer);
-        return new ResponseEntity<>(HttpStatus.CREATED);
+    public ResponseEntity<SuccessResponse<Customer>> createNewCustomer(@RequestBody Customer customer) {
+        Customer createdCustomer = createNewCustomerUseCase.createNewCustomer(customer);
+        return ResponseEntity.status(HttpStatus.CREATED).body(SuccessResponse.ok(createdCustomer));
     }
-
 
     @PostMapping("/{customerId}/addresses")
     public ResponseEntity<SuccessResponse<CustomerAddress>> createCustomerAddress(@PathVariable Long customerId,

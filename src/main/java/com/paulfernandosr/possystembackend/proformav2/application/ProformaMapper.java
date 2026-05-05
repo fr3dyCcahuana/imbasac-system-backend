@@ -41,6 +41,9 @@ public class ProformaMapper {
                 .discountTotal(p.getDiscountTotal())
                 .total(p.getTotal())
                 .status(p.getStatus() != null ? p.getStatus().name() : null)
+                .convertedSaleId(p.getConvertedSaleId())
+                .convertedAt(p.getConvertedAt() != null ? p.getConvertedAt().toString() : null)
+                .convertedBy(p.getConvertedBy())
                 .items(items == null ? null : items.stream().map(ProformaMapper::toItem).collect(Collectors.toList()))
                 .build();
     }

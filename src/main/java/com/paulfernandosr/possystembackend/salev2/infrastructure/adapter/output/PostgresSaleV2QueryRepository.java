@@ -298,8 +298,8 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                 s.created_at      AS created_at,
                 s.updated_at      AS updated_at,
 
-                sr.proforma_id    AS reference_proforma_id,
-                sr.imported_at    AS reference_imported_at,
+                COALESCE(sr.proforma_id, s.source_proforma_id) AS reference_proforma_id,
+                COALESCE(sr.imported_at, p_ref.converted_at)      AS reference_imported_at,
 
                 s.sunat_status               AS sunat_status,
                 s.sunat_response_code        AS sunat_response_code,
@@ -320,6 +320,8 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
               FROM sale s
               LEFT JOIN sale_reference sr
                      ON sr.sale_id = s.id
+              LEFT JOIN proforma p_ref
+                     ON p_ref.id = s.source_proforma_id
               LEFT JOIN users u_created
                      ON u_created.id = s.created_by
               LEFT JOIN users u_edit

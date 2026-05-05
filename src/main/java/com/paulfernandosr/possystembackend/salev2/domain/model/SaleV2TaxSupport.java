@@ -72,12 +72,21 @@ public final class SaleV2TaxSupport {
             throw new InvalidSaleV2Exception(docType + " requiere customerDocType y customerDocNumber para emisión SUNAT.");
         }
 
+        boolean genericCustomer = isGenericCustomerDocumentType(normalizedDocType);
+
         if (docType == DocType.FACTURA) {
             if (!"RUC".equals(normalizedDocType)) {
                 throw new InvalidSaleV2Exception("FACTURA requiere customerDocType=RUC.");
             }
             if (!RUC_PATTERN.matcher(normalizedDocNumber).matches()) {
                 throw new InvalidSaleV2Exception("FACTURA requiere customerDocNumber con 11 dígitos (RUC).");
+            }
+            return;
+        }
+
+        if (genericCustomer) {
+            if (total != null && total.compareTo(new BigDecimal("700.00")) > 0) {
+                throw new InvalidSaleV2Exception("Ventas mayores a S/ 700.00 requieren cliente identificado. No se permite GEN/0.");
             }
             return;
         }
@@ -96,7 +105,16 @@ public final class SaleV2TaxSupport {
             return;
         }
 
-        throw new InvalidSaleV2Exception("Para BOLETA/FACTURA solo se soporta customerDocType=DNI o RUC en este flujo SUNAT.");
+        throw new InvalidSaleV2Exception("Para BOLETA/FACTURA solo se soporta customerDocType=DNI, RUC o GEN/0 en este flujo SUNAT.");
+    }
+
+    public static boolean isGenericCustomerDocumentType(String value) {
+        String v = normalizeText(value);
+        return switch (v) {
+            case "GEN", "GENERICO", "GENÉRICO", "GENERAL", "0",
+                 "OTROS", "SIN_DOCUMENTO", "SIN DOCUMENTO" -> true;
+            default -> false;
+        };
     }
 
     public static String normalizeDigits(String value) {

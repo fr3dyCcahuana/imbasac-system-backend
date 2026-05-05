@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.output;
 
 import com.paulfernandosr.possystembackend.proformav2.domain.Proforma;
+import com.paulfernandosr.possystembackend.proformav2.domain.model.ProformaStatus;
 import com.paulfernandosr.possystembackend.proformav2.domain.port.output.ProformaRepository;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.output.mapper.ProformaRowMapper;
 import lombok.RequiredArgsConstructor;
@@ -108,6 +109,32 @@ public class PostgresProformaRepository implements ProformaRepository {
 
         return jdbcClient.sql(sql)
                 .param(proformaId)
+                .query(new ProformaRowMapper())
+                .optional();
+    }
+
+
+    @Override
+    public Optional<Proforma> lockByNumber(Long number) {
+        // IMPORTANTE:
+        // Este método bloquea por el NÚMERO VISIBLE de la proforma, no por el ID interno.
+        // Como el negocio trabaja con una sola serie de proforma, number identifica la proforma operacional.
+        String sql = """
+            SELECT
+              p.*,
+              u.username   AS cashier_username,
+              u.first_name AS cashier_first_name,
+              u.last_name  AS cashier_last_name
+            FROM proforma p
+            LEFT JOIN users u ON u.id = p.created_by
+            WHERE p.number = ?
+            ORDER BY p.id DESC
+            LIMIT 1
+            FOR UPDATE OF p
+            """;
+
+        return jdbcClient.sql(sql)
+                .param(number)
                 .query(new ProformaRowMapper())
                 .optional();
     }
@@ -247,5 +274,29 @@ public class PostgresProformaRepository implements ProformaRepository {
             WHERE id = ?
             """;
         jdbcClient.sql(sql).param(proformaId).update();
+    }
+
+    @Override
+    public int markAsConverted(Long proformaId, Long saleId, Long convertedBy) {
+        String sql = """
+        UPDATE proforma
+           SET status = ?,
+               converted_sale_id = ?,
+               converted_at = NOW(),
+               converted_by = ?,
+               updated_at = NOW()
+         WHERE id = ?
+           AND status = ?
+        """;
+
+        return jdbcClient.sql(sql)
+                .params(
+                        ProformaStatus.CONVERTIDA.name(),
+                        saleId,
+                        convertedBy,
+                        proformaId,
+                        ProformaStatus.PENDIENTE.name()
+                )
+                .update();
     }
 }

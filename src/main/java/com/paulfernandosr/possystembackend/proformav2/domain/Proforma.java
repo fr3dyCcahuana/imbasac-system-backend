@@ -46,6 +46,9 @@ public class Proforma {
     private BigDecimal igvAmount; // taxTotal
     private Boolean igvIncluded;
     private ProformaStatus status;
+    private Long convertedSaleId;
+    private LocalDateTime convertedAt;
+    private Long convertedBy;
     private String cashierUsername;
     private String cashierFirstName;
     private String cashierLastName;

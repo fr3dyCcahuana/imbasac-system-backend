@@ -16,6 +16,20 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
     private final JdbcClient jdbcClient;
 
     @Override
+    public int updateSourceProformaId(Long saleId, Long proformaId) {
+        String sql = """
+        UPDATE sale
+           SET source_proforma_id = ?,
+               updated_at = NOW()
+         WHERE id = ?
+        """;
+
+        return jdbcClient.sql(sql)
+                .params(proformaId, saleId)
+                .update();
+    }
+
+    @Override
     public Long insertSale(Long stationId, Long saleSessionId, Long createdBy, String docType, String series, Long number,
                            LocalDate issueDate, String currency, BigDecimal exchangeRate, String priceList,
                            Long customerId, String customerDocType, String customerDocNumber, String customerName,

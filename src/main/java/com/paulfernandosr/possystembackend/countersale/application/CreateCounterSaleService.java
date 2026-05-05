@@ -22,6 +22,7 @@ import java.util.*;
 public class CreateCounterSaleService implements CreateCounterSaleUseCase {
 
     private static final String DOCUMENT_SERIES_TYPE = "VENTANILLA";
+    private static final BigDecimal GENERIC_CUSTOMER_TOTAL_LIMIT = new BigDecimal("700.00");
 
     private final UserRepository userRepository;
     private final DocumentSeriesRepository documentSeriesRepository;
@@ -292,9 +293,21 @@ public class CreateCounterSaleService implements CreateCounterSaleUseCase {
     }
 
     private void validateDocumentRules(CounterSaleCreateRequest request, Totals totals) {
-        if (totals.total != null && totals.total.compareTo(new BigDecimal("700")) >= 0) {
-            if (isBlank(request.getCustomerDocType()) || isBlank(request.getCustomerDocNumber())) {
-                throw new InvalidCounterSaleException("Operaciones >= 700 requieren customerDocType y customerDocNumber.");
+        boolean genericCustomer = isGenericCustomerDocumentType(request.getCustomerDocType());
+
+        if (totals.total != null && totals.total.compareTo(GENERIC_CUSTOMER_TOTAL_LIMIT) > 0) {
+            if (isBlank(request.getCustomerDocType())
+                    || isBlank(request.getCustomerDocNumber())
+                    || genericCustomer) {
+                throw new InvalidCounterSaleException("Operaciones mayores a S/ 700.00 requieren cliente identificado. No se permite GEN/0.");
+            }
+        }
+
+        if (genericCustomer) {
+            request.setCustomerDocType("GEN");
+            request.setCustomerDocNumber("0");
+            if (isBlank(request.getCustomerName())) {
+                request.setCustomerName("VENTA RAPIDA");
             }
         }
     }
@@ -379,6 +392,15 @@ public class CreateCounterSaleService implements CreateCounterSaleUseCase {
 
     private static String nzs(String v, String def) {
         return (v == null || v.trim().isEmpty()) ? def : v;
+    }
+
+    private static boolean isGenericCustomerDocumentType(String value) {
+        String v = nzs(value).trim().toUpperCase();
+        return switch (v) {
+            case "GEN", "GENERICO", "GENÉRICO", "GENERAL", "0",
+                 "OTROS", "SIN_DOCUMENTO", "SIN DOCUMENTO" -> true;
+            default -> false;
+        };
     }
 
     private static boolean isBlank(String value) {

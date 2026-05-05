@@ -26,4 +26,5 @@ public class ProformaV2SummaryResponse {
 
     private BigDecimal total;
     private String status;
+    private Long convertedSaleId;
 }
