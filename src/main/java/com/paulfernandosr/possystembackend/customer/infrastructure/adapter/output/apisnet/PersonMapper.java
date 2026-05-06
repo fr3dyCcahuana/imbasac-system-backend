@@ -12,54 +12,61 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 public class PersonMapper {
+    /**
+     * En la tabla actual varios campos de customers/customer_address son varchar(160).
+     * La ficha SUNAT puede devolver textos largos, sobre todo actividad económica y dirección.
+     * Por eso se normaliza y limita antes de persistir para no romper el registro del cliente.
+     */
+    private static final int DB_TEXT_LIMIT = 160;
+
     public static Customer toCustomer(NaturalPerson naturalPerson) {
         return Customer.builder()
-                .legalName(buildLegalName(
+                .legalName(dbText(buildLegalName(
                         naturalPerson.getGivenNames(),
                         naturalPerson.getLastName(),
-                        naturalPerson.getSecondLastName()))
+                        naturalPerson.getSecondLastName())))
                 .documentType(DocumentType.DNI)
-                .documentNumber(naturalPerson.getDocumentNumber())
-                .givenNames(naturalPerson.getGivenNames())
-                .lastName(naturalPerson.getLastName())
-                .secondLastName(naturalPerson.getSecondLastName())
+                .documentNumber(dbText(naturalPerson.getDocumentNumber()))
+                .givenNames(dbText(naturalPerson.getGivenNames()))
+                .lastName(dbText(naturalPerson.getLastName()))
+                .secondLastName(dbText(naturalPerson.getSecondLastName()))
                 .build();
     }
 
     public static Customer toCustomer(JuridicalPerson juridicalPerson) {
-        String fiscalAddress = normalizeNullable(juridicalPerson.getAddress());
+        String fiscalAddress = dbText(juridicalPerson.getAddress());
 
         Customer customer = Customer.builder()
-                .legalName(normalizeNullable(juridicalPerson.getBusinessName()))
+                .legalName(dbText(juridicalPerson.getBusinessName()))
                 .documentType(DocumentType.RUC)
-                .documentNumber(normalizeNullable(juridicalPerson.getDocumentNumber()))
+                .documentNumber(dbText(juridicalPerson.getDocumentNumber()))
                 // --- fiscal
                 .address(fiscalAddress)
-                .ubigeo(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getUbigeo()))
-                .department(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getDepartment()))
-                .province(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getProvince()))
-                .district(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getDistrict()))
-                // --- SUNAT info
-                .sunatStatus(normalizeNullable(juridicalPerson.getStatus()))
-                .sunatCondition(normalizeNullable(juridicalPerson.getCondition()))
-                .streetType(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getStreetType()))
-                .streetName(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getStreetName()))
-                .zoneCode(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getZoneCode()))
-                .zoneType(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getZoneType()))
-                .addressNumber(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getNumber()))
-                .interior(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getInterior()))
-                .lot(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getLot()))
-                .apartment(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getApartment()))
-                .block(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getBlock()))
-                .kilometer(fiscalAddress == null ? null : normalizeNullable(juridicalPerson.getKilometer()))
+                .ubigeo(fiscalAddress == null ? null : dbText(juridicalPerson.getUbigeo()))
+                .department(fiscalAddress == null ? null : dbText(juridicalPerson.getDepartment()))
+                .province(fiscalAddress == null ? null : dbText(juridicalPerson.getProvince()))
+                .district(fiscalAddress == null ? null : dbText(juridicalPerson.getDistrict()))
+                // --- SUNAT info mínima útil
+                .sunatStatus(dbText(juridicalPerson.getStatus()))
+                .sunatCondition(dbText(juridicalPerson.getCondition()))
+                .streetType(fiscalAddress == null ? null : dbText(juridicalPerson.getStreetType()))
+                .streetName(fiscalAddress == null ? null : dbText(juridicalPerson.getStreetName()))
+                .zoneCode(fiscalAddress == null ? null : dbText(juridicalPerson.getZoneCode()))
+                .zoneType(fiscalAddress == null ? null : dbText(juridicalPerson.getZoneType()))
+                .addressNumber(fiscalAddress == null ? null : dbText(juridicalPerson.getNumber()))
+                .interior(fiscalAddress == null ? null : dbText(juridicalPerson.getInterior()))
+                .lot(fiscalAddress == null ? null : dbText(juridicalPerson.getLot()))
+                .apartment(fiscalAddress == null ? null : dbText(juridicalPerson.getApartment()))
+                .block(fiscalAddress == null ? null : dbText(juridicalPerson.getBlock()))
+                .kilometer(fiscalAddress == null ? null : dbText(juridicalPerson.getKilometer()))
                 .retentionAgent(juridicalPerson.isRetentionAgent())
                 .goodContributor(juridicalPerson.isGoodContributor())
-                .sunatType(normalizeNullable(juridicalPerson.getType()))
-                .economicActivity(normalizeNullable(juridicalPerson.getEconomicActivity()))
-                .numberOfEmployees(normalizeNullable(juridicalPerson.getNumberOfEmployees()))
-                .billingType(normalizeNullable(juridicalPerson.getBillingType()))
-                .accountingType(normalizeNullable(juridicalPerson.getAccountingType()))
-                .foreignTrade(normalizeNullable(juridicalPerson.getForeignTrade()))
+                .sunatType(dbText(juridicalPerson.getType()))
+                .economicActivity(compactEconomicActivity(juridicalPerson.getEconomicActivity()))
+                .numberOfEmployees(dbText(juridicalPerson.getNumberOfEmployees()))
+                .billingType(dbText(juridicalPerson.getBillingType()))
+                .accountingType(dbText(juridicalPerson.getAccountingType()))
+                .foreignTrade(dbText(juridicalPerson.getForeignTrade()))
                 .build();
 
         // Direcciones (fiscal + anexos)
@@ -68,10 +75,10 @@ public class PersonMapper {
         if (fiscalAddress != null) {
             addresses.add(CustomerAddress.builder()
                     .address(fiscalAddress)
-                    .ubigeo(normalizeNullable(juridicalPerson.getUbigeo()))
-                    .department(normalizeNullable(juridicalPerson.getDepartment()))
-                    .province(normalizeNullable(juridicalPerson.getProvince()))
-                    .district(normalizeNullable(juridicalPerson.getDistrict()))
+                    .ubigeo(dbText(juridicalPerson.getUbigeo()))
+                    .department(dbText(juridicalPerson.getDepartment()))
+                    .province(dbText(juridicalPerson.getProvince()))
+                    .district(dbText(juridicalPerson.getDistrict()))
                     .fiscal(true)
                     .enabled(true)
                     .position(0)
@@ -83,15 +90,15 @@ public class PersonMapper {
             for (JuridicalPersonLocal local : juridicalPerson.getAnnexLocations()) {
                 if (local == null) continue;
 
-                String annexAddress = normalizeNullable(local.getAddress());
+                String annexAddress = dbText(local.getAddress());
                 if (annexAddress == null) continue;
 
                 addresses.add(CustomerAddress.builder()
                         .address(annexAddress)
-                        .ubigeo(normalizeNullable(local.getUbigeo()))
-                        .department(normalizeNullable(local.getDepartment()))
-                        .province(normalizeNullable(local.getProvince()))
-                        .district(normalizeNullable(local.getDistrict()))
+                        .ubigeo(dbText(local.getUbigeo()))
+                        .department(dbText(local.getDepartment()))
+                        .province(dbText(local.getProvince()))
+                        .district(dbText(local.getDistrict()))
                         .fiscal(false)
                         .enabled(true)
                         .position(pos++)
@@ -123,16 +130,52 @@ public class PersonMapper {
                 .orElse(null);
     }
 
+    private static String compactEconomicActivity(String value) {
+        String normalized = normalizeNullable(value);
+        if (normalized == null) {
+            return null;
+        }
+
+        // SUNAT puede devolver Principal + Secundaria 1 + Secundaria 2 en una sola cadena.
+        // Para customers.economic_activity guardamos solo la actividad principal.
+        normalized = cutBefore(normalized, " Secundaria ");
+        normalized = cutBefore(normalized, " Secundaria 1 ");
+        normalized = cutBefore(normalized, " Secundaria 2 ");
+        normalized = cutBefore(normalized, " Comprobantes de Pago ");
+        normalized = cutBefore(normalized, " Sistema de Emisión ");
+        normalized = cutBefore(normalized, " Sistema de Emision ");
+
+        return truncate(normalized, DB_TEXT_LIMIT);
+    }
+
+    private static String cutBefore(String value, String marker) {
+        int index = value.toUpperCase().indexOf(marker.toUpperCase());
+        return index > 0 ? value.substring(0, index).trim() : value;
+    }
+
+    private static String dbText(String value) {
+        return truncate(normalizeNullable(value), DB_TEXT_LIMIT);
+    }
+
     private static String normalizeNullable(String value) {
         if (value == null) {
             return null;
         }
 
-        String normalized = value.trim();
+        String normalized = value.replace(' ', ' ')
+                .replaceAll("\s+", " ")
+                .trim();
+
         if (normalized.isBlank() || "-".equals(normalized)) {
             return null;
         }
-
         return normalized;
+    }
+
+    private static String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength).trim();
     }
 }
