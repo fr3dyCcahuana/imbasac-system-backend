@@ -114,6 +114,11 @@
 			<artifactId>playwright</artifactId>
 			<version>1.53.0</version>
 		</dependency>
+		<dependency>
+			<groupId>org.jsoup</groupId>
+			<artifactId>jsoup</artifactId>
+			<version>1.22.2</version>
+		</dependency>
 	</dependencies>
 
 	<build>

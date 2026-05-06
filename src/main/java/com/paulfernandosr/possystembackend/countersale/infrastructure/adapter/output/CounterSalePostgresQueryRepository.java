@@ -145,10 +145,12 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                    csi.quantity AS quantity,
                    csi.sku AS sku,
                    csi.description AS description,
+                   p.warehouse_location AS product_location,
                    csi.presentation AS presentation,
                    csi.unit_price AS unit_price,
                    csi.revenue_total AS revenue_total
               FROM counter_sale_item csi
+              JOIN product p ON p.id = csi.product_id
              WHERE csi.counter_sale_id IN (%s)
              ORDER BY csi.counter_sale_id ASC, csi.line_number ASC
         """, placeholders);
@@ -160,6 +162,7 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                 .quantity(rs.getBigDecimal("quantity"))
                 .sku(rs.getString("sku"))
                 .description(rs.getString("description"))
+                .productLocation(rs.getString("product_location"))
                 .presentation(rs.getString("presentation"))
                 .unitPrice(rs.getBigDecimal("unit_price"))
                 .revenueTotal(rs.getBigDecimal("revenue_total"))
@@ -282,6 +285,7 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                    csi.product_id AS product_id,
                    csi.sku AS sku,
                    csi.description AS description,
+                   p.warehouse_location AS product_location,
                    csi.presentation AS presentation,
                    csi.factor AS factor,
                    csi.quantity AS quantity,
@@ -336,6 +340,7 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                     .productId(rs.getLong("product_id"))
                     .sku(rs.getString("sku"))
                     .description(rs.getString("description"))
+                    .productLocation(rs.getString("product_location"))
                     .presentation(rs.getString("presentation"))
                     .factor(rs.getBigDecimal("factor"))
                     .quantity(rs.getBigDecimal("quantity"))

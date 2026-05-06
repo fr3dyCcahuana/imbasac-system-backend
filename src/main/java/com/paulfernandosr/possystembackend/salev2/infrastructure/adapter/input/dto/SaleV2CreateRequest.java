@@ -59,10 +59,11 @@ public class SaleV2CreateRequest {
     private Long sourceProformaNumber;
 
     /**
-     * DEPRECADO para el flujo de ventas desde proforma.
-     * No usar desde el frontend porque se presta a confundir número visible con ID interno.
-     * Se deja temporalmente solo para compatibilidad, pero CreateSaleV2Service lo rechaza
-     * si llega sin sourceProformaNumber.
+     * Campo legacy de compatibilidad con el frontend anterior.
+     * IMPORTANTE: aunque el nombre diga "Id", CreateSaleV2Service lo interpreta como
+     * NÚMERO VISIBLE de proforma cuando sourceProformaNumber no viene informado.
+     *
+     * No se debe usar este valor como proforma.id para actualizar estado o relación.
      */
     @Deprecated
     private Long sourceProformaId;

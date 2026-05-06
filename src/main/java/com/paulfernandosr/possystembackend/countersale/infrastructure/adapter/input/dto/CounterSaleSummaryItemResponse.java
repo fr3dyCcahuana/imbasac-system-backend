@@ -17,6 +17,7 @@ public class CounterSaleSummaryItemResponse {
     private BigDecimal quantity;
     private String sku;
     private String description;
+    private String productLocation;
     private String presentation;
     private BigDecimal unitPrice;
     private BigDecimal revenueTotal;

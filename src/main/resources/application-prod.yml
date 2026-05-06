@@ -31,7 +31,7 @@ logging:
 security:
   token:
     secret: bSZWQDl3ZDVtUW0memhHNEc3ME82ZlYmYms5enVFSmU=
-    expiration: 900
+    expiration: 60000000
   session:
     ttl: 1800
 

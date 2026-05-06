@@ -49,7 +49,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
     private final AccountsReceivableRepository accountsReceivableRepository;
     private final CustomerAccountRepository customerAccountRepository;
 
-    // Proforma origen (Opción B): POST /sales/v2 con sourceProformaId
+    // Proforma origen (Opción B): POST /sales/v2 con número visible de proforma
     private final ProformaRepository proformaRepository;
     private final SaleReferenceRepository saleReferenceRepository;
 
@@ -465,41 +465,41 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
     }
 
     private Proforma lockAndValidateSourceProforma(SaleV2CreateRequest request) {
-        Long sourceProformaNumber = request.getSourceProformaNumber();
-        Long deprecatedSourceProformaId = request.getSourceProformaId();
+        Long requestedProformaNumber = request.getSourceProformaNumber();
 
-        if (sourceProformaNumber == null && deprecatedSourceProformaId == null) {
+        /*
+         * Compatibilidad temporal:
+         * - Nuevo frontend: envía sourceProformaNumber = número visible de la proforma.
+         * - Frontend anterior: todavía puede enviar sourceProformaId, pero ese valor venía
+         *   desde el campo visual del usuario. Para evitar volver a convertir el número visible
+         *   como ID interno, se interpreta como NÚMERO visible, nunca como proforma.id.
+         *
+         * Regla definitiva:
+         * 1) Resolver siempre la proforma por p.number.
+         * 2) Usar recién proforma.getId() para guardar sale.source_proforma_id,
+         *    sale_reference.proforma_id y proforma.converted_sale_id.
+         */
+        if (requestedProformaNumber == null) {
+            requestedProformaNumber = request.getSourceProformaId();
+        }
+
+        if (requestedProformaNumber == null) {
             return null;
         }
 
-        if (sourceProformaNumber == null && deprecatedSourceProformaId != null) {
-            throw new InvalidSaleV2Exception(
-                    "No envíes sourceProformaId desde el módulo de ventas. " +
-                    "El facturador carga por número visible; envía sourceProformaNumber. " +
-                    "Valor recibido en sourceProformaId=" + deprecatedSourceProformaId
-            );
+        if (requestedProformaNumber <= 0) {
+            throw new InvalidSaleV2Exception("Número de proforma origen inválido: " + requestedProformaNumber);
         }
 
-        if (sourceProformaNumber == null || sourceProformaNumber <= 0) {
-            throw new InvalidSaleV2Exception("sourceProformaNumber inválido.");
-        }
+        final Long proformaNumber = requestedProformaNumber;
 
-        Proforma proforma = proformaRepository.lockByNumber(sourceProformaNumber)
+        Proforma proforma = proformaRepository.lockByNumber(proformaNumber)
                 .orElseThrow(() -> new InvalidSaleV2Exception(
-                        "Proforma origen no encontrada con número: " + sourceProformaNumber
+                        "Proforma origen no encontrada con número: " + proformaNumber
                 ));
 
-        // Si algún cliente interno manda ambos campos, se valida que no haya cruce accidental.
-        if (deprecatedSourceProformaId != null && !Objects.equals(deprecatedSourceProformaId, proforma.getId())) {
-            throw new InvalidSaleV2Exception(
-                    "Inconsistencia de proforma: sourceProformaNumber=" + sourceProformaNumber +
-                    " corresponde al ID interno " + proforma.getId() +
-                    ", pero sourceProformaId=" + deprecatedSourceProformaId + "."
-            );
-        }
-
         if (proforma.getStatus() != ProformaStatus.PENDIENTE) {
-            throw new InvalidSaleV2Exception("La proforma Nro " + sourceProformaNumber
+            throw new InvalidSaleV2Exception("La proforma Nro " + proformaNumber
                     + " no está PENDIENTE. Estado actual: " + proforma.getStatus());
         }
 
