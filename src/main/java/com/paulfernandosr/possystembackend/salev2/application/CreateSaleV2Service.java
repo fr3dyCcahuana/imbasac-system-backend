@@ -37,6 +37,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
     private final DocumentSeriesPolicy documentSeriesPolicy;
 
     private final SaleV2Repository saleV2Repository;
+    private final CustomerLocationSnapshotRepository customerLocationSnapshotRepository;
     private final SalePaymentRepository salePaymentRepository;
 
     private final ProductStockRepository productStockRepository;
@@ -335,6 +336,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         }
 
         boolean finalIgvIncluded = Boolean.TRUE.equals(request.getIgvIncluded()) && request.getTaxStatus() == TaxStatus.GRAVADA;
+        CustomerLocationSnapshot customerLocation = resolveCustomerLocation(request);
 
         // 4) Insertar sale + items
         Long saleId = saleV2Repository.insertSale(
@@ -353,6 +355,10 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                 request.getCustomerDocNumber(),
                 request.getCustomerName(),
                 request.getCustomerAddress(),
+                customerLocation.getUbigeo(),
+                customerLocation.getDepartment(),
+                customerLocation.getProvince(),
+                customerLocation.getDistrict(),
                 request.getTaxStatus().name(),
                 request.getTaxReason(),
                 nz(request.getIgvRate(), new BigDecimal("18.00")),
@@ -473,6 +479,39 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                 .dueDate(dueDate)
                 .accountsReceivableId(arId)
                 .build();
+    }
+
+    private CustomerLocationSnapshot resolveCustomerLocation(SaleV2CreateRequest request) {
+        if (request == null || isGenericCustomerDocumentType(request.getCustomerDocType())) {
+            return new CustomerLocationSnapshot();
+        }
+
+        CustomerLocationSnapshot fromDb = customerLocationSnapshotRepository.resolveCustomerLocation(
+                        request.getCustomerId(),
+                        request.getCustomerDocType(),
+                        request.getCustomerDocNumber(),
+                        request.getCustomerAddress()
+                )
+                .orElseGet(CustomerLocationSnapshot::new);
+
+        return CustomerLocationSnapshot.builder()
+                .ubigeo(firstText(request.getCustomerUbigeo(), fromDb.getUbigeo()))
+                .department(firstText(request.getCustomerDepartment(), fromDb.getDepartment()))
+                .province(firstText(request.getCustomerProvince(), fromDb.getProvince()))
+                .district(firstText(request.getCustomerDistrict(), fromDb.getDistrict()))
+                .build();
+    }
+
+    private String firstText(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return null;
     }
 
     private Proforma lockAndValidateSourceProforma(SaleV2CreateRequest request) {

@@ -24,6 +24,15 @@ public class SaleV2AdminEditRequest {
     private String customerName;
     private String customerAddress;
 
+    /**
+     * Snapshot opcional de ubicación del cliente para edición antes de SUNAT.
+     * Si no se envía y no cambia cliente/dirección, se conserva el snapshot anterior.
+     */
+    private String customerUbigeo;
+    private String customerDepartment;
+    private String customerProvince;
+    private String customerDistrict;
+
     private TaxStatus taxStatus;
     private String taxReason;
     private BigDecimal igvRate;

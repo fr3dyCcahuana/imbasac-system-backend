@@ -30,6 +30,10 @@ public class PostgresSaleV2SunatRepository implements SaleV2SunatRepository {
                 s.customer_doc_number AS customer_doc_number,
                 s.customer_name       AS customer_name,
                 s.customer_address    AS customer_address,
+                COALESCE(s.customer_ubigeo, c_id.ubigeo, c_doc.ubigeo) AS customer_ubigeo,
+                COALESCE(s.customer_department, c_id.department, c_doc.department) AS customer_department,
+                COALESCE(s.customer_province, c_id.province, c_doc.province) AS customer_province,
+                COALESCE(s.customer_district, c_id.district, c_doc.district) AS customer_district,
                 s.tax_status        AS tax_status,
                 s.subtotal          AS subtotal,
                 s.discount_total    AS discount_total,
@@ -46,8 +50,14 @@ public class PostgresSaleV2SunatRepository implements SaleV2SunatRepository {
                 s.sunat_pdf_path            AS sunat_pdf_path,
                 s.sunat_sent_at             AS sunat_sent_at
             FROM sale s
+            LEFT JOIN customers c_id
+                   ON c_id.id = s.customer_id
+            LEFT JOIN customers c_doc
+                   ON s.customer_id IS NULL
+                  AND c_doc.document_type = s.customer_doc_type
+                  AND c_doc.document_number = s.customer_doc_number
             WHERE s.id = ?
-            FOR UPDATE
+            FOR UPDATE OF s
         """;
 
         return jdbcClient.sql(sql)
@@ -65,6 +75,10 @@ public class PostgresSaleV2SunatRepository implements SaleV2SunatRepository {
                         .customerDocNumber(rs.getString("customer_doc_number"))
                         .customerName(rs.getString("customer_name"))
                         .customerAddress(rs.getString("customer_address"))
+                        .customerUbigeo(rs.getString("customer_ubigeo"))
+                        .customerDepartment(rs.getString("customer_department"))
+                        .customerProvince(rs.getString("customer_province"))
+                        .customerDistrict(rs.getString("customer_district"))
                         .taxStatus(rs.getString("tax_status"))
                         .subtotal(rs.getBigDecimal("subtotal"))
                         .discountTotal(rs.getBigDecimal("discount_total"))

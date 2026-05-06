@@ -35,6 +35,7 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
     private final UserRepository userRepository;
     private final ProductSnapshotRepository productSnapshotRepository;
     private final SaleV2Repository saleV2Repository;
+    private final CustomerLocationSnapshotRepository customerLocationSnapshotRepository;
     private final SalePaymentRepository salePaymentRepository;
     private final ProductStockRepository productStockRepository;
     private final ProductStockMovementRepository productStockMovementRepository;
@@ -135,6 +136,15 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
         customerName = normalizedCustomer.name;
 
         validateDocumentRules(docType, customerDocType, customerDocNumber, totals, taxStatus, taxReason, computedLines);
+
+        CustomerLocationSnapshot customerLocation = resolveCustomerLocation(
+                request,
+                current,
+                customerId,
+                customerDocType,
+                customerDocNumber,
+                customerAddress
+        );
 
         Integer creditDays = current.getCreditDays();
         LocalDate dueDate = current.getDueDate();
@@ -277,6 +287,10 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
                 customerDocNumber,
                 customerName,
                 customerAddress,
+                customerLocation.getUbigeo(),
+                customerLocation.getDepartment(),
+                customerLocation.getProvince(),
+                customerLocation.getDistrict(),
                 taxStatus.name(),
                 taxReason,
                 igvRate,
@@ -302,6 +316,10 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
                 customerDocNumber,
                 customerName,
                 customerAddress,
+                customerLocation.getUbigeo(),
+                customerLocation.getDepartment(),
+                customerLocation.getProvince(),
+                customerLocation.getDistrict(),
                 taxStatus,
                 taxReason,
                 igvRate,
@@ -538,6 +556,78 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
         );
     }
 
+    private CustomerLocationSnapshot resolveCustomerLocation(SaleV2AdminEditRequest request,
+                                                               SaleV2Repository.LockedEditableSale locked,
+                                                               Long customerId,
+                                                               String customerDocType,
+                                                               String customerDocNumber,
+                                                               String customerAddress) {
+        if (isGenericCustomerDocumentType(customerDocType)) {
+            return new CustomerLocationSnapshot();
+        }
+
+        CustomerLocationSnapshot fromDb = customerLocationSnapshotRepository.resolveCustomerLocation(
+                        customerId,
+                        customerDocType,
+                        customerDocNumber,
+                        customerAddress
+                )
+                .orElseGet(CustomerLocationSnapshot::new);
+
+        CustomerLocationSnapshot fallback = shouldKeepLockedCustomerLocation(request, locked, customerId, customerDocType, customerDocNumber, customerAddress)
+                ? CustomerLocationSnapshot.builder()
+                        .ubigeo(locked.getCustomerUbigeo())
+                        .department(locked.getCustomerDepartment())
+                        .province(locked.getCustomerProvince())
+                        .district(locked.getCustomerDistrict())
+                        .build()
+                : new CustomerLocationSnapshot();
+
+        return CustomerLocationSnapshot.builder()
+                .ubigeo(firstText(request.getCustomerUbigeo(), fromDb.getUbigeo(), fallback.getUbigeo()))
+                .department(firstText(request.getCustomerDepartment(), fromDb.getDepartment(), fallback.getDepartment()))
+                .province(firstText(request.getCustomerProvince(), fromDb.getProvince(), fallback.getProvince()))
+                .district(firstText(request.getCustomerDistrict(), fromDb.getDistrict(), fallback.getDistrict()))
+                .build();
+    }
+
+    private boolean shouldKeepLockedCustomerLocation(SaleV2AdminEditRequest request,
+                                                     SaleV2Repository.LockedEditableSale locked,
+                                                     Long customerId,
+                                                     String customerDocType,
+                                                     String customerDocNumber,
+                                                     String customerAddress) {
+        boolean requestTouchesCustomerLocation = request.getCustomerUbigeo() != null
+                || request.getCustomerDepartment() != null
+                || request.getCustomerProvince() != null
+                || request.getCustomerDistrict() != null;
+
+        if (requestTouchesCustomerLocation) {
+            return false;
+        }
+
+        return Objects.equals(customerId, locked.getCustomerId())
+                && Objects.equals(normalizeNullable(customerDocType), normalizeNullable(locked.getCustomerDocType()))
+                && Objects.equals(normalizeNullable(customerDocNumber), normalizeNullable(locked.getCustomerDocNumber()))
+                && Objects.equals(normalizeNullable(customerAddress), normalizeNullable(locked.getCustomerAddress()));
+    }
+
+    private String firstText(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private String normalizeNullable(String value) {
+        return value == null ? null : value.trim();
+    }
+
     private void validateDocumentRules(DocType docType,
                                        String customerDocType,
                                        String customerDocNumber,
@@ -765,6 +855,10 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
         snapshot.put("customerDocNumber", current.getCustomerDocNumber());
         snapshot.put("customerName", current.getCustomerName());
         snapshot.put("customerAddress", current.getCustomerAddress());
+        snapshot.put("customerUbigeo", current.getCustomerUbigeo());
+        snapshot.put("customerDepartment", current.getCustomerDepartment());
+        snapshot.put("customerProvince", current.getCustomerProvince());
+        snapshot.put("customerDistrict", current.getCustomerDistrict());
         snapshot.put("taxStatus", current.getTaxStatus());
         snapshot.put("taxReason", current.getTaxReason());
         snapshot.put("igvRate", current.getIgvRate());
@@ -794,6 +888,10 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
                                                    String customerDocNumber,
                                                    String customerName,
                                                    String customerAddress,
+                                                   String customerUbigeo,
+                                                   String customerDepartment,
+                                                   String customerProvince,
+                                                   String customerDistrict,
                                                    TaxStatus taxStatus,
                                                    String taxReason,
                                                    BigDecimal igvRate,
@@ -845,6 +943,10 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
         snapshot.put("customerDocNumber", customerDocNumber);
         snapshot.put("customerName", customerName);
         snapshot.put("customerAddress", customerAddress);
+        snapshot.put("customerUbigeo", customerUbigeo);
+        snapshot.put("customerDepartment", customerDepartment);
+        snapshot.put("customerProvince", customerProvince);
+        snapshot.put("customerDistrict", customerDistrict);
         snapshot.put("taxStatus", taxStatus.name());
         snapshot.put("taxReason", taxReason);
         snapshot.put("igvRate", igvRate);

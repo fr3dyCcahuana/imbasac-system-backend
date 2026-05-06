@@ -280,6 +280,10 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                 s.customer_doc_number AS customer_doc_number,
                 s.customer_name       AS customer_name,
                 s.customer_address    AS customer_address,
+                COALESCE(s.customer_ubigeo, c_id.ubigeo, c_doc.ubigeo) AS customer_ubigeo,
+                COALESCE(s.customer_department, c_id.department, c_doc.department) AS customer_department,
+                COALESCE(s.customer_province, c_id.province, c_doc.province) AS customer_province,
+                COALESCE(s.customer_district, c_id.district, c_doc.district) AS customer_district,
                 s.tax_status      AS tax_status,
                 s.tax_reason      AS tax_reason,
                 s.igv_rate        AS igv_rate,
@@ -326,6 +330,12 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                      ON u_created.id = s.created_by
               LEFT JOIN users u_edit
                      ON u_edit.id = s.last_edited_by
+              LEFT JOIN customers c_id
+                     ON c_id.id = s.customer_id
+              LEFT JOIN customers c_doc
+                     ON s.customer_id IS NULL
+                    AND c_doc.document_type = s.customer_doc_type
+                    AND c_doc.document_number = s.customer_doc_number
              WHERE s.id = ?
         """;
 
@@ -398,6 +408,10 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                     .customerDocNumber(rs.getString("customer_doc_number"))
                     .customerName(rs.getString("customer_name"))
                     .customerAddress(rs.getString("customer_address"))
+                    .customerUbigeo(rs.getString("customer_ubigeo"))
+                    .customerDepartment(rs.getString("customer_department"))
+                    .customerProvince(rs.getString("customer_province"))
+                    .customerDistrict(rs.getString("customer_district"))
                     .taxStatus(rs.getString("tax_status"))
                     .taxReason(rs.getString("tax_reason"))
                     .igvRate(rs.getBigDecimal("igv_rate"))

@@ -25,6 +25,10 @@ public interface SaleV2Repository {
                     String customerDocNumber,
                     String customerName,
                     String customerAddress,
+                    String customerUbigeo,
+                    String customerDepartment,
+                    String customerProvince,
+                    String customerDistrict,
                     String taxStatus,
                     String taxReason,
                     BigDecimal igvRate,
@@ -73,6 +77,10 @@ public interface SaleV2Repository {
                                   String customerDocNumber,
                                   String customerName,
                                   String customerAddress,
+                                  String customerUbigeo,
+                                  String customerDepartment,
+                                  String customerProvince,
+                                  String customerDistrict,
                                   String taxStatus,
                                   String taxReason,
                                   BigDecimal igvRate,
@@ -133,6 +141,10 @@ public interface SaleV2Repository {
         private String customerDocNumber;
         private String customerName;
         private String customerAddress;
+        private String customerUbigeo;
+        private String customerDepartment;
+        private String customerProvince;
+        private String customerDistrict;
         private String taxStatus;
         private String taxReason;
         private BigDecimal igvRate;

@@ -32,6 +32,16 @@ public class SaleV2CreateRequest {
     private String customerName;
     private String customerAddress;
 
+    /**
+     * Snapshot opcional de ubicación del cliente.
+     * Si el frontend no lo envía, el backend lo resuelve desde customers/customer_address
+     * usando customerId o customerDocType + customerDocNumber.
+     */
+    private String customerUbigeo;
+    private String customerDepartment;
+    private String customerProvince;
+    private String customerDistrict;
+
     private TaxStatus taxStatus;      // GRAVADA/NO_GRAVADA
     private String taxReason;
     private BigDecimal igvRate;       // 18.00

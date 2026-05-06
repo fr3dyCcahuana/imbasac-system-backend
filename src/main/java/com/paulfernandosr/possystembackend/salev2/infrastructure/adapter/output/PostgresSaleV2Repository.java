@@ -33,7 +33,8 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
     public Long insertSale(Long stationId, Long saleSessionId, Long createdBy, String docType, String series, Long number,
                            LocalDate issueDate, String currency, BigDecimal exchangeRate, String priceList,
                            Long customerId, String customerDocType, String customerDocNumber, String customerName,
-                           String customerAddress, String taxStatus, String taxReason, BigDecimal igvRate, Boolean igvIncluded,
+                           String customerAddress, String customerUbigeo, String customerDepartment, String customerProvince,
+                           String customerDistrict, String taxStatus, String taxReason, BigDecimal igvRate, Boolean igvIncluded,
                            String paymentType, Integer creditDays, LocalDate dueDate, String notes) {
 
         String sql = """
@@ -43,6 +44,7 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
                       currency, exchange_rate,
                       price_list,
                       customer_id, customer_doc_type, customer_doc_number, customer_name, customer_address,
+                      customer_ubigeo, customer_department, customer_province, customer_district,
                       tax_status, tax_reason, igv_rate, igv_included,
                       payment_type, credit_days, due_date,
                       subtotal, discount_total, igv_amount, total, gift_cost_total,
@@ -53,6 +55,7 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
                       ?, ?,
                       ?,
                       ?, ?, ?, ?, ?,
+                      ?, ?, ?, ?,
                       ?, ?, ?, ?,
                       ?, ?, ?,
                       0, 0, 0, 0, 0,
@@ -68,6 +71,7 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
                         currency, exchangeRate,
                         priceList,
                         customerId, customerDocType, customerDocNumber, customerName, customerAddress,
+                        customerUbigeo, customerDepartment, customerProvince, customerDistrict,
                         taxStatus, taxReason, igvRate, (igvIncluded != null ? igvIncluded : Boolean.FALSE),
                         paymentType, creditDays, dueDate,
                         notes
@@ -193,6 +197,10 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
                       customer_doc_number,
                       customer_name,
                       customer_address,
+                      customer_ubigeo,
+                      customer_department,
+                      customer_province,
+                      customer_district,
                       tax_status,
                       tax_reason,
                       igv_rate,
@@ -231,6 +239,10 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
                         .customerDocNumber(rs.getString("customer_doc_number"))
                         .customerName(rs.getString("customer_name"))
                         .customerAddress(rs.getString("customer_address"))
+                        .customerUbigeo(rs.getString("customer_ubigeo"))
+                        .customerDepartment(rs.getString("customer_department"))
+                        .customerProvince(rs.getString("customer_province"))
+                        .customerDistrict(rs.getString("customer_district"))
                         .taxStatus(rs.getString("tax_status"))
                         .taxReason(rs.getString("tax_reason"))
                         .igvRate(rs.getBigDecimal("igv_rate"))
@@ -320,7 +332,8 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
     @Override
     public void updateHeaderForAdminEdit(Long saleId, LocalDate issueDate, String priceList, Long customerId,
                                          String customerDocType, String customerDocNumber, String customerName,
-                                         String customerAddress, String taxStatus, String taxReason,
+                                         String customerAddress, String customerUbigeo, String customerDepartment,
+                                         String customerProvince, String customerDistrict, String taxStatus, String taxReason,
                                          BigDecimal igvRate, Boolean igvIncluded, Integer creditDays, LocalDate dueDate,
                                          BigDecimal subtotal, BigDecimal discountTotal, BigDecimal igvAmount,
                                          BigDecimal total, BigDecimal giftCostTotal, String notes,
@@ -334,6 +347,10 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
                            customer_doc_number = ?,
                            customer_name = ?,
                            customer_address = ?,
+                           customer_ubigeo = ?,
+                           customer_department = ?,
+                           customer_province = ?,
+                           customer_district = ?,
                            tax_status = ?,
                            tax_reason = ?,
                            igv_rate = ?,
@@ -368,7 +385,8 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
 
         jdbcClient.sql(sql)
                 .params(issueDate, priceList, customerId, customerDocType, customerDocNumber, customerName,
-                        customerAddress, taxStatus, taxReason, igvRate, igvIncluded, creditDays, dueDate,
+                        customerAddress, customerUbigeo, customerDepartment, customerProvince, customerDistrict,
+                        taxStatus, taxReason, igvRate, igvIncluded, creditDays, dueDate,
                         subtotal, discountTotal, igvAmount, total, giftCostTotal, notes,
                         editedBy, editReason, saleId)
                 .update();

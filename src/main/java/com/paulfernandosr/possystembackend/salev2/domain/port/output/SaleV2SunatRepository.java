@@ -43,6 +43,10 @@ public interface SaleV2SunatRepository {
         private String customerDocNumber;
         private String customerName;
         private String customerAddress;
+        private String customerUbigeo;
+        private String customerDepartment;
+        private String customerProvince;
+        private String customerDistrict;
         private String taxStatus;
         private BigDecimal subtotal;
         private BigDecimal discountTotal;
