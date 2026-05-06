@@ -30,6 +30,10 @@ public class CreateProformaV2Request {
     private String customerDocNumber;
     private String customerName;
     private String customerAddress;
+    private String customerUbigeo;
+    private String customerDepartment;
+    private String customerProvince;
+    private String customerDistrict;
 
     private PaymentType paymentType; // CONTADO | CREDITO (default CONTADO)
     private Integer creditDays;

@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.proformav2.application;
 
+import com.paulfernandosr.possystembackend.proformav2.domain.CustomerLocationSnapshot;
 import com.paulfernandosr.possystembackend.proformav2.domain.Proforma;
 import com.paulfernandosr.possystembackend.proformav2.domain.ProformaItem;
 import com.paulfernandosr.possystembackend.proformav2.domain.exception.InvalidProformaV2Exception;
@@ -22,6 +23,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -66,6 +68,21 @@ public class UpdateProformaV2Service implements UpdateProformaV2UseCase {
 
         CalculatedItems calculated = buildItems(request.getItems(), priceList, taxStatus, igvRate, igvIncluded);
 
+        Long customerId = request.getCustomerId() != null ? request.getCustomerId() : locked.getCustomerId();
+        String customerDocType = request.getCustomerDocType() != null ? request.getCustomerDocType() : locked.getCustomerDocType();
+        String customerDocNumber = request.getCustomerDocNumber() != null ? request.getCustomerDocNumber() : locked.getCustomerDocNumber();
+        String customerName = request.getCustomerName() != null ? request.getCustomerName() : locked.getCustomerName();
+        String customerAddress = request.getCustomerAddress() != null ? request.getCustomerAddress() : locked.getCustomerAddress();
+
+        CustomerLocationSnapshot customerLocation = resolveCustomerLocation(
+                request,
+                locked,
+                customerId,
+                customerDocType,
+                customerDocNumber,
+                customerAddress
+        );
+
         Proforma toUpdate = Proforma.builder()
                 .id(locked.getId())
                 .stationId(locked.getStationId())
@@ -81,11 +98,15 @@ public class UpdateProformaV2Service implements UpdateProformaV2UseCase {
                 .igvIncluded(igvIncluded)
                 .igvAmount(money2(calculated.igvAmount()))
 
-                .customerId(request.getCustomerId() != null ? request.getCustomerId() : locked.getCustomerId())
-                .customerDocType(request.getCustomerDocType() != null ? request.getCustomerDocType() : locked.getCustomerDocType())
-                .customerDocNumber(request.getCustomerDocNumber() != null ? request.getCustomerDocNumber() : locked.getCustomerDocNumber())
-                .customerName(request.getCustomerName() != null ? request.getCustomerName() : locked.getCustomerName())
-                .customerAddress(request.getCustomerAddress() != null ? request.getCustomerAddress() : locked.getCustomerAddress())
+                .customerId(customerId)
+                .customerDocType(customerDocType)
+                .customerDocNumber(customerDocNumber)
+                .customerName(customerName)
+                .customerAddress(customerAddress)
+                .customerUbigeo(customerLocation.getUbigeo())
+                .customerDepartment(customerLocation.getDepartment())
+                .customerProvince(customerLocation.getProvince())
+                .customerDistrict(customerLocation.getDistrict())
 
                 .paymentType(paymentType)
                 .creditDays(creditDays)
@@ -111,6 +132,78 @@ public class UpdateProformaV2Service implements UpdateProformaV2UseCase {
         List<ProformaItem> updatedItems = proformaItemRepository.findByProformaId(proformaId);
 
         return ProformaMapper.toResponse(updated, updatedItems);
+    }
+
+    private CustomerLocationSnapshot resolveCustomerLocation(
+            UpdateProformaV2Request request,
+            Proforma locked,
+            Long customerId,
+            String customerDocType,
+            String customerDocNumber,
+            String customerAddress
+    ) {
+        CustomerLocationSnapshot fromDb = proformaRepository.resolveCustomerLocation(
+                        customerId,
+                        customerDocType,
+                        customerDocNumber,
+                        customerAddress
+                )
+                .orElseGet(CustomerLocationSnapshot::new);
+
+        CustomerLocationSnapshot fallback = shouldKeepLockedCustomerLocation(request, locked, customerId, customerDocType, customerDocNumber, customerAddress)
+                ? CustomerLocationSnapshot.builder()
+                        .ubigeo(locked.getCustomerUbigeo())
+                        .department(locked.getCustomerDepartment())
+                        .province(locked.getCustomerProvince())
+                        .district(locked.getCustomerDistrict())
+                        .build()
+                : new CustomerLocationSnapshot();
+
+        return CustomerLocationSnapshot.builder()
+                .ubigeo(firstText(request.getCustomerUbigeo(), fromDb.getUbigeo(), fallback.getUbigeo()))
+                .department(firstText(request.getCustomerDepartment(), fromDb.getDepartment(), fallback.getDepartment()))
+                .province(firstText(request.getCustomerProvince(), fromDb.getProvince(), fallback.getProvince()))
+                .district(firstText(request.getCustomerDistrict(), fromDb.getDistrict(), fallback.getDistrict()))
+                .build();
+    }
+
+    private boolean shouldKeepLockedCustomerLocation(
+            UpdateProformaV2Request request,
+            Proforma locked,
+            Long customerId,
+            String customerDocType,
+            String customerDocNumber,
+            String customerAddress
+    ) {
+        boolean requestTouchesCustomerLocation = request.getCustomerUbigeo() != null
+                || request.getCustomerDepartment() != null
+                || request.getCustomerProvince() != null
+                || request.getCustomerDistrict() != null;
+
+        if (requestTouchesCustomerLocation) {
+            return false;
+        }
+
+        return Objects.equals(customerId, locked.getCustomerId())
+                && Objects.equals(normalizeNullable(customerDocType), normalizeNullable(locked.getCustomerDocType()))
+                && Objects.equals(normalizeNullable(customerDocNumber), normalizeNullable(locked.getCustomerDocNumber()))
+                && Objects.equals(normalizeNullable(customerAddress), normalizeNullable(locked.getCustomerAddress()));
+    }
+
+    private String firstText(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        return null;
+    }
+
+    private String normalizeNullable(String value) {
+        return value == null ? null : value.trim();
     }
 
     private void validateBasic(Long proformaId, UpdateProformaV2Request request) {

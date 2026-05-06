@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.proformav2.application;
 
+import com.paulfernandosr.possystembackend.proformav2.domain.CustomerLocationSnapshot;
 import com.paulfernandosr.possystembackend.proformav2.domain.Proforma;
 import com.paulfernandosr.possystembackend.proformav2.domain.ProformaItem;
 import com.paulfernandosr.possystembackend.proformav2.domain.exception.InvalidProformaV2Exception;
@@ -214,6 +215,8 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
                 ? LocalDate.parse(request.getDueDate())
                 : null;
 
+        CustomerLocationSnapshot customerLocation = resolveCustomerLocation(request);
+
         Proforma proforma = Proforma.builder()
                 .stationId(request.getStationId())
                 .createdBy(request.getCreatedBy())
@@ -232,6 +235,10 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
                 .customerDocNumber(request.getCustomerDocNumber())
                 .customerName(request.getCustomerName())
                 .customerAddress(request.getCustomerAddress())
+                .customerUbigeo(customerLocation.getUbigeo())
+                .customerDepartment(customerLocation.getDepartment())
+                .customerProvince(customerLocation.getProvince())
+                .customerDistrict(customerLocation.getDistrict())
                 .paymentType(paymentType)
                 .creditDays(creditDays)
                 .dueDate(dueDate)
@@ -252,6 +259,33 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
         proformaItemRepository.batchCreate(items);
 
         return ProformaMapper.toResponse(created, items);
+    }
+
+    private CustomerLocationSnapshot resolveCustomerLocation(CreateProformaV2Request request) {
+        CustomerLocationSnapshot fromDb = proformaRepository.resolveCustomerLocation(
+                        request.getCustomerId(),
+                        request.getCustomerDocType(),
+                        request.getCustomerDocNumber(),
+                        request.getCustomerAddress()
+                )
+                .orElseGet(CustomerLocationSnapshot::new);
+
+        return CustomerLocationSnapshot.builder()
+                .ubigeo(firstText(request.getCustomerUbigeo(), fromDb.getUbigeo()))
+                .department(firstText(request.getCustomerDepartment(), fromDb.getDepartment()))
+                .province(firstText(request.getCustomerProvince(), fromDb.getProvince()))
+                .district(firstText(request.getCustomerDistrict(), fromDb.getDistrict()))
+                .build();
+    }
+
+    private String firstText(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return primary.trim();
+        }
+        if (fallback != null && !fallback.isBlank()) {
+            return fallback.trim();
+        }
+        return null;
     }
 
     private String resolveItemDescription(String requestedDescription, ProductSnapshot product) {

@@ -1,10 +1,12 @@
 package com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.output;
 
+import com.paulfernandosr.possystembackend.proformav2.domain.CustomerLocationSnapshot;
 import com.paulfernandosr.possystembackend.proformav2.domain.Proforma;
 import com.paulfernandosr.possystembackend.proformav2.domain.model.ProformaStatus;
 import com.paulfernandosr.possystembackend.proformav2.domain.port.output.ProformaRepository;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.output.mapper.ProformaRowMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -15,6 +17,70 @@ import java.util.Optional;
 public class PostgresProformaRepository implements ProformaRepository {
 
     private final JdbcClient jdbcClient;
+
+    private static final RowMapper<CustomerLocationSnapshot> CUSTOMER_LOCATION_ROW_MAPPER = (rs, rowNum) ->
+            CustomerLocationSnapshot.builder()
+                    .ubigeo(rs.getString("ubigeo"))
+                    .department(rs.getString("department"))
+                    .province(rs.getString("province"))
+                    .district(rs.getString("district"))
+                    .build();
+
+    private static final String CUSTOMER_LOCATION_LATERAL_SQL = """
+            LEFT JOIN LATERAL (
+                SELECT
+                    COALESCE(ca.ubigeo, cu.ubigeo)         AS ubigeo,
+                    COALESCE(ca.department, cu.department) AS department,
+                    COALESCE(ca.province, cu.province)     AS province,
+                    COALESCE(ca.district, cu.district)     AS district
+                  FROM customers cu
+                  LEFT JOIN LATERAL (
+                      SELECT
+                          ca.ubigeo,
+                          ca.department,
+                          ca.province,
+                          ca.district
+                        FROM customer_address ca
+                       WHERE ca.customer_id = cu.id
+                         AND ca.enabled = TRUE
+                       ORDER BY
+                         CASE
+                           WHEN p.customer_address IS NOT NULL
+                            AND BTRIM(p.customer_address) <> ''
+                            AND UPPER(BTRIM(ca.address)) = UPPER(BTRIM(p.customer_address))
+                           THEN 0 ELSE 1
+                         END,
+                         CASE WHEN ca.fiscal = TRUE THEN 0 ELSE 1 END,
+                         ca.position,
+                         ca.id
+                       LIMIT 1
+                  ) ca ON TRUE
+                 WHERE (p.customer_id IS NOT NULL AND cu.id = p.customer_id)
+                    OR (
+                        p.customer_id IS NULL
+                        AND p.customer_doc_type IS NOT NULL
+                        AND p.customer_doc_number IS NOT NULL
+                        AND cu.document_type = p.customer_doc_type
+                        AND cu.document_number = p.customer_doc_number
+                    )
+                 ORDER BY CASE WHEN p.customer_id IS NOT NULL AND cu.id = p.customer_id THEN 0 ELSE 1 END
+                 LIMIT 1
+            ) c ON TRUE
+            """;
+
+    private static final String SELECT_PROFORMA_WITH_RESOLVED_CUSTOMER_LOCATION = """
+            SELECT
+              p.*,
+              u.username   AS cashier_username,
+              u.first_name AS cashier_first_name,
+              u.last_name  AS cashier_last_name,
+              COALESCE(p.customer_ubigeo, c.ubigeo)         AS customer_ubigeo_resolved,
+              COALESCE(p.customer_department, c.department) AS customer_department_resolved,
+              COALESCE(p.customer_province, c.province)     AS customer_province_resolved,
+              COALESCE(p.customer_district, c.district)     AS customer_district_resolved
+            FROM proforma p
+            LEFT JOIN users u ON u.id = p.created_by
+            """ + CUSTOMER_LOCATION_LATERAL_SQL;
 
     @Override
     public Proforma create(Proforma proforma) {
@@ -28,6 +94,7 @@ public class PostgresProformaRepository implements ProformaRepository {
           tax_status, igv_rate, igv_included, igv_amount,
 
           customer_id, customer_doc_type, customer_doc_number, customer_name, customer_address,
+          customer_ubigeo, customer_department, customer_province, customer_district,
           payment_type, credit_days, due_date,
           notes,
 
@@ -36,18 +103,19 @@ public class PostgresProformaRepository implements ProformaRepository {
 
           created_at, updated_at
         ) VALUES (
-          ?, ?,            -- 1-2
-          ?, ?, ?,         -- 3-5
-          ?, ?,            -- 6-7
+          ?, ?,
+          ?, ?, ?,
+          ?, ?,
 
-          ?, ?, ?, ?,      -- 8-11
+          ?, ?, ?, ?,
 
-          ?, ?, ?, ?, ?,   -- 12-16
-          ?, ?, ?,         -- 17-19
-          ?,               -- 20
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?,
+          ?, ?, ?,
+          ?,
 
-          ?, ?, ?,         -- 21-23
-          ?,               -- 24
+          ?, ?, ?,
+          ?,
 
           NOW(), NOW()
         )
@@ -76,6 +144,11 @@ public class PostgresProformaRepository implements ProformaRepository {
                         proforma.getCustomerDocNumber(),
                         proforma.getCustomerName(),
                         proforma.getCustomerAddress(),
+                        proforma.getCustomerUbigeo(),
+                        proforma.getCustomerDepartment(),
+                        proforma.getCustomerProvince(),
+                        proforma.getCustomerDistrict(),
+
                         proforma.getPaymentType() != null ? proforma.getPaymentType().name() : null,
                         proforma.getCreditDays(),
                         proforma.getDueDate() != null ? java.sql.Date.valueOf(proforma.getDueDate()) : null,
@@ -93,38 +166,115 @@ public class PostgresProformaRepository implements ProformaRepository {
     }
 
     @Override
-    public Optional<Proforma> lockById(Long proformaId) {
-        // ✅ Trae también datos del cajero
+    public Optional<CustomerLocationSnapshot> resolveCustomerLocation(
+            Long customerId,
+            String customerDocType,
+            String customerDocNumber,
+            String customerAddress
+    ) {
+        if (customerId != null) {
+            Optional<CustomerLocationSnapshot> byId = findCustomerLocationById(customerId, customerAddress);
+            if (byId.isPresent()) {
+                return byId;
+            }
+        }
+
+        if (!hasText(customerDocType) || !hasText(customerDocNumber)) {
+            return Optional.empty();
+        }
+
+        return findCustomerLocationByDocument(customerDocType, customerDocNumber, customerAddress);
+    }
+
+    private Optional<CustomerLocationSnapshot> findCustomerLocationById(Long customerId, String customerAddress) {
         String sql = """
             SELECT
-              p.*,
-              u.username   AS cashier_username,
-              u.first_name AS cashier_first_name,
-              u.last_name  AS cashier_last_name,
-              c.ubigeo     AS customer_ubigeo,
-              c.department AS customer_department,
-              c.province   AS customer_province,
-              c.district   AS customer_district
-            FROM proforma p
-            LEFT JOIN users u ON u.id = p.created_by
-            LEFT JOIN LATERAL (
-                SELECT
-                    cu.ubigeo,
-                    cu.department,
-                    cu.province,
-                    cu.district
-                  FROM customers cu
-                 WHERE (p.customer_id IS NOT NULL AND cu.id = p.customer_id)
-                    OR (
-                        p.customer_id IS NULL
-                        AND p.customer_doc_type IS NOT NULL
-                        AND p.customer_doc_number IS NOT NULL
-                        AND cu.document_type = p.customer_doc_type
-                        AND cu.document_number = p.customer_doc_number
-                    )
-                 ORDER BY CASE WHEN p.customer_id IS NOT NULL AND cu.id = p.customer_id THEN 0 ELSE 1 END
-                 LIMIT 1
-            ) c ON TRUE
+                COALESCE(ca.ubigeo, c.ubigeo)         AS ubigeo,
+                COALESCE(ca.department, c.department) AS department,
+                COALESCE(ca.province, c.province)     AS province,
+                COALESCE(ca.district, c.district)     AS district
+              FROM customers c
+              LEFT JOIN LATERAL (
+                  SELECT
+                      ca.ubigeo,
+                      ca.department,
+                      ca.province,
+                      ca.district
+                    FROM customer_address ca
+                   WHERE ca.customer_id = c.id
+                     AND ca.enabled = TRUE
+                   ORDER BY
+                     CASE
+                       WHEN ? <> ''
+                        AND UPPER(BTRIM(ca.address)) = UPPER(BTRIM(?))
+                       THEN 0 ELSE 1
+                     END,
+                     CASE WHEN ca.fiscal = TRUE THEN 0 ELSE 1 END,
+                     ca.position,
+                     ca.id
+                   LIMIT 1
+              ) ca ON TRUE
+             WHERE c.id = ?
+             LIMIT 1
+            """;
+
+        String normalizedAddress = normalize(customerAddress);
+
+        return jdbcClient.sql(sql)
+                .params(normalizedAddress, normalizedAddress, customerId)
+                .query(CUSTOMER_LOCATION_ROW_MAPPER)
+                .optional();
+    }
+
+    private Optional<CustomerLocationSnapshot> findCustomerLocationByDocument(
+            String customerDocType,
+            String customerDocNumber,
+            String customerAddress
+    ) {
+        String sql = """
+            SELECT
+                COALESCE(ca.ubigeo, c.ubigeo)         AS ubigeo,
+                COALESCE(ca.department, c.department) AS department,
+                COALESCE(ca.province, c.province)     AS province,
+                COALESCE(ca.district, c.district)     AS district
+              FROM customers c
+              LEFT JOIN LATERAL (
+                  SELECT
+                      ca.ubigeo,
+                      ca.department,
+                      ca.province,
+                      ca.district
+                    FROM customer_address ca
+                   WHERE ca.customer_id = c.id
+                     AND ca.enabled = TRUE
+                   ORDER BY
+                     CASE
+                       WHEN ? <> ''
+                        AND UPPER(BTRIM(ca.address)) = UPPER(BTRIM(?))
+                       THEN 0 ELSE 1
+                     END,
+                     CASE WHEN ca.fiscal = TRUE THEN 0 ELSE 1 END,
+                     ca.position,
+                     ca.id
+                   LIMIT 1
+              ) ca ON TRUE
+             WHERE c.document_type = ?
+               AND c.document_number = ?
+             ORDER BY c.id DESC
+             LIMIT 1
+            """;
+
+        String normalizedAddress = normalize(customerAddress);
+
+        return jdbcClient.sql(sql)
+                .params(normalizedAddress, normalizedAddress, customerDocType, customerDocNumber)
+                .query(CUSTOMER_LOCATION_ROW_MAPPER)
+                .optional();
+    }
+
+    @Override
+    public Optional<Proforma> lockById(Long proformaId) {
+        String sql = SELECT_PROFORMA_WITH_RESOLVED_CUSTOMER_LOCATION + """
             WHERE p.id = ?
             FOR UPDATE OF p
             """;
@@ -135,42 +285,9 @@ public class PostgresProformaRepository implements ProformaRepository {
                 .optional();
     }
 
-
     @Override
     public Optional<Proforma> lockByNumber(Long number) {
-        // IMPORTANTE:
-        // Este método bloquea por el NÚMERO VISIBLE de la proforma, no por el ID interno.
-        // Como el negocio trabaja con una sola serie de proforma, number identifica la proforma operacional.
-        String sql = """
-            SELECT
-              p.*,
-              u.username   AS cashier_username,
-              u.first_name AS cashier_first_name,
-              u.last_name  AS cashier_last_name,
-              c.ubigeo     AS customer_ubigeo,
-              c.department AS customer_department,
-              c.province   AS customer_province,
-              c.district   AS customer_district
-            FROM proforma p
-            LEFT JOIN users u ON u.id = p.created_by
-            LEFT JOIN LATERAL (
-                SELECT
-                    cu.ubigeo,
-                    cu.department,
-                    cu.province,
-                    cu.district
-                  FROM customers cu
-                 WHERE (p.customer_id IS NOT NULL AND cu.id = p.customer_id)
-                    OR (
-                        p.customer_id IS NULL
-                        AND p.customer_doc_type IS NOT NULL
-                        AND p.customer_doc_number IS NOT NULL
-                        AND cu.document_type = p.customer_doc_type
-                        AND cu.document_number = p.customer_doc_number
-                    )
-                 ORDER BY CASE WHEN p.customer_id IS NOT NULL AND cu.id = p.customer_id THEN 0 ELSE 1 END
-                 LIMIT 1
-            ) c ON TRUE
+        String sql = SELECT_PROFORMA_WITH_RESOLVED_CUSTOMER_LOCATION + """
             WHERE p.number = ?
             ORDER BY p.id DESC
             LIMIT 1
@@ -185,37 +302,7 @@ public class PostgresProformaRepository implements ProformaRepository {
 
     @Override
     public Optional<Proforma> findById(Long proformaId) {
-        // ✅ Trae también datos del cajero
-        String sql = """
-            SELECT
-              p.*,
-              u.username   AS cashier_username,
-              u.first_name AS cashier_first_name,
-              u.last_name  AS cashier_last_name,
-              c.ubigeo     AS customer_ubigeo,
-              c.department AS customer_department,
-              c.province   AS customer_province,
-              c.district   AS customer_district
-            FROM proforma p
-            LEFT JOIN users u ON u.id = p.created_by
-            LEFT JOIN LATERAL (
-                SELECT
-                    cu.ubigeo,
-                    cu.department,
-                    cu.province,
-                    cu.district
-                  FROM customers cu
-                 WHERE (p.customer_id IS NOT NULL AND cu.id = p.customer_id)
-                    OR (
-                        p.customer_id IS NULL
-                        AND p.customer_doc_type IS NOT NULL
-                        AND p.customer_doc_number IS NOT NULL
-                        AND cu.document_type = p.customer_doc_type
-                        AND cu.document_number = p.customer_doc_number
-                    )
-                 ORDER BY CASE WHEN p.customer_id IS NOT NULL AND cu.id = p.customer_id THEN 0 ELSE 1 END
-                 LIMIT 1
-            ) c ON TRUE
+        String sql = SELECT_PROFORMA_WITH_RESOLVED_CUSTOMER_LOCATION + """
             WHERE p.id = ?
             """;
 
@@ -227,36 +314,7 @@ public class PostgresProformaRepository implements ProformaRepository {
 
     @Override
     public Optional<Proforma> findByNumber(Long number) {
-        String sql = """
-            SELECT
-              p.*,
-              u.username   AS cashier_username,
-              u.first_name AS cashier_first_name,
-              u.last_name  AS cashier_last_name,
-              c.ubigeo     AS customer_ubigeo,
-              c.department AS customer_department,
-              c.province   AS customer_province,
-              c.district   AS customer_district
-            FROM proforma p
-            LEFT JOIN users u ON u.id = p.created_by
-            LEFT JOIN LATERAL (
-                SELECT
-                    cu.ubigeo,
-                    cu.department,
-                    cu.province,
-                    cu.district
-                  FROM customers cu
-                 WHERE (p.customer_id IS NOT NULL AND cu.id = p.customer_id)
-                    OR (
-                        p.customer_id IS NULL
-                        AND p.customer_doc_type IS NOT NULL
-                        AND p.customer_doc_number IS NOT NULL
-                        AND cu.document_type = p.customer_doc_type
-                        AND cu.document_number = p.customer_doc_number
-                    )
-                 ORDER BY CASE WHEN p.customer_id IS NOT NULL AND cu.id = p.customer_id THEN 0 ELSE 1 END
-                 LIMIT 1
-            ) c ON TRUE
+        String sql = SELECT_PROFORMA_WITH_RESOLVED_CUSTOMER_LOCATION + """
             WHERE p.number = ?
             ORDER BY p.id DESC
             LIMIT 1
@@ -313,6 +371,10 @@ public class PostgresProformaRepository implements ProformaRepository {
                    customer_doc_number = ?,
                    customer_name = ?,
                    customer_address = ?,
+                   customer_ubigeo = ?,
+                   customer_department = ?,
+                   customer_province = ?,
+                   customer_district = ?,
                    payment_type = ?,
                    credit_days = ?,
                    due_date = ?,
@@ -339,6 +401,10 @@ public class PostgresProformaRepository implements ProformaRepository {
                         proforma.getCustomerDocNumber(),
                         proforma.getCustomerName(),
                         proforma.getCustomerAddress(),
+                        proforma.getCustomerUbigeo(),
+                        proforma.getCustomerDepartment(),
+                        proforma.getCustomerProvince(),
+                        proforma.getCustomerDistrict(),
 
                         proforma.getPaymentType() != null ? proforma.getPaymentType().name() : null,
                         proforma.getCreditDays(),
@@ -386,5 +452,13 @@ public class PostgresProformaRepository implements ProformaRepository {
                         ProformaStatus.PENDIENTE.name()
                 )
                 .update();
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }
