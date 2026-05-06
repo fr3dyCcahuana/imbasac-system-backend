@@ -43,4 +43,32 @@ public interface ProductStockMovementRepository {
                       BigDecimal totalCost,
                       BigDecimal balanceQty,
                       BigDecimal balanceCost);
+
+
+    /**
+     * Movimiento de salida para productos internos/no facturables
+     * consumidos al convertir una proforma a venta.
+     */
+    void createOutProformaInternal(Long productId,
+                                   BigDecimal quantityOut,
+                                   Long proformaItemId,
+                                   BigDecimal unitCost,
+                                   BigDecimal totalCost,
+                                   BigDecimal balanceQty,
+                                   BigDecimal balanceCost);
+
+    /**
+     * Movimiento de reversa para devolver stock interno/no facturable
+     * cuando se anula una venta creada desde proforma.
+     */
+    void createInProformaInternalReturn(Long productId,
+                                        BigDecimal quantityIn,
+                                        Long proformaItemId,
+                                        BigDecimal unitCost,
+                                        BigDecimal totalCost,
+                                        BigDecimal balanceQty,
+                                        BigDecimal balanceCost);
+
+    boolean existsOutProformaInternal(Long proformaItemId);
+
 }

@@ -31,13 +31,23 @@ public class PostgresProformaItemRepository implements ProformaItemRepository {
             """;
 
         for (ProformaItem it : items) {
+            String descriptionToPersist = normalizeDescriptionForInsert(it.getDescription(), it.getSku());
+
+            System.out.println("[PROFORMA][DB_INSERT_ITEM] proformaId=" + it.getProformaId()
+                    + ", line=" + it.getLineNumber()
+                    + ", productId=" + it.getProductId()
+                    + ", sku=" + it.getSku()
+                    + ", facturableSunat=" + it.getFacturableSunat()
+                    + ", affectsStock=" + it.getAffectsStock()
+                    + ", description=" + descriptionToPersist);
+
             jdbcClient.sql(sql)
                     .params(
                             it.getProformaId(),
                             it.getLineNumber(),
                             it.getProductId(),
                             it.getSku(),
-                            it.getDescription(),
+                            descriptionToPersist,
                             it.getPresentation(),
                             it.getFactor(),
                             it.getQuantity(),
@@ -77,6 +87,14 @@ public class PostgresProformaItemRepository implements ProformaItemRepository {
         jdbcClient.sql(sql)
                 .param(proformaId)
                 .update();
+    }
+
+    private String normalizeDescriptionForInsert(String value, String sku) {
+        String normalized = value == null ? "" : value.trim().replaceAll("\\s+", " ");
+        if (normalized.isBlank()) {
+            normalized = sku == null || sku.isBlank() ? "ITEM" : sku.trim();
+        }
+        return normalized.length() > 250 ? normalized.substring(0, 250) : normalized;
     }
 
 }

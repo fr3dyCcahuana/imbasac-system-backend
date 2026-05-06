@@ -287,9 +287,7 @@ public class UpdateProformaV2Service implements UpdateProformaV2UseCase {
                     .lineNumber(line)
                     .productId(product.getId())
                     .sku(product.getSku())
-                    .description((reqItem.getDescription() != null && !reqItem.getDescription().isBlank())
-                            ? reqItem.getDescription()
-                            : product.getName())
+                    .description(resolveItemDescription(reqItem.getDescription(), product, line))
                     .presentation((reqItem.getPresentation() != null && !reqItem.getPresentation().isBlank())
                             ? reqItem.getPresentation()
                             : product.getPresentation())
@@ -328,6 +326,32 @@ public class UpdateProformaV2Service implements UpdateProformaV2UseCase {
         return new CalculatedItems(items, subtotalBase, discountTotal, igvAmount, total);
     }
 
+    private String resolveItemDescription(String requestedDescription, ProductSnapshot product, int line) {
+        String fallbackName = normalizeDescription(product.getName());
+
+        if (!Boolean.TRUE.equals(product.getFacturableSunat())) {
+            String customDescription = normalizeDescription(requestedDescription);
+
+            if (!customDescription.isBlank()) {
+                return limit250(customDescription);
+            }
+
+            if (!fallbackName.isBlank()) {
+                return limit250(fallbackName);
+            }
+
+            String sku = normalizeDescription(product.getSku());
+            return limit250(!sku.isBlank() ? sku : "ITEM INTERNO");
+        }
+
+        return limit250(fallbackName);
+    }
+
+    private String limit250(String value) {
+        if (value == null) return "";
+        return value.length() > 250 ? value.substring(0, 250) : value;
+    }
+
     private void validateSerializableProduct(ProductSnapshot product) {
         if (!Boolean.TRUE.equals(product.getManageBySerial())) {
             return;
@@ -346,11 +370,16 @@ public class UpdateProformaV2Service implements UpdateProformaV2UseCase {
         if (!Boolean.TRUE.equals(product.getManageBySerial())) {
             return;
         }
+
         if (quantity.stripTrailingZeros().scale() > 0) {
             throw new InvalidProformaV2Exception(
                     "Cantidad debe ser entera para productos serializados (MOTOR/MOTOCICLETAS). SKU=" + product.getSku()
             );
         }
+    }
+
+    private String normalizeDescription(String value) {
+        return value == null ? "" : value.trim().replaceAll("\\s+", " " );
     }
 
     private BigDecimal resolveUnitPrice(

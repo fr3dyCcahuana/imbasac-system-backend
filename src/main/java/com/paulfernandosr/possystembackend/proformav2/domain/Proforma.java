@@ -32,6 +32,11 @@ public class Proforma {
     private String customerName;
     private String customerAddress;
 
+    private String customerUbigeo;
+    private String customerDepartment;
+    private String customerProvince;
+    private String customerDistrict;
+
     private String notes;
 
     private PaymentType paymentType;

@@ -1,5 +1,7 @@
 package com.paulfernandosr.possystembackend.salev2.application;
 
+import com.paulfernandosr.possystembackend.proformav2.domain.ProformaItem;
+import com.paulfernandosr.possystembackend.proformav2.domain.port.output.ProformaItemRepository;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
 import com.paulfernandosr.possystembackend.salev2.domain.model.OpenSaleSession;
 import com.paulfernandosr.possystembackend.salev2.domain.model.StockMovementBalance;
@@ -31,6 +33,7 @@ public class VoidSaleV2Service implements VoidSaleV2UseCase {
     private final SaleSessionAccumulatorRepository saleSessionAccumulatorRepository;
     private final UserRepository userRepository;
     private final SaleSessionControlRepository saleSessionControlRepository;
+    private final ProformaItemRepository proformaItemRepository;
 
     @Override
     @Transactional
@@ -86,6 +89,8 @@ public class VoidSaleV2Service implements VoidSaleV2UseCase {
             }
         }
 
+        reverseInternalProformaStockIfNeeded(sale);
+
         // 4) Reversa de cobro/credito
         if ("CONTADO".equalsIgnoreCase(sale.getPaymentType())) {
             salePaymentRepository.deleteBySaleId(saleId);
@@ -137,6 +142,53 @@ public class VoidSaleV2Service implements VoidSaleV2UseCase {
                 .status("ANULADA")
                 .build();
     }
+    private void reverseInternalProformaStockIfNeeded(SaleV2Repository.LockedSale sale) {
+        if (sale == null || sale.getSourceProformaId() == null) {
+            return;
+        }
+
+        List<ProformaItem> proformaItems = proformaItemRepository.findByProformaId(sale.getSourceProformaId());
+        if (proformaItems == null || proformaItems.isEmpty()) {
+            return;
+        }
+
+        for (ProformaItem it : proformaItems) {
+            if (Boolean.TRUE.equals(it.getFacturableSunat())) {
+                continue;
+            }
+
+            if (!Boolean.TRUE.equals(it.getAffectsStock())) {
+                continue;
+            }
+
+            BigDecimal qty = it.getQuantity() == null ? BigDecimal.ZERO : it.getQuantity();
+            if (qty.signum() <= 0) {
+                continue;
+            }
+
+            // Evita devolver stock de ventas antiguas creadas antes de este cambio,
+            // o de proformas internas que no generaron salida real.
+            if (!productStockMovementRepository.existsOutProformaInternal(it.getId())) {
+                continue;
+            }
+
+            StockMovementBalance balance = productStockRepository.increaseOnHand(it.getProductId(), qty);
+
+            BigDecimal unitCost = BigDecimal.ZERO;
+            BigDecimal totalCost = BigDecimal.ZERO;
+
+            productStockMovementRepository.createInProformaInternalReturn(
+                    it.getProductId(),
+                    qty,
+                    it.getId(),
+                    unitCost,
+                    totalCost,
+                    balance.getQuantityOnHand(),
+                    nz(balance.getAverageCost(), unitCost)
+            );
+        }
+    }
+
     private static BigDecimal nz(BigDecimal value, BigDecimal fallback) {
         return value == null ? fallback : value;
     }

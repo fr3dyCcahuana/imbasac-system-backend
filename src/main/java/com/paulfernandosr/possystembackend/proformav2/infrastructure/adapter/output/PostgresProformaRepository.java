@@ -100,9 +100,31 @@ public class PostgresProformaRepository implements ProformaRepository {
               p.*,
               u.username   AS cashier_username,
               u.first_name AS cashier_first_name,
-              u.last_name  AS cashier_last_name
+              u.last_name  AS cashier_last_name,
+              c.ubigeo     AS customer_ubigeo,
+              c.department AS customer_department,
+              c.province   AS customer_province,
+              c.district   AS customer_district
             FROM proforma p
             LEFT JOIN users u ON u.id = p.created_by
+            LEFT JOIN LATERAL (
+                SELECT
+                    cu.ubigeo,
+                    cu.department,
+                    cu.province,
+                    cu.district
+                  FROM customers cu
+                 WHERE (p.customer_id IS NOT NULL AND cu.id = p.customer_id)
+                    OR (
+                        p.customer_id IS NULL
+                        AND p.customer_doc_type IS NOT NULL
+                        AND p.customer_doc_number IS NOT NULL
+                        AND cu.document_type = p.customer_doc_type
+                        AND cu.document_number = p.customer_doc_number
+                    )
+                 ORDER BY CASE WHEN p.customer_id IS NOT NULL AND cu.id = p.customer_id THEN 0 ELSE 1 END
+                 LIMIT 1
+            ) c ON TRUE
             WHERE p.id = ?
             FOR UPDATE OF p
             """;
@@ -124,9 +146,31 @@ public class PostgresProformaRepository implements ProformaRepository {
               p.*,
               u.username   AS cashier_username,
               u.first_name AS cashier_first_name,
-              u.last_name  AS cashier_last_name
+              u.last_name  AS cashier_last_name,
+              c.ubigeo     AS customer_ubigeo,
+              c.department AS customer_department,
+              c.province   AS customer_province,
+              c.district   AS customer_district
             FROM proforma p
             LEFT JOIN users u ON u.id = p.created_by
+            LEFT JOIN LATERAL (
+                SELECT
+                    cu.ubigeo,
+                    cu.department,
+                    cu.province,
+                    cu.district
+                  FROM customers cu
+                 WHERE (p.customer_id IS NOT NULL AND cu.id = p.customer_id)
+                    OR (
+                        p.customer_id IS NULL
+                        AND p.customer_doc_type IS NOT NULL
+                        AND p.customer_doc_number IS NOT NULL
+                        AND cu.document_type = p.customer_doc_type
+                        AND cu.document_number = p.customer_doc_number
+                    )
+                 ORDER BY CASE WHEN p.customer_id IS NOT NULL AND cu.id = p.customer_id THEN 0 ELSE 1 END
+                 LIMIT 1
+            ) c ON TRUE
             WHERE p.number = ?
             ORDER BY p.id DESC
             LIMIT 1
@@ -147,9 +191,31 @@ public class PostgresProformaRepository implements ProformaRepository {
               p.*,
               u.username   AS cashier_username,
               u.first_name AS cashier_first_name,
-              u.last_name  AS cashier_last_name
+              u.last_name  AS cashier_last_name,
+              c.ubigeo     AS customer_ubigeo,
+              c.department AS customer_department,
+              c.province   AS customer_province,
+              c.district   AS customer_district
             FROM proforma p
             LEFT JOIN users u ON u.id = p.created_by
+            LEFT JOIN LATERAL (
+                SELECT
+                    cu.ubigeo,
+                    cu.department,
+                    cu.province,
+                    cu.district
+                  FROM customers cu
+                 WHERE (p.customer_id IS NOT NULL AND cu.id = p.customer_id)
+                    OR (
+                        p.customer_id IS NULL
+                        AND p.customer_doc_type IS NOT NULL
+                        AND p.customer_doc_number IS NOT NULL
+                        AND cu.document_type = p.customer_doc_type
+                        AND cu.document_number = p.customer_doc_number
+                    )
+                 ORDER BY CASE WHEN p.customer_id IS NOT NULL AND cu.id = p.customer_id THEN 0 ELSE 1 END
+                 LIMIT 1
+            ) c ON TRUE
             WHERE p.id = ?
             """;
 
@@ -166,9 +232,31 @@ public class PostgresProformaRepository implements ProformaRepository {
               p.*,
               u.username   AS cashier_username,
               u.first_name AS cashier_first_name,
-              u.last_name  AS cashier_last_name
+              u.last_name  AS cashier_last_name,
+              c.ubigeo     AS customer_ubigeo,
+              c.department AS customer_department,
+              c.province   AS customer_province,
+              c.district   AS customer_district
             FROM proforma p
             LEFT JOIN users u ON u.id = p.created_by
+            LEFT JOIN LATERAL (
+                SELECT
+                    cu.ubigeo,
+                    cu.department,
+                    cu.province,
+                    cu.district
+                  FROM customers cu
+                 WHERE (p.customer_id IS NOT NULL AND cu.id = p.customer_id)
+                    OR (
+                        p.customer_id IS NULL
+                        AND p.customer_doc_type IS NOT NULL
+                        AND p.customer_doc_number IS NOT NULL
+                        AND cu.document_type = p.customer_doc_type
+                        AND cu.document_number = p.customer_doc_number
+                    )
+                 ORDER BY CASE WHEN p.customer_id IS NOT NULL AND cu.id = p.customer_id THEN 0 ELSE 1 END
+                 LIMIT 1
+            ) c ON TRUE
             WHERE p.number = ?
             ORDER BY p.id DESC
             LIMIT 1

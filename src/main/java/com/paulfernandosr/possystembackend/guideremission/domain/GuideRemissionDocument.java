@@ -43,9 +43,15 @@ public class GuideRemissionDocument {
     private String recipientDocumentNumber;
     private String recipientName;
     private String departureUbigeo;
+    private String departureDepartment;
+    private String departureProvince;
+    private String departureDistrict;
     private String departureAddress;
     private String departureEstablishmentCode;
     private String arrivalUbigeo;
+    private String arrivalDepartment;
+    private String arrivalProvince;
+    private String arrivalDistrict;
     private String arrivalAddress;
     private String arrivalEstablishmentCode;
     private BigDecimal totalWeight;

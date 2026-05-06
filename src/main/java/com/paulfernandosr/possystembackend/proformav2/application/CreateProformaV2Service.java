@@ -160,12 +160,20 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
             // Persistimos unitPrice y lineSubtotal con la MISMA semántica:
             // - si igvIncluded=true => unitPrice y lineSubtotal son "gross" (incluye IGV)
             // - si igvIncluded=false => unitPrice y lineSubtotal son "base"
+            String resolvedDescription = resolveItemDescription(reqItem.getDescription(), p);
+
+            System.out.println("[PROFORMA][ITEM_DESC] productId=" + p.getId()
+                    + ", sku=" + p.getSku()
+                    + ", productFacturableSunat=" + p.getFacturableSunat()
+                    + ", requestedDescription=" + reqItem.getDescription()
+                    + ", resolvedDescription=" + resolvedDescription);
+
             ProformaItem item = ProformaItem.builder()
                     .proformaId(null) // se setea luego
                     .lineNumber(line)
                     .productId(p.getId())
                     .sku(p.getSku())
-                    .description((reqItem.getDescription() != null && !reqItem.getDescription().isBlank()) ? reqItem.getDescription() : p.getName())
+                    .description(resolvedDescription)
                     .presentation((reqItem.getPresentation() != null && !reqItem.getPresentation().isBlank()) ? reqItem.getPresentation() : p.getPresentation())
                     .factor((reqItem.getFactor() != null && !reqItem.getFactor().isBlank()) ? new BigDecimal(reqItem.getFactor()) : p.getFactor())
                     .quantity(qty)
@@ -244,6 +252,36 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
         proformaItemRepository.batchCreate(items);
 
         return ProformaMapper.toResponse(created, items);
+    }
+
+    private String resolveItemDescription(String requestedDescription, ProductSnapshot product) {
+        String fallbackName = normalizeDescription(product.getName());
+
+        if (!Boolean.TRUE.equals(product.getFacturableSunat())) {
+            String customDescription = normalizeDescription(requestedDescription);
+
+            if (!customDescription.isBlank()) {
+                return limit250(customDescription);
+            }
+
+            if (!fallbackName.isBlank()) {
+                return limit250(fallbackName);
+            }
+
+            String sku = normalizeDescription(product.getSku());
+            return limit250(!sku.isBlank() ? sku : "ITEM INTERNO");
+        }
+
+        return limit250(fallbackName);
+    }
+
+    private String normalizeDescription(String value) {
+        return value == null ? "" : value.trim().replaceAll("\\s+", " ");
+    }
+
+    private String limit250(String value) {
+        if (value == null) return "";
+        return value.length() > 250 ? value.substring(0, 250) : value;
     }
 
     private void validateRequest(CreateProformaV2Request request) {

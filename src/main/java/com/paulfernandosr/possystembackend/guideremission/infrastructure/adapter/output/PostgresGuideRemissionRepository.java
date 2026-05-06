@@ -226,6 +226,7 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
         }
 
         GuideRemissionDocument document = documents.get(0);
+        enrichLocationNames(document);
         document.setRelatedDocuments(loadRelatedDocuments(document));
         document.setItems(loadItems(document.getId()));
         return Optional.of(document);
@@ -899,6 +900,370 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
         return null;
     }
 
+    private void enrichLocationNames(GuideRemissionDocument document) {
+        if (document == null) {
+            return;
+        }
+
+        UbigeoLocation departure = resolveUbigeoLocation(document.getDepartureUbigeo());
+        document.setDepartureDepartment(departure.department());
+        document.setDepartureProvince(departure.province());
+        document.setDepartureDistrict(departure.district());
+
+        UbigeoLocation arrival = resolveUbigeoLocation(document.getArrivalUbigeo());
+        document.setArrivalDepartment(arrival.department());
+        document.setArrivalProvince(arrival.province());
+        document.setArrivalDistrict(arrival.district());
+    }
+
+    private UbigeoLocation resolveUbigeoLocation(String ubigeo) {
+        if (!hasText(ubigeo)) {
+            return UbigeoLocation.empty();
+        }
+
+        String code = ubigeo.trim();
+        if (!code.matches("\\d{6}")) {
+            return UbigeoLocation.empty();
+        }
+
+        UbigeoLocation flatCatalogLocation = resolveFromFlatUbigeoCatalog(code);
+        if (flatCatalogLocation.hasFullData()) {
+            return flatCatalogLocation;
+        }
+
+        UbigeoLocation structuredCatalogLocation = resolveFromStructuredUbigeoCatalog(code);
+        if (structuredCatalogLocation.hasFullData()) {
+            return structuredCatalogLocation;
+        }
+
+        if (flatCatalogLocation.hasData()) {
+            return flatCatalogLocation.mergeWith(structuredCatalogLocation);
+        }
+
+        if (structuredCatalogLocation.hasData()) {
+            return structuredCatalogLocation;
+        }
+
+        return UbigeoLocation.empty();
+    }
+
+    private UbigeoLocation resolveFromFlatUbigeoCatalog(String code) {
+        List<String> tableNames = mergeDistinct(List.of(
+                "ubigeo",
+                "ubigeos",
+                "ubigeo_peru",
+                "peru_ubigeo",
+                "peru_ubigeos",
+                "catalog_ubigeo",
+                "catalog_ubigeos",
+                "sunat_ubigeo",
+                "sunat_ubigeos"
+        ), findTablesByKeywords(List.of("ubigeo")));
+
+        List<String> codeColumns = List.of("ubigeo", "codigo", "codigo_ubigeo", "code", "district_code", "distrito_code");
+        List<String> departmentColumns = List.of("departamento", "department", "department_name", "nombre_departamento");
+        List<String> provinceColumns = List.of("provincia", "province", "province_name", "nombre_provincia");
+        List<String> districtColumns = List.of("distrito", "district", "district_name", "nombre_distrito");
+
+        for (String tableName : tableNames) {
+            String codeColumn = firstExistingColumn(tableName, codeColumns);
+            String departmentColumn = firstExistingColumn(tableName, departmentColumns);
+            String provinceColumn = firstExistingColumn(tableName, provinceColumns);
+            String districtColumn = firstExistingColumn(tableName, districtColumns);
+
+            if (!hasText(codeColumn) || !hasText(departmentColumn) || !hasText(provinceColumn) || !hasText(districtColumn)) {
+                continue;
+            }
+
+            UbigeoLocation location = querySingleLocation("""
+                    SELECT %s AS department,
+                           %s AS province,
+                           %s AS district
+                      FROM %s
+                     WHERE CAST(%s AS TEXT) = ?
+                    """.formatted(
+                    quoteIdentifier(departmentColumn),
+                    quoteIdentifier(provinceColumn),
+                    quoteIdentifier(districtColumn),
+                    quoteIdentifier(tableName),
+                    quoteIdentifier(codeColumn)
+            ), List.of(code));
+
+            if (location.hasData()) {
+                return location;
+            }
+        }
+
+        return UbigeoLocation.empty();
+    }
+
+    private UbigeoLocation resolveFromStructuredUbigeoCatalog(String code) {
+        String departmentCode = code.substring(0, 2);
+        String provinceFullCode = code.substring(0, 4);
+        String provinceShortCode = code.substring(2, 4);
+        String districtFullCode = code;
+        String districtShortCode = code.substring(4, 6);
+
+        String department = lookupCatalogName(
+                mergeDistinct(List.of("departments", "department", "departamentos", "departamento", "catalog_departments", "catalog_departamentos", "sunat_departments", "sunat_departamentos"),
+                        findTablesByKeywords(List.of("department", "departamento"))),
+                List.of(departmentCode),
+                null,
+                null
+        );
+
+        String province = lookupCatalogName(
+                mergeDistinct(List.of("provinces", "province", "provincias", "provincia", "catalog_provinces", "catalog_provincias", "sunat_provinces", "sunat_provincias"),
+                        findTablesByKeywords(List.of("province", "provincia"))),
+                List.of(provinceFullCode, provinceShortCode),
+                departmentCode,
+                null
+        );
+
+        String district = lookupCatalogName(
+                mergeDistinct(List.of("districts", "district", "distritos", "distrito", "catalog_districts", "catalog_distritos", "sunat_districts", "sunat_distritos"),
+                        findTablesByKeywords(List.of("district", "distrito"))),
+                List.of(districtFullCode, districtShortCode),
+                departmentCode,
+                provinceFullCode
+        );
+
+        if (!hasText(district)) {
+            district = lookupCatalogName(
+                    mergeDistinct(List.of("districts", "district", "distritos", "distrito", "catalog_districts", "catalog_distritos", "sunat_districts", "sunat_distritos"),
+                            findTablesByKeywords(List.of("district", "distrito"))),
+                    List.of(districtFullCode, districtShortCode),
+                    departmentCode,
+                    provinceShortCode
+            );
+        }
+
+        return new UbigeoLocation(department, province, district);
+    }
+
+    private String lookupCatalogName(List<String> tableNames,
+                                     List<String> codes,
+                                     String departmentCode,
+                                     String provinceCode) {
+        List<String> codeColumns = List.of("code", "codigo", "ubigeo", "id", "department_code", "province_code", "district_code", "codigo_departamento", "codigo_provincia", "codigo_distrito");
+        List<String> nameColumns = List.of("name", "nombre", "description", "descripcion", "department", "departamento", "province", "provincia", "district", "distrito");
+
+        for (String tableName : tableNames) {
+            if (!tableExists(tableName)) {
+                continue;
+            }
+
+            String nameColumn = firstExistingColumn(tableName, nameColumns);
+            if (!hasText(nameColumn)) {
+                continue;
+            }
+
+            for (String codeColumn : existingColumns(tableName, codeColumns)) {
+                for (String code : codes) {
+                    String name = querySingleName(tableName, nameColumn, codeColumn, code, departmentCode, provinceCode, true);
+                    if (hasText(name)) {
+                        return name;
+                    }
+
+                    name = querySingleName(tableName, nameColumn, codeColumn, code, departmentCode, provinceCode, false);
+                    if (hasText(name)) {
+                        return name;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private String querySingleName(String tableName,
+                                   String nameColumn,
+                                   String codeColumn,
+                                   String code,
+                                   String departmentCode,
+                                   String provinceCode,
+                                   boolean useParentFilters) {
+        List<Object> params = new ArrayList<>();
+        params.add(code);
+
+        StringBuilder sql = new StringBuilder("SELECT ")
+                .append(quoteIdentifier(nameColumn))
+                .append(" AS name FROM ")
+                .append(quoteIdentifier(tableName))
+                .append(" WHERE CAST(")
+                .append(quoteIdentifier(codeColumn))
+                .append(" AS TEXT) = ?");
+
+        if (useParentFilters && hasText(departmentCode)) {
+            String depColumn = firstExistingColumn(tableName, List.of("department_code", "codigo_departamento", "departamento_code", "dep_code"));
+            if (hasText(depColumn)) {
+                sql.append(" AND CAST(").append(quoteIdentifier(depColumn)).append(" AS TEXT) = ?");
+                params.add(departmentCode);
+            }
+        }
+
+        if (useParentFilters && hasText(provinceCode)) {
+            String provColumn = firstExistingColumn(tableName, List.of("province_code", "codigo_provincia", "provincia_code", "prov_code"));
+            if (hasText(provColumn)) {
+                sql.append(" AND CAST(").append(quoteIdentifier(provColumn)).append(" AS TEXT) = ?");
+                params.add(provinceCode);
+            }
+        }
+
+        sql.append(" ORDER BY ").append(quoteIdentifier(nameColumn)).append(" LIMIT 1");
+
+        List<String> names = jdbcClient.sql(sql.toString())
+                .params(params)
+                .query((rs, rowNum) -> rs.getString("name"))
+                .list();
+
+        return names.isEmpty() ? null : names.get(0);
+    }
+
+    private UbigeoLocation querySingleLocation(String sql, List<?> params) {
+        List<UbigeoLocation> locations = jdbcClient.sql(sql)
+                .params(params)
+                .query((rs, rowNum) -> new UbigeoLocation(
+                        rs.getString("department"),
+                        rs.getString("province"),
+                        rs.getString("district")
+                ))
+                .list();
+
+        return locations.isEmpty() ? UbigeoLocation.empty() : locations.get(0);
+    }
+
+    private List<String> findTablesByKeywords(List<String> keywords) {
+        if (keywords == null || keywords.isEmpty()) {
+            return List.of();
+        }
+
+        List<String> params = new ArrayList<>();
+        StringBuilder where = new StringBuilder();
+
+        for (String keyword : keywords) {
+            if (!hasText(keyword)) {
+                continue;
+            }
+            if (!where.isEmpty()) {
+                where.append(" OR ");
+            }
+            where.append("LOWER(table_name) LIKE ?");
+            params.add("%" + keyword.toLowerCase() + "%");
+        }
+
+        if (params.isEmpty()) {
+            return List.of();
+        }
+
+        return jdbcClient.sql("""
+                SELECT table_name
+                  FROM information_schema.tables
+                 WHERE table_schema = ANY (current_schemas(false))
+                   AND table_type = 'BASE TABLE'
+                   AND (%s)
+                 ORDER BY table_name
+                """.formatted(where))
+                .params(params)
+                .query((rs, rowNum) -> rs.getString("table_name"))
+                .list();
+    }
+
+    private List<String> mergeDistinct(List<String> primary, List<String> secondary) {
+        List<String> merged = new ArrayList<>();
+        addDistinct(merged, primary);
+        addDistinct(merged, secondary);
+        return merged;
+    }
+
+    private void addDistinct(List<String> target, List<String> values) {
+        if (values == null) {
+            return;
+        }
+        for (String value : values) {
+            if (hasText(value) && !target.contains(value)) {
+                target.add(value);
+            }
+        }
+    }
+
+    private List<String> existingColumns(String tableName, List<String> candidates) {
+        List<String> columns = new ArrayList<>();
+        for (String candidate : candidates) {
+            if (hasColumn(tableName, candidate) && !columns.contains(candidate)) {
+                columns.add(candidate);
+            }
+        }
+        return columns;
+    }
+
+    private String firstExistingColumn(String tableName, List<String> candidates) {
+        for (String candidate : candidates) {
+            if (hasColumn(tableName, candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private boolean tableExists(String tableName) {
+        if (!hasText(tableName)) {
+            return false;
+        }
+
+        Boolean exists = jdbcClient.sql("""
+                SELECT EXISTS (
+                    SELECT 1
+                      FROM information_schema.tables
+                     WHERE table_schema = ANY (current_schemas(false))
+                       AND table_type = 'BASE TABLE'
+                       AND table_name = ?
+                )
+                """)
+                .params(tableName)
+                .query(Boolean.class)
+                .single();
+
+        return Boolean.TRUE.equals(exists);
+    }
+
+    private boolean hasColumns(String tableName, String... columnNames) {
+        for (String columnName : columnNames) {
+            if (!hasColumn(tableName, columnName)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean hasColumn(String tableName, String columnName) {
+        if (!hasText(tableName) || !hasText(columnName)) {
+            return false;
+        }
+
+        Boolean exists = jdbcClient.sql("""
+                SELECT EXISTS (
+                    SELECT 1
+                      FROM information_schema.columns
+                     WHERE table_schema = ANY (current_schemas(false))
+                       AND table_name = ?
+                       AND column_name = ?
+                )
+                """)
+                .params(tableName, columnName)
+                .query(Boolean.class)
+                .single();
+
+        return Boolean.TRUE.equals(exists);
+    }
+
+    private String quoteIdentifier(String identifier) {
+        if (!hasText(identifier)) {
+            throw new IllegalArgumentException("Identificador SQL vacío.");
+        }
+        return "\"" + identifier.replace("\"", "\"\"") + "\"";
+    }
+
     private GuideRemissionStatus resolveStatus(GuideRemissionTicketStatusResponse response) {
         String responseCode = firstNonBlank(response.getCdrResponseCode(), response.getTicketRpta());
 
@@ -1014,6 +1379,38 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private record StructuredCatalogTables(String departmentsTable, String provincesTable, String districtsTable) {
+    }
+
+    private record UbigeoLocation(String department, String province, String district) {
+        private static UbigeoLocation empty() {
+            return new UbigeoLocation(null, null, null);
+        }
+
+        private boolean hasData() {
+            return (department != null && !department.isBlank())
+                    || (province != null && !province.isBlank())
+                    || (district != null && !district.isBlank());
+        }
+
+        private boolean hasFullData() {
+            return department != null && !department.isBlank()
+                    && province != null && !province.isBlank()
+                    && district != null && !district.isBlank();
+        }
+
+        private UbigeoLocation mergeWith(UbigeoLocation other) {
+            if (other == null) {
+                return this;
+            }
+            return new UbigeoLocation(
+                    department != null && !department.isBlank() ? department : other.department(),
+                    province != null && !province.isBlank() ? province : other.province(),
+                    district != null && !district.isBlank() ? district : other.district()
+            );
+        }
     }
 
     private record AllocationRow(Integer guideItemLineNo, GuideRemissionDocumentItemAllocation allocation) {

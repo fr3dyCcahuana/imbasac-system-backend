@@ -49,6 +49,19 @@ public class ProformaRowMapper implements RowMapper<Proforma> {
             builder.cashierLastName(rs.getString("cashier_last_name"));
         }
 
+        if (cols.contains("customer_ubigeo")) {
+            builder.customerUbigeo(rs.getString("customer_ubigeo"));
+        }
+        if (cols.contains("customer_department")) {
+            builder.customerDepartment(rs.getString("customer_department"));
+        }
+        if (cols.contains("customer_province")) {
+            builder.customerProvince(rs.getString("customer_province"));
+        }
+        if (cols.contains("customer_district")) {
+            builder.customerDistrict(rs.getString("customer_district"));
+        }
+
         if (cols.contains("payment_type")) {
             String paymentType = rs.getString("payment_type");
             if (paymentType != null && !paymentType.isBlank()) {

@@ -61,6 +61,48 @@ public class PostgresProductStockMovementRepository implements ProductStockMovem
                 quantityIn, BigDecimal.ZERO, unitCost, totalCost, balanceQty, balanceCost);
     }
 
+    @Override
+    public void createOutProformaInternal(Long productId,
+                                          BigDecimal quantityOut,
+                                          Long proformaItemId,
+                                          BigDecimal unitCost,
+                                          BigDecimal totalCost,
+                                          BigDecimal balanceQty,
+                                          BigDecimal balanceCost) {
+        createMovement(productId, "OUT_PROFORMA_INTERNAL", "proforma_item", proformaItemId,
+                BigDecimal.ZERO, quantityOut, unitCost, totalCost, balanceQty, balanceCost);
+    }
+
+    @Override
+    public void createInProformaInternalReturn(Long productId,
+                                               BigDecimal quantityIn,
+                                               Long proformaItemId,
+                                               BigDecimal unitCost,
+                                               BigDecimal totalCost,
+                                               BigDecimal balanceQty,
+                                               BigDecimal balanceCost) {
+        createMovement(productId, "IN_PROFORMA_INTERNAL_RETURN", "proforma_item", proformaItemId,
+                quantityIn, BigDecimal.ZERO, unitCost, totalCost, balanceQty, balanceCost);
+    }
+
+    @Override
+    public boolean existsOutProformaInternal(Long proformaItemId) {
+        String sql = """
+            SELECT COUNT(1)
+            FROM product_stock_movement
+            WHERE movement_type = 'OUT_PROFORMA_INTERNAL'
+              AND source_table = 'proforma_item'
+              AND source_id = ?
+        """;
+
+        Long count = jdbcClient.sql(sql)
+                .param(proformaItemId)
+                .query(Long.class)
+                .single();
+
+        return count != null && count > 0;
+    }
+
     private void createMovement(Long productId,
                                 String movementType,
                                 String sourceTable,

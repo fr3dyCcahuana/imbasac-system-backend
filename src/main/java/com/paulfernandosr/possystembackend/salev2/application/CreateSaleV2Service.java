@@ -2,8 +2,10 @@ package com.paulfernandosr.possystembackend.salev2.application;
 
 import com.paulfernandosr.possystembackend.common.infrastructure.documentseries.DocumentSeriesPolicy;
 import com.paulfernandosr.possystembackend.proformav2.domain.Proforma;
+import com.paulfernandosr.possystembackend.proformav2.domain.ProformaItem;
 import com.paulfernandosr.possystembackend.proformav2.domain.model.ProformaStatus;
 import com.paulfernandosr.possystembackend.proformav2.domain.port.output.ProformaRepository;
+import com.paulfernandosr.possystembackend.proformav2.domain.port.output.ProformaItemRepository;
 import com.paulfernandosr.possystembackend.proformav2.domain.port.output.SaleReferenceRepository;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
 import com.paulfernandosr.possystembackend.salev2.domain.model.*;
@@ -51,6 +53,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
 
     // Proforma origen (Opción B): POST /sales/v2 con número visible de proforma
     private final ProformaRepository proformaRepository;
+    private final ProformaItemRepository proformaItemRepository;
     private final SaleReferenceRepository saleReferenceRepository;
 
     // Política de costo snapshot (Regla #8)
@@ -70,6 +73,12 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         // IMPORTANTE: ahora el frontend envía sourceProformaNumber (número visible),
         // y el backend resuelve el ID interno real para guardar la relación.
         Proforma sourceProforma = lockAndValidateSourceProforma(request);
+
+        List<ProformaItem> sourceProformaItems = List.of();
+        if (sourceProforma != null) {
+            sourceProformaItems = proformaItemRepository.findByProformaId(sourceProforma.getId());
+            request.setItems(filterFacturableItemsForSaleFromProforma(request.getItems(), sourceProformaItems));
+        }
 
         Long resolvedSaleSessionId = null;
 
@@ -401,6 +410,8 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
             }
         }
 
+        processInternalProformaStockMovements(sourceProformaItems);
+
         // 7) Actualizar totales
         saleV2Repository.updateTotals(
                 saleId,
@@ -585,6 +596,103 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                         throw new InvalidSaleV2Exception("BOLETA/FACTURA solo permiten lineKind=VENDIDO en el flujo de emisión SUNAT desacoplada actual. productId="
                                 + line.getProduct().getId());
                     });
+        }
+    }
+
+
+    private List<SaleV2CreateRequest.Item> filterFacturableItemsForSaleFromProforma(
+            List<SaleV2CreateRequest.Item> requestItems,
+            List<ProformaItem> proformaItems
+    ) {
+        if (requestItems == null || requestItems.isEmpty()) {
+            throw new InvalidSaleV2Exception("Debe enviar items.");
+        }
+
+        if (proformaItems == null || proformaItems.isEmpty()) {
+            return requestItems;
+        }
+
+        Set<Long> nonFacturableProductIds = proformaItems.stream()
+                .filter(it -> !Boolean.TRUE.equals(it.getFacturableSunat()))
+                .map(ProformaItem::getProductId)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+
+        if (nonFacturableProductIds.isEmpty()) {
+            return requestItems;
+        }
+
+        List<SaleV2CreateRequest.Item> filtered = requestItems.stream()
+                .filter(Objects::nonNull)
+                .filter(it -> it.getProductId() != null)
+                .filter(it -> !nonFacturableProductIds.contains(it.getProductId()))
+                .toList();
+
+        if (filtered.isEmpty()) {
+            throw new InvalidSaleV2Exception(
+                    "La proforma no tiene productos facturables para generar una venta."
+            );
+        }
+
+        return filtered;
+    }
+
+    private void processInternalProformaStockMovements(List<ProformaItem> proformaItems) {
+        if (proformaItems == null || proformaItems.isEmpty()) {
+            return;
+        }
+
+        for (ProformaItem item : proformaItems) {
+            if (Boolean.TRUE.equals(item.getFacturableSunat())) {
+                continue;
+            }
+
+            if (!Boolean.TRUE.equals(item.getAffectsStock())) {
+                continue;
+            }
+
+            if (item.getProductId() == null) {
+                throw new InvalidSaleV2Exception("Ítem interno de proforma sin productId.");
+            }
+
+            BigDecimal quantity = nz(item.getQuantity());
+            if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new InvalidSaleV2Exception(
+                        "Cantidad inválida para ítem interno de proforma. SKU=" + nzs(item.getSku())
+                );
+            }
+
+            ProductSnapshot product = productSnapshotRepository.findSnapshotById(item.getProductId());
+            if (product == null) {
+                throw new InvalidSaleV2Exception("Producto interno no encontrado: " + item.getProductId());
+            }
+
+            if (Boolean.TRUE.equals(product.getManageBySerial())) {
+                throw new InvalidSaleV2Exception(
+                        "Producto interno no facturable con serie/VIN no soportado en conversión. SKU=" + nzs(product.getSku())
+                );
+            }
+
+            BigDecimal unitCost = costPolicy == CostPolicy.PROMEDIO
+                    ? nz(productStockRepository.getAverageCost(product.getId()))
+                    : nz(productStockRepository.getLastUnitCost(product.getId()));
+
+            BigDecimal totalCost = unitCost.multiply(quantity).setScale(4, RoundingMode.HALF_UP);
+
+            StockMovementBalance balance = productStockRepository.decreaseOnHandOrFail(
+                    product.getId(),
+                    quantity
+            );
+
+            productStockMovementRepository.createOutProformaInternal(
+                    product.getId(),
+                    quantity,
+                    item.getId(),
+                    unitCost,
+                    totalCost,
+                    balance.getQuantityOnHand(),
+                    nz(balance.getAverageCost(), unitCost)
+            );
         }
     }
 

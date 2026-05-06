@@ -147,6 +147,7 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
                     SELECT
                       id,
                       sale_session_id,
+                      source_proforma_id,
                       customer_id,
                       doc_type,
                       status,
@@ -163,6 +164,7 @@ public class PostgresSaleV2Repository implements SaleV2Repository {
                 .query((rs, rowNum) -> LockedSale.builder()
                         .id(rs.getLong("id"))
                         .saleSessionId((Long) rs.getObject("sale_session_id"))
+                        .sourceProformaId((Long) rs.getObject("source_proforma_id"))
                         .customerId((Long) rs.getObject("customer_id"))
                         .docType(rs.getString("doc_type"))
                         .status(rs.getString("status"))

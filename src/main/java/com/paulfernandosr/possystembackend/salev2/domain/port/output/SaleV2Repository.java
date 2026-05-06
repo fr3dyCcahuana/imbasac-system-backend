@@ -105,6 +105,7 @@ public interface SaleV2Repository {
     class LockedSale {
         private Long id;
         private Long saleSessionId;
+        private Long sourceProformaId;
         private Long customerId;
         private String docType;
         private String status;

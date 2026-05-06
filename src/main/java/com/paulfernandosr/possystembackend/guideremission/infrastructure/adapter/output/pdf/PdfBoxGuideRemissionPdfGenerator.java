@@ -138,16 +138,18 @@ public class PdfBoxGuideRemissionPdfGenerator implements GuideRemissionPdfGenera
         float docBoxX = PAGE_WIDTH - MARGIN_RIGHT - DOC_BOX_WIDTH;
 
         float leftX = MARGIN_LEFT;
+        float leftBlockWidth = docBoxX - leftX - 8f;
 
-        // Más aire a izquierda y derecha para que el bloque se vea más centrado
-        float contentInset = 50f;
+        // Solo se mueve/centra el mismo contenido existente del bloque izquierdo.
+        // No se reemplaza razón social, dirección fiscal, ubigeo, distrito, provincia ni departamento.
+        float contentInset = 16f;
         float textX = leftX + contentInset;
-        float textWidth = docBoxX - leftX - (contentInset * 2f);
+        float textWidth = leftBlockWidth - (contentInset * 2f);
 
         PDImageXObject logo = loadLogo(pdf, company);
 
         float textY = topY - 12f;
-        textY = writeWrapped(stream,
+        textY = writeWrappedCentered(stream,
                 safe(company.getRazonSocial()).toUpperCase(Locale.ROOT),
                 textX,
                 textY,
@@ -159,18 +161,14 @@ public class PdfBoxGuideRemissionPdfGenerator implements GuideRemissionPdfGenera
 
         if (logo != null) {
             ImageFit fit = fitImage(logo, LOGO_MAX_WIDTH, LOGO_MAX_HEIGHT);
-
-            // Un poco más alineado dentro del bloque
-            float logoX = textX + 2f;
-
-            // Sube un poco el logo
+            float logoX = textX + ((textWidth - fit.width()) / 2f);
             float logoY = textY - fit.height() + 4f;
 
             stream.drawImage(logo, logoX, logoY, fit.width(), fit.height());
             textY = logoY - 4f;
         }
 
-        textY = writeWrapped(stream,
+        textY = writeWrappedCentered(stream,
                 "Dirección fiscal: " + firstNotBlank(company.getDomicilioFiscal(), "-"),
                 textX,
                 textY - 10f,
@@ -180,7 +178,7 @@ public class PdfBoxGuideRemissionPdfGenerator implements GuideRemissionPdfGenera
                 7.9f,
                 COLOR_TEXT) - 1f;
 
-        writeWrapped(stream,
+        writeWrappedCentered(stream,
                 buildCompanyLocationLine(company),
                 textX,
                 textY,
@@ -271,8 +269,20 @@ public class PdfBoxGuideRemissionPdfGenerator implements GuideRemissionPdfGenera
         rows.add(new FieldRow(List.of(new FieldCell("Fecha inicio traslado", formatDate(document.getTransferDate())))));
         rows.add(new FieldRow(List.of(new FieldCell("Destinatario", firstNotBlank(document.getRecipientName(), "-")))));
         rows.add(new FieldRow(List.of(new FieldCell(recipientDocLabel(document.getRecipientDocumentType()), firstNotBlank(document.getRecipientDocumentNumber(), "-")))));
-        rows.add(new FieldRow(List.of(new FieldCell("Punto de partida", buildLocation(document.getDepartureUbigeo(), document.getDepartureAddress())))));
-        rows.add(new FieldRow(List.of(new FieldCell("Punto de llegada", buildLocation(document.getArrivalUbigeo(), document.getArrivalAddress())))));
+        rows.add(new FieldRow(List.of(new FieldCell("Punto de partida", buildLocation(
+                document.getDepartureDepartment(),
+                document.getDepartureProvince(),
+                document.getDepartureDistrict(),
+                document.getDepartureAddress(),
+                document.getDepartureUbigeo()
+        )))));
+        rows.add(new FieldRow(List.of(new FieldCell("Punto de llegada", buildLocation(
+                document.getArrivalDepartment(),
+                document.getArrivalProvince(),
+                document.getArrivalDistrict(),
+                document.getArrivalAddress(),
+                document.getArrivalUbigeo()
+        )))));
         return rows;
     }
 
@@ -844,6 +854,28 @@ public class PdfBoxGuideRemissionPdfGenerator implements GuideRemissionPdfGenera
         return currentY;
     }
 
+    private float writeWrappedCentered(PDPageContentStream stream,
+                                       String text,
+                                       float x,
+                                       float y,
+                                       float width,
+                                       PDFont font,
+                                       float fontSize,
+                                       float lineHeight,
+                                       int gray) throws IOException {
+        List<String> lines = wrapByWidth(text, font, fontSize, width);
+        if (lines.isEmpty()) {
+            lines = List.of("");
+        }
+
+        float currentY = y;
+        for (String line : lines) {
+            writeCentered(stream, line, x, currentY, width, font, fontSize, gray);
+            currentY -= lineHeight;
+        }
+        return currentY;
+    }
+
     private List<String> wrapByWidth(String text,
                                      PDFont font,
                                      float fontSize,
@@ -925,11 +957,27 @@ public class PdfBoxGuideRemissionPdfGenerator implements GuideRemissionPdfGenera
         return String.join(" ", parts);
     }
 
-    private String buildLocation(String ubigeo, String address) {
-        if (notBlank(ubigeo) && notBlank(address)) {
-            return ubigeo + " - " + address;
+    private String buildLocation(String department,
+                                 String province,
+                                 String district,
+                                 String address,
+                                 String fallbackUbigeo) {
+        List<String> locationParts = new ArrayList<>();
+        if (notBlank(department)) locationParts.add(safe(department));
+        if (notBlank(province)) locationParts.add(safe(province));
+        if (notBlank(district)) locationParts.add(safe(district));
+
+        String locationNames = String.join(" - ", locationParts);
+        if (notBlank(locationNames) && notBlank(address)) {
+            return locationNames + " - " + safe(address);
         }
-        return firstNotBlank(address, ubigeo, "-");
+        if (notBlank(locationNames)) {
+            return locationNames;
+        }
+
+        // No se imprime el código de ubigeo en el PDF. Si el catálogo no tiene datos,
+        // se conserva la dirección para no perder información operativa.
+        return firstNotBlank(address, "-");
     }
 
     private String recipientDocLabel(Integer type) {
