@@ -3,29 +3,28 @@ package com.paulfernandosr.possystembackend.customer.infrastructure.adapter.outp
 import com.paulfernandosr.possystembackend.customer.domain.Customer;
 import com.paulfernandosr.possystembackend.customer.domain.port.output.CustomerProvider;
 import com.paulfernandosr.possystembackend.customer.infrastructure.adapter.output.apisnet.JuridicalPerson;
-import com.paulfernandosr.possystembackend.customer.infrastructure.adapter.output.apisnet.NaturalPerson;
 import com.paulfernandosr.possystembackend.customer.infrastructure.adapter.output.apisnet.PersonMapper;
-import lombok.RequiredArgsConstructor;
+import com.paulfernandosr.possystembackend.customer.infrastructure.adapter.output.eldni.EldniDniScraper;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.util.Optional;
 
 @Component
-@RequiredArgsConstructor
 public class ApisNetCustomerProvider implements CustomerProvider {
     private final RestClient apisNetRestClient;
+    private final EldniDniScraper eldniDniScraper;
+
+    public ApisNetCustomerProvider(@Qualifier("apisNetRestClient") RestClient apisNetRestClient,
+                                   EldniDniScraper eldniDniScraper) {
+        this.apisNetRestClient = apisNetRestClient;
+        this.eldniDniScraper = eldniDniScraper;
+    }
 
     @Override
     public Optional<Customer> findByDni(String dni) {
-        NaturalPerson personInfo = apisNetRestClient.get()
-                .uri(uriBuilder -> uriBuilder.path("/reniec/dni")
-                        .queryParam("numero", dni)
-                        .build())
-                .retrieve()
-                .body(NaturalPerson.class);
-
-        return Optional.ofNullable(personInfo)
+        return eldniDniScraper.findByDni(dni)
                 .map(PersonMapper::toCustomer);
     }
 
