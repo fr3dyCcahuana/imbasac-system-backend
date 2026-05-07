@@ -25,7 +25,21 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class RegisterPurchaseWithStockService implements CreatePurchaseUseCase {
 
-    private static final Pattern ID_PATTERN = Pattern.compile("^[A-Z0-9-]+$");
+    /**
+     * Identificadores vehiculares reales pueden venir desde DUA/Excel con espacios internos
+     * y separadores comunes. Aplica para motor, VIN, chasis y número de DUA.
+     *
+     * Ejemplos válidos:
+     * - DY150FMH T0007010
+     * - LATXCHLY0T1001947
+     * - CHASIS-001/2026
+     * - DUA 34837-45
+     *
+     * Regla: debe iniciar y terminar con letra o número. En el medio permite
+     * letras, números, espacios internos y separadores comunes: - / . * _ # +
+     */
+    private static final Pattern VEHICLE_IDENTIFIER_PATTERN =
+            Pattern.compile("^[A-Z0-9](?:[A-Z0-9 ./_#*+-]*[A-Z0-9])?$");
 
     private final PurchaseRepository purchaseRepository;
     private final ProductFlagsRepository productFlagsRepository;
@@ -241,11 +255,11 @@ public class RegisterPurchaseWithStockService implements CreatePurchaseUseCase {
             }
 
             // Normaliza
-            u.setVin(normalizeId(u.getVin()));
-            u.setChassisNumber(normalizeId(u.getChassisNumber()));
-            u.setEngineNumber(normalizeId(u.getEngineNumber()));
-            u.setDuaNumber(normalizeId(u.getDuaNumber()));
-            u.setColor(normalizeText(u.getColor()));
+            u.setVin(normalizeVehicleIdentifier(u.getVin()));
+            u.setChassisNumber(normalizeVehicleIdentifier(u.getChassisNumber()));
+            u.setEngineNumber(normalizeVehicleIdentifier(u.getEngineNumber()));
+            u.setDuaNumber(normalizeVehicleIdentifier(u.getDuaNumber()));
+            u.setColor(normalizeVehicleText(u.getColor()));
 
             // Comunes obligatorios
             requireText(u.getColor(), itemIndex, j, "color");
@@ -292,14 +306,14 @@ public class RegisterPurchaseWithStockService implements CreatePurchaseUseCase {
             }
 
             // Validación de formatos
-            validateIdField(u.getEngineNumber(), 4, 40, itemIndex, j, "engineNumber");
-            validateIdField(u.getDuaNumber(), 1, 30, itemIndex, j, "duaNumber");
+            validateVehicleIdentifierField(u.getEngineNumber(), 1, 80, itemIndex, j, "engineNumber");
+            validateVehicleIdentifierField(u.getDuaNumber(), 1, 80, itemIndex, j, "duaNumber");
 
             if (notBlank(u.getVin())) {
-                validateIdField(u.getVin(), 8, 40, itemIndex, j, "vin");
+                validateVehicleIdentifierField(u.getVin(), 1, 80, itemIndex, j, "vin");
             }
             if (notBlank(u.getChassisNumber())) {
-                validateIdField(u.getChassisNumber(), 1, 40, itemIndex, j, "chassisNumber");
+                validateVehicleIdentifierField(u.getChassisNumber(), 1, 80, itemIndex, j, "chassisNumber");
             }
 
             // Acumula para validación de duplicados en BD
@@ -455,16 +469,30 @@ public class RegisterPurchaseWithStockService implements CreatePurchaseUseCase {
         return s != null && !s.trim().isEmpty();
     }
 
-    private static String normalizeId(String s) {
+    private static String normalizeVehicleIdentifier(String s) {
         if (s == null) return null;
-        String t = s.trim();
+        String t = s.trim().toUpperCase(Locale.ROOT);
         if (t.isEmpty()) return null;
-        return t.toUpperCase(Locale.ROOT);
+
+        // Normaliza caracteres frecuentes al copiar desde PDF/Excel/DUA.
+        t = t.replace('–', '-').replace('—', '-').replace('−', '-');
+
+        // Evita fallos por doble espacio, tabulaciones o saltos accidentales.
+        // Importante: no elimina el espacio interno porque puede formar parte del dato real.
+        t = t.replaceAll("\\s+", " ");
+
+        return t.isEmpty() ? null : t;
     }
 
-    private static String normalizeText(String s) {
+    private static String normalizeVehicleText(String s) {
         if (s == null) return null;
-        String t = s.trim();
+        String t = s.trim().toUpperCase(Locale.ROOT);
+        if (t.isEmpty()) return null;
+
+        // Para colores/descripciones cortas: BLANCO, ROJO NEGRO, NEGRO/ROJO, etc.
+        t = t.replace('–', '-').replace('—', '-').replace('−', '-');
+        t = t.replaceAll("\\s+", " ");
+
         return t.isEmpty() ? null : t;
     }
 
@@ -500,13 +528,14 @@ public class RegisterPurchaseWithStockService implements CreatePurchaseUseCase {
         }
     }
 
-    private static void validateIdField(String value,
-                                        int min,
-                                        int max,
-                                        int itemIndex,
-                                        int serialIndex,
-                                        String field) {
+    private static void validateVehicleIdentifierField(String value,
+                                                       int min,
+                                                       int max,
+                                                       int itemIndex,
+                                                       int serialIndex,
+                                                       String field) {
         if (!notBlank(value)) return;
+
         if (value.length() < min || value.length() > max) {
             throw new PurchaseApiException(422, "INVALID_FIELD_LENGTH", field + " inválido.",
                     List.of(PurchaseFieldError.builder()
@@ -516,13 +545,14 @@ public class RegisterPurchaseWithStockService implements CreatePurchaseUseCase {
                             .expected(min + ".." + max)
                             .build()));
         }
-        if (!ID_PATTERN.matcher(value).matches()) {
+
+        if (!VEHICLE_IDENTIFIER_PATTERN.matcher(value).matches()) {
             throw new PurchaseApiException(422, "INVALID_FIELD_FORMAT", field + " inválido.",
                     List.of(PurchaseFieldError.builder()
                             .path(path(itemIndex, "serialUnits[" + serialIndex + "]." + field))
-                            .message(field + " solo puede contener A-Z, 0-9 y guión (-)")
+                            .message(field + " solo puede contener letras, números, espacios internos y separadores comunes (- / . * _ # +)")
                             .value(value)
-                            .expected("A-Z0-9-")
+                            .expected("A-Z0-9 con espacios internos y separadores - / . * _ # +")
                             .build()));
         }
     }

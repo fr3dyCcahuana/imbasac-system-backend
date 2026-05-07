@@ -92,7 +92,8 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
 
     @Override
     public Page<ProductSerialUnit> findPage(Long productId, String query, String status, Pageable pageable) {
-        String q = query == null ? "" : query;
+        String q = query == null ? "" : query.trim();
+        String st = status == null ? "" : status.trim();
         String like = QueryMapper.formatAsLikeParam(q);
 
         String countSql = """
@@ -100,14 +101,14 @@ public class PostgresProductSerialUnitRepository implements ProductSerialUnitRep
               FROM product_serial_unit u
              WHERE u.product_id = ?
                AND (? = '' OR u.vin ILIKE ? OR u.chassis_number ILIKE ? OR u.engine_number ILIKE ?)
-               AND (? IS NULL OR ? = '' OR u.status = ?)
+               AND (? = '' OR u.status = ?)
             """;
 
         long totalElements = jdbcClient.sql(countSql)
                 .params(
                         productId,
                         q, like, like, like,
-                        status, status, status
+                        st, st
                 )
                 .query(Long.class)
                 .single();

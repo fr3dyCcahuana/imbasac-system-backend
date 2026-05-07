@@ -2,6 +2,8 @@ package com.paulfernandosr.possystembackend.purchase.infrastructure.adapter.inpu
 
 import com.paulfernandosr.possystembackend.purchase.domain.exception.PurchaseApiException;
 import com.paulfernandosr.possystembackend.purchase.domain.exception.PurchaseFieldError;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -11,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Order(Ordered.HIGHEST_PRECEDENCE)
 @RestControllerAdvice(assignableTypes = PurchaseRestController.class)
 public class PurchaseExceptionHandler {
 
