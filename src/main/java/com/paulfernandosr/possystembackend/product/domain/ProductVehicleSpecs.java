@@ -31,7 +31,7 @@ public class ProductVehicleSpecs {
     // --------------------
     private String bodywork;         // carrocería
 
-    private BigDecimal engineCapacity; // capacidad motor
+    private String engineCapacity; // capacidad motor
     private String fuel;               // combustible
     private Integer cylinders;         // número de cilindros
 
@@ -43,7 +43,7 @@ public class ProductVehicleSpecs {
     // Solo MOTOCICLETA
     // --------------------
     private String vehicleClass;     // clase
-    private BigDecimal enginePower;  // potencia motor
+    private String enginePower;  // potencia motor
     private String rollingForm;      // form. rodante
 
     private Integer seats;           // número asientos

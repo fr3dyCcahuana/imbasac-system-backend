@@ -50,7 +50,7 @@ public class ProductVehicleSpecsRules {
         requireText(specs.getBodywork(), "bodywork");
         requireText(specs.getFuel(), "fuel");
 
-        requirePositive(specs.getEngineCapacity(), "engineCapacity");
+        requireText(specs.getEngineCapacity(), "engineCapacity");
         requirePositive(specs.getCylinders(), "cylinders");
 
         requireNonNegative(specs.getNetWeight(), "netWeight");
@@ -62,7 +62,7 @@ public class ProductVehicleSpecsRules {
         // --------------------
         if ("MOTOCICLETA".equals(vehicleType)) {
             requireText(specs.getVehicleClass(), "vehicleClass");
-            requirePositive(specs.getEnginePower(), "enginePower");
+            requireText(specs.getEnginePower(), "enginePower");
             requireText(specs.getRollingForm(), "rollingForm");
 
             requirePositive(specs.getSeats(), "seats");

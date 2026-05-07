@@ -962,22 +962,30 @@ public class PdfBoxGuideRemissionPdfGenerator implements GuideRemissionPdfGenera
                                  String district,
                                  String address,
                                  String fallbackUbigeo) {
-        List<String> locationParts = new ArrayList<>();
-        if (notBlank(department)) locationParts.add(safe(department));
-        if (notBlank(province)) locationParts.add(safe(province));
-        if (notBlank(district)) locationParts.add(safe(district));
+        List<String> parts = new ArrayList<>();
 
-        String locationNames = String.join(" - ", locationParts);
-        if (notBlank(locationNames) && notBlank(address)) {
-            return locationNames + " - " + safe(address);
+        // Formato requerido:
+        // 1) dirección
+        // 2) departamento - provincia - distrito, siempre en mayúsculas.
+        if (notBlank(address)) {
+            parts.add(safe(address));
         }
-        if (notBlank(locationNames)) {
-            return locationNames;
+        if (notBlank(district)) {
+            parts.add(safe(district).toUpperCase(Locale.ROOT));
+        }
+        if (notBlank(province)) {
+            parts.add(safe(province).toUpperCase(Locale.ROOT));
+        }
+        if (notBlank(department)) {
+            parts.add(safe(department).toUpperCase(Locale.ROOT));
+        }
+        if (!parts.isEmpty()) {
+            return String.join(" - ", parts);
         }
 
-        // No se imprime el código de ubigeo en el PDF. Si el catálogo no tiene datos,
-        // se conserva la dirección para no perder información operativa.
-        return firstNotBlank(address, "-");
+        // No se imprime el código de ubigeo en el PDF.
+        // Si no existen dirección ni nombres de ubicación, se muestra guion.
+        return "-";
     }
 
     private String recipientDocLabel(Integer type) {
