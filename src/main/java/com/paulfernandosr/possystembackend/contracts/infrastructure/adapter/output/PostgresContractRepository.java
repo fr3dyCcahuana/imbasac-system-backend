@@ -96,7 +96,7 @@ public class PostgresContractRepository implements ContractRepository {
                 .param(id)
                 .query((rs, rowNum) -> Contract.builder()
                         .id(rs.getLong("id"))
-                        .stationId(rs.getLong("stationId"))
+                        .stationId((Long) rs.getObject("stationId"))
                         .createdBy(rs.getLong("createdBy"))
                         .series(rs.getString("series"))
                         .number(rs.getLong("number"))

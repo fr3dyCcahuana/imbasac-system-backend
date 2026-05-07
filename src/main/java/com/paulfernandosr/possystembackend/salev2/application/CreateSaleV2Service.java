@@ -84,22 +84,34 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         Long resolvedSaleSessionId = null;
 
         if (user.requiresCashSession()) {
-            if (user.isNotOnRegister()) {
-                throw new InvalidSaleV2Exception("El usuario no tiene una sesión de caja abierta.");
-            }
+            /*
+             * stationId opcional:
+             * - Si viene stationId, se valida contra la sesión abierta.
+             * - Si NO viene stationId, se permite continuar sin caja/estación.
+             *   Esto aplica para ventas generadas desde contrato.
+             */
+            if (request.getStationId() != null || request.getSaleSessionId() != null) {
+                if (user.isNotOnRegister()) {
+                    throw new InvalidSaleV2Exception("El usuario no tiene una sesión de caja abierta.");
+                }
 
-            OpenSaleSession openSession = saleSessionControlRepository.findOpenByUserId(user.getId());
-            if (openSession == null) {
-                throw new InvalidSaleV2Exception("El usuario no tiene una sesión de caja abierta.");
-            }
-            if (!Objects.equals(openSession.getStationId(), request.getStationId())) {
-                throw new InvalidSaleV2Exception("La estación de la venta no coincide con la sesión de caja abierta del usuario.");
-            }
-            if (request.getSaleSessionId() != null && !Objects.equals(request.getSaleSessionId(), openSession.getId())) {
-                throw new InvalidSaleV2Exception("saleSessionId no coincide con la sesión de caja abierta del usuario.");
-            }
+                OpenSaleSession openSession = saleSessionControlRepository.findOpenByUserId(user.getId());
+                if (openSession == null) {
+                    throw new InvalidSaleV2Exception("El usuario no tiene una sesión de caja abierta.");
+                }
 
-            resolvedSaleSessionId = openSession.getId();
+                if (request.getStationId() != null
+                        && !Objects.equals(openSession.getStationId(), request.getStationId())) {
+                    throw new InvalidSaleV2Exception("La estación de la venta no coincide con la sesión de caja abierta del usuario.");
+                }
+
+                if (request.getSaleSessionId() != null
+                        && !Objects.equals(request.getSaleSessionId(), openSession.getId())) {
+                    throw new InvalidSaleV2Exception("saleSessionId no coincide con la sesión de caja abierta del usuario.");
+                }
+
+                resolvedSaleSessionId = openSession.getId();
+            }
         } else if (request.getSaleSessionId() != null) {
             throw new InvalidSaleV2Exception("Este rol no debe enviar saleSessionId porque no trabaja con apertura de caja.");
         }
@@ -737,17 +749,26 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
 
     private void validateRequest(SaleV2CreateRequest request) {
         if (request == null) throw new InvalidSaleV2Exception("Request vacío.");
-        if (request.getStationId() == null) throw new InvalidSaleV2Exception("stationId es obligatorio.");
+
+        // stationId es opcional.
+        // Para ventas desde contrato no debe depender de caja/estación.
+        // Las ventas normales de caja se controlan más abajo con requiresCashSession().
         if (request.getDocType() == null) throw new InvalidSaleV2Exception("docType es obligatorio.");
+
         request.setSeries(resolveSeriesForRequest(request.getDocType(), request.getSeries()));
+
         if (request.getPriceList() == null) throw new InvalidSaleV2Exception("priceList es obligatorio.");
+
         if (request.getTaxStatus() == null) request.setTaxStatus(TaxStatus.NO_GRAVADA);
+
         if (request.getTaxStatus() == TaxStatus.NO_GRAVADA
                 && (request.getTaxReason() == null || request.getTaxReason().trim().isEmpty())) {
             request.setTaxReason("EXONERADA");
         }
+
         if (request.getIgvIncluded() == null) request.setIgvIncluded(Boolean.FALSE);
         if (request.getTaxStatus() != TaxStatus.GRAVADA) request.setIgvIncluded(Boolean.FALSE);
+
         if (request.getPaymentType() == null) throw new InvalidSaleV2Exception("paymentType es obligatorio.");
         if (request.getItems() == null || request.getItems().isEmpty()) throw new InvalidSaleV2Exception("Debe enviar items.");
     }

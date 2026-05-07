@@ -15,6 +15,8 @@ import java.time.LocalDate;
 @Builder
 public class ContractGenerateSaleRequest {
 
+    private Long stationId;
+
     private DocType docType;
     private String series;
     private LocalDate issueDate;

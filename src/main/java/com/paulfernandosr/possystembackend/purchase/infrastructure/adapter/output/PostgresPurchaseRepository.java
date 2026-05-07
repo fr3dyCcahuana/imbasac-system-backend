@@ -647,14 +647,14 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                         product.setVehicleSpecs(PurchaseVehicleSpecs.builder()
                                 .vehicleType(rs.getString("vehicle_type"))
                                 .bodywork(rs.getString("bodywork"))
-                                .engineCapacity(rs.getBigDecimal("engine_capacity"))
+                                .engineCapacity(normalizeVehicleSpecText(rs.getString("engine_capacity")))
                                 .fuel(rs.getString("fuel"))
                                 .cylinders(rs.getObject("cylinders", Integer.class))
                                 .netWeight(rs.getBigDecimal("net_weight"))
                                 .payload(rs.getBigDecimal("payload"))
                                 .grossWeight(rs.getBigDecimal("gross_weight"))
                                 .vehicleClass(rs.getString("vehicle_class"))
-                                .enginePower(rs.getBigDecimal("engine_power"))
+                                .enginePower(normalizeVehicleSpecText(rs.getString("engine_power")))
                                 .rollingForm(rs.getString("rolling_form"))
                                 .seats(rs.getObject("seats", Integer.class))
                                 .passengers(rs.getObject("passengers", Integer.class))
@@ -667,6 +667,13 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                     }
                     return Boolean.TRUE;
                 });
+    }
+
+    private static String normalizeVehicleSpecText(String value) {
+        if (value == null) return null;
+        String normalized = value.trim();
+        if (normalized.isEmpty()) return null;
+        return normalized.replaceAll("\\s+", " ");
     }
 
     private PurchaseSummary buildSummary(List<PurchaseItem> items) {

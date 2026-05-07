@@ -60,6 +60,10 @@ public class GenerateSaleFromContractService implements GenerateSaleFromContract
 
         if (req == null) req = ContractGenerateSaleRequest.builder().build();
 
+        // stationId es opcional para ventas generadas desde contrato.
+        // Si el request o el contrato lo traen, se usa; si no, la venta se crea sin caja/estación.
+        Long stationIdForSale = req.getStationId() != null ? req.getStationId() : contract.getStationId();
+
         DocType docType = req.getDocType() != null ? req.getDocType() : DocType.SIMPLE;
         String series = req.getSeries() != null ? req.getSeries() : "S001";
         LocalDate issueDate = req.getIssueDate() != null ? req.getIssueDate() : (contract.getIssueDate() != null ? contract.getIssueDate() : LocalDate.now());
@@ -74,7 +78,7 @@ public class GenerateSaleFromContractService implements GenerateSaleFromContract
         }
 
         SaleV2CreateRequest saleReq = SaleV2CreateRequest.builder()
-                .stationId(contract.getStationId())
+                .stationId(stationIdForSale)
                 .docType(docType)
                 .series(series)
                 .issueDate(issueDate)

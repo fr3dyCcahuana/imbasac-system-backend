@@ -182,7 +182,6 @@ public class CreateContractService implements CreateContractUseCase {
 
     private void validate(ContractCreateRequest r) {
         if (r == null) throw new InvalidContractException("Request vacío.");
-        if (r.getStationId() == null) throw new InvalidContractException("stationId es obligatorio.");
         if (r.getSeries() == null || r.getSeries().trim().isEmpty()) throw new InvalidContractException("series es obligatorio.");
         if (r.getPriceList() == null) throw new InvalidContractException("priceList es obligatorio.");
         if (r.getPaymentType() == null) throw new InvalidContractException("paymentType es obligatorio.");
