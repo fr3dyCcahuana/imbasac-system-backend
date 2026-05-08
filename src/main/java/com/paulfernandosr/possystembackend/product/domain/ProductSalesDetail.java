@@ -13,6 +13,8 @@ public class ProductSalesDetail {
     private String sku;
     private String barcode;
     private String name;
+    private String brand;
+    private String model;
     private String category;
     private String warehouseLocation;
     private String presentation;

@@ -95,6 +95,7 @@ public class ProductRestController {
     @GetMapping("/sales-detail")
     public ResponseEntity<SuccessResponse<Collection<ProductSalesDetail>>> getSalesDetailPage(
             @RequestParam(defaultValue = "") String query,
+            @RequestParam(defaultValue = "") String subQuery,
             @RequestParam(defaultValue = "") String category,
             @RequestParam(defaultValue = "false") boolean onlyWithStock,
             @RequestParam(defaultValue = "A") String priceList,
@@ -103,7 +104,7 @@ public class ProductRestController {
             @RequestParam(defaultValue = "12") int size
     ) {
         Page<ProductSalesDetail> result = getProductSalesDetailPageUseCase.getPage(
-                query, category, onlyWithStock, priceList, context,
+                query, subQuery, category, onlyWithStock, priceList, context,
                 new Pageable(page, size)
         );
         for (ProductSalesDetail item : result.getContent()) {

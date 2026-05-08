@@ -8,6 +8,7 @@ public interface GetProductSalesDetailPageUseCase {
 
     Page<ProductSalesDetail> getPage(
             String query,
+            String subQuery,
             String category,
             boolean onlyWithStock,
             String priceList,

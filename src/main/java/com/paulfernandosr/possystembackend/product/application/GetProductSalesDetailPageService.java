@@ -23,6 +23,7 @@ public class GetProductSalesDetailPageService implements GetProductSalesDetailPa
     @Override
     public Page<ProductSalesDetail> getPage(
             String query,
+            String subQuery,
             String category,
             boolean onlyWithStock,
             String priceList,
@@ -41,6 +42,7 @@ public class GetProductSalesDetailPageService implements GetProductSalesDetailPa
 
         return repository.findPage(
                 query == null ? "" : query,
+                subQuery == null ? "" : subQuery,
                 category == null ? "" : category,
                 onlyWithStock,
                 pl,

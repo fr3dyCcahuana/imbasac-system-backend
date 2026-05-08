@@ -25,6 +25,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
     @Override
     public Page<ProductSalesDetail> findPage(
             String query,
+            String subQuery,
             String category,
             boolean onlyWithStock,
             String priceList,
@@ -32,6 +33,8 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
             Pageable pageable
     ) {
         String like = QueryMapper.formatAsLikeParam(query);
+        String sub = subQuery == null ? "" : subQuery.trim();
+        String subLike = QueryMapper.formatAsLikeParam(sub);
         String cat = category == null ? "" : category.trim();
         String pl = priceList == null ? "A" : priceList.trim().toUpperCase();
         String ctx = context == null ? "PROFORMA" : context.trim().toUpperCase();
@@ -59,6 +62,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                   FROM product p
                   LEFT JOIN product_stock ps ON ps.product_id = p.id
                   WHERE (p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ?)
+                    AND (? = '' OR p.name ILIKE ?)
                     AND (? = '' OR p.category = ?)
                     AND (? <> 'SALE' OR p.facturable_sunat = TRUE)
                 )
@@ -70,6 +74,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
         long totalElements = jdbcClient.sql(countSql)
                 .params(
                         like, like, like,
+                        sub, subLike,
                         cat, cat,
                         ctx,
                         onlyWithStock
@@ -84,6 +89,8 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                     p.sku,
                     p.barcode,
                     p.name,
+                    p.brand,
+                    p.model,
                     p.category,
                     p.warehouse_location,
                     p.presentation,
@@ -122,11 +129,12 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                   FROM product p
                   LEFT JOIN product_stock ps ON ps.product_id = p.id
                   WHERE (p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ?)
+                    AND (? = '' OR p.name ILIKE ?)
                     AND (? = '' OR p.category = ?)
                     AND (? <> 'SALE' OR p.facturable_sunat = TRUE)
                 )
                 SELECT
-                  id, sku, barcode, name, category, warehouse_location, presentation, factor,
+                  id, sku, barcode, name, brand, model, category, warehouse_location, presentation, factor,
                   manage_by_serial, compatibility, gift_allowed,
                   affects_stock, facturable_sunat,
                   unit_price,
@@ -145,6 +153,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                 .params(
                         pl,
                         like, like, like,
+                        sub, subLike,
                         cat, cat,
                         ctx,
                         onlyWithStock,
@@ -156,6 +165,8 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                         .sku(rs.getString("sku"))
                         .barcode(rs.getString("barcode"))
                         .name(rs.getString("name"))
+                        .brand(rs.getString("brand"))
+                        .model(rs.getString("model"))
                         .category(rs.getString("category"))
                         .warehouseLocation(rs.getString("warehouse_location"))
                         .presentation(rs.getString("presentation"))

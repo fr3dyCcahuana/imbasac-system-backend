@@ -8,6 +8,7 @@ public interface ProductSalesDetailRepository {
 
     Page<ProductSalesDetail> findPage(
             String query,
+            String subQuery,
             String category,
             boolean onlyWithStock,
             String priceList,
