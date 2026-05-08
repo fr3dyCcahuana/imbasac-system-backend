@@ -16,7 +16,7 @@ public class VehicleSpecsRow {
     private String vehicleType;
     private String bodywork;
 
-    private BigDecimal engineCapacity;
+    private String engineCapacity;
     private String fuel;
     private Integer cylinders;
 
@@ -25,7 +25,7 @@ public class VehicleSpecsRow {
     private BigDecimal grossWeight;
 
     private String vehicleClass;
-    private BigDecimal enginePower;
+    private String enginePower;
     private String rollingForm;
 
     private Integer seats;

@@ -16,7 +16,7 @@ public class VehicleSpecsDto {
     private String vehicleType;   // MOTOR | MOTOCICLETA
     private String bodywork;
 
-    private BigDecimal engineCapacity;
+    private String engineCapacity;
     private String fuel;
     private Integer cylinders;
 
@@ -26,7 +26,7 @@ public class VehicleSpecsDto {
 
     // Solo MOTOCICLETA
     private String vehicleClass;
-    private BigDecimal enginePower;
+    private String enginePower;
     private String rollingForm;
 
     private Integer seats;

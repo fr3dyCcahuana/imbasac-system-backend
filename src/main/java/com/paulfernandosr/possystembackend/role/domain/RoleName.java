@@ -4,7 +4,8 @@ public enum RoleName {
     ADMINISTRATOR(false),
     CASHIER(true),
     WHOLESALER(false),
-    WAREHOUSE(false);
+    WAREHOUSE(false),
+    CLIENTE(false);
 
     private final boolean requiresCashSession;
 
