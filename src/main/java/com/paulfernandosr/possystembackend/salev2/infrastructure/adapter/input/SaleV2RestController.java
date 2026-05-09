@@ -22,11 +22,13 @@ import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.d
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2SunatEmissionResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.VoidSaleV2Request;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.security.Principal;
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/sales/v2")
@@ -89,10 +91,12 @@ public class SaleV2RestController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String sunatStatus,
             @RequestParam(required = false) String editStatus,
-            @RequestParam(required = false) String paymentType
+            @RequestParam(required = false) String paymentType,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo
     ) {
         return ResponseEntity.ok(SuccessResponse.ok(
-                getSalesV2PageUseCase.findPage(query, docType, series, number, status, sunatStatus, editStatus, paymentType, page, size)
+                getSalesV2PageUseCase.findPage(query, docType, series, number, status, sunatStatus, editStatus, paymentType, dateFrom, dateTo, page, size)
         ));
     }
 

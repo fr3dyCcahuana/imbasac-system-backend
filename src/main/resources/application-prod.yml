@@ -44,6 +44,14 @@ integration:
     debug-enabled: false
     network-log-enabled: false
     debug-dir: /var/log/pos-backend/mtc-debug
+    proxy-enabled: true
+    proxy-server: socks5://127.0.0.1:1080
+    proxy-bypass: localhost,127.0.0.1
+  customer-lookup:
+    proxy-enabled: true
+    proxy-server: socks5://127.0.0.1:1080
+    connect-timeout-ms: 30000
+    read-timeout-ms: 60000
 
   guide-remission:
     base-url: http://127.0.0.1:8093/API_SUNAT_GUIAS

@@ -2,6 +2,7 @@ package com.paulfernandosr.possystembackend.salev2.domain.port.output;
 
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface SaleV2QueryRepository {
@@ -13,7 +14,9 @@ public interface SaleV2QueryRepository {
                     String status,
                     String sunatStatus,
                     String editStatus,
-                    String paymentType);
+                    String paymentType,
+                    LocalDate dateFrom,
+                    LocalDate dateTo);
 
     List<SaleV2SummaryResponse> findSalesPage(String likeParam,
                                               String docType,
@@ -23,6 +26,8 @@ public interface SaleV2QueryRepository {
                                               String sunatStatus,
                                               String editStatus,
                                               String paymentType,
+                                              LocalDate dateFrom,
+                                              LocalDate dateTo,
                                               int limit,
                                               int offset);
 

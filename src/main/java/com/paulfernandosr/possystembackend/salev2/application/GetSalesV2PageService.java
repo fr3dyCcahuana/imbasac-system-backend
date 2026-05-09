@@ -10,6 +10,7 @@ import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.d
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,6 +37,8 @@ public class GetSalesV2PageService implements GetSalesV2PageUseCase {
                                                         String sunatStatus,
                                                         String editStatus,
                                                         String paymentType,
+                                                        LocalDate dateFrom,
+                                                        LocalDate dateTo,
                                                         int page,
                                                         int size) {
         int safePage = Math.max(page, 0);
@@ -48,6 +51,7 @@ public class GetSalesV2PageService implements GetSalesV2PageUseCase {
         String normalizedSunatStatus = normalizeEnum(sunatStatus, ALLOWED_SUNAT_STATUSES, "sunatStatus", "NO_APLICA, NO_ENVIADO, ACEPTADO, RECHAZADO o ERROR");
         String normalizedEditStatus = normalizeEnum(editStatus, ALLOWED_EDIT_STATUSES, "editStatus", "NO_EDITADA o EDITADA");
         String normalizedPaymentType = normalizeEnum(paymentType, ALLOWED_PAYMENT_TYPES, "paymentType", "CONTADO o CREDITO");
+        validateDateRange(dateFrom, dateTo);
 
         long total = saleV2QueryRepository.countSales(
                 like,
@@ -57,7 +61,9 @@ public class GetSalesV2PageService implements GetSalesV2PageUseCase {
                 normalizedStatus,
                 normalizedSunatStatus,
                 normalizedEditStatus,
-                normalizedPaymentType
+                normalizedPaymentType,
+                dateFrom,
+                dateTo
         );
         int totalPages = (int) Math.ceil(total / (double) safeSize);
 
@@ -70,6 +76,8 @@ public class GetSalesV2PageService implements GetSalesV2PageUseCase {
                 normalizedSunatStatus,
                 normalizedEditStatus,
                 normalizedPaymentType,
+                dateFrom,
+                dateTo,
                 safeSize,
                 safePage * safeSize
         );
@@ -98,6 +106,12 @@ public class GetSalesV2PageService implements GetSalesV2PageUseCase {
                 .payload(rows)
                 .metadata(meta)
                 .build();
+    }
+
+    private void validateDateRange(LocalDate dateFrom, LocalDate dateTo) {
+        if (dateFrom != null && dateTo != null && dateFrom.isAfter(dateTo)) {
+            throw new InvalidSaleV2Exception("dateFrom no puede ser mayor que dateTo.");
+        }
     }
 
     private String toLike(String q) {

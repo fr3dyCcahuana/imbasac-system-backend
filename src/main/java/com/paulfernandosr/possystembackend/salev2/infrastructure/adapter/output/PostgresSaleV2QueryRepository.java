@@ -8,6 +8,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -27,7 +28,9 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                                           String status,
                                           String sunatStatus,
                                           String editStatus,
-                                          String paymentType) {
+                                          String paymentType,
+                                          LocalDate dateFrom,
+                                          LocalDate dateTo) {
         if (docType != null && !docType.isBlank()) {
             sql.append(" AND s.doc_type = ? ");
             params.add(docType);
@@ -61,6 +64,16 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
         if (paymentType != null && !paymentType.isBlank()) {
             sql.append(" AND s.payment_type = ? ");
             params.add(paymentType);
+        }
+
+        if (dateFrom != null) {
+            sql.append(" AND s.issue_date >= ? ");
+            params.add(dateFrom);
+        }
+
+        if (dateTo != null) {
+            sql.append(" AND s.issue_date <= ? ");
+            params.add(dateTo);
         }
 
         sql.append("""
@@ -115,7 +128,9 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                            String status,
                            String sunatStatus,
                            String editStatus,
-                           String paymentType) {
+                           String paymentType,
+                           LocalDate dateFrom,
+                           LocalDate dateTo) {
         StringBuilder sql = new StringBuilder("""
         SELECT COUNT(1)
           FROM sale s
@@ -123,7 +138,7 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
     """);
 
         List<Object> params = new ArrayList<>();
-        appendCommonSalesFilters(sql, params, likeParam, docType, series, number, status, sunatStatus, editStatus, paymentType);
+        appendCommonSalesFilters(sql, params, likeParam, docType, series, number, status, sunatStatus, editStatus, paymentType, dateFrom, dateTo);
 
         return jdbcClient.sql(sql.toString())
                 .params(params)
@@ -140,6 +155,8 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                                                      String sunatStatus,
                                                      String editStatus,
                                                      String paymentType,
+                                                     LocalDate dateFrom,
+                                                     LocalDate dateTo,
                                                      int limit,
                                                      int offset) {
         StringBuilder sql = new StringBuilder("""
@@ -171,7 +188,7 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
     """);
 
         List<Object> params = new ArrayList<>();
-        appendCommonSalesFilters(sql, params, likeParam, docType, series, number, status, sunatStatus, editStatus, paymentType);
+        appendCommonSalesFilters(sql, params, likeParam, docType, series, number, status, sunatStatus, editStatus, paymentType, dateFrom, dateTo);
 
         sql.append("""
         ORDER BY s.issue_date DESC, s.id DESC

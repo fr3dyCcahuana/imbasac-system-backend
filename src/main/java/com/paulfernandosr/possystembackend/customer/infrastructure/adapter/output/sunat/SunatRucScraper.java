@@ -8,9 +8,11 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.TimeoutError;
 import com.microsoft.playwright.options.LoadState;
+import com.microsoft.playwright.options.Proxy;
 import com.microsoft.playwright.options.WaitUntilState;
 import com.paulfernandosr.possystembackend.customer.infrastructure.adapter.output.apisnet.JuridicalPerson;
 import com.paulfernandosr.possystembackend.customer.infrastructure.adapter.output.apisnet.JuridicalPersonLocal;
+import com.paulfernandosr.possystembackend.customer.infrastructure.adapter.output.config.CustomerLookupProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -55,11 +57,14 @@ public class SunatRucScraper {
 
     private final RestClient sunatRucRestClient;
     private final SunatAddressParser addressParser;
+    private final CustomerLookupProperties lookupProperties;
 
     public SunatRucScraper(@Qualifier("sunatRucRestClient") RestClient sunatRucRestClient,
-                           SunatAddressParser addressParser) {
+                           SunatAddressParser addressParser,
+                           CustomerLookupProperties lookupProperties) {
         this.sunatRucRestClient = sunatRucRestClient;
         this.addressParser = addressParser;
+        this.lookupProperties = lookupProperties;
     }
 
     public Optional<JuridicalPerson> findByRuc(String ruc) {
@@ -84,7 +89,21 @@ public class SunatRucScraper {
         try (Playwright playwright = Playwright.create()) {
             BrowserType.LaunchOptions launchOptions = new BrowserType.LaunchOptions()
                     .setHeadless(true)
-                    .setTimeout(35_000);
+                    .setTimeout(35_000)
+                    .setArgs(List.of(
+                            "--no-sandbox",
+                            "--disable-setuid-sandbox",
+                            "--disable-dev-shm-usage",
+                            "--disable-gpu"
+                    ));
+
+            if (lookupProperties.isProxyEnabled()
+                    && lookupProperties.getProxyServer() != null
+                    && !lookupProperties.getProxyServer().isBlank()) {
+
+                launchOptions.setProxy(new Proxy(lookupProperties.getProxyServer()));
+                log.info("SUNAT RUC: Playwright usando proxy {}", lookupProperties.getProxyServer());
+            }
 
             try (Browser browser = playwright.chromium().launch(launchOptions)) {
                 Browser.NewContextOptions contextOptions = new Browser.NewContextOptions()

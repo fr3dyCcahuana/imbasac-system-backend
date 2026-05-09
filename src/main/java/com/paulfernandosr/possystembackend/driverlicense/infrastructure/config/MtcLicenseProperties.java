@@ -6,9 +6,15 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class MtcLicenseProperties {
 
     private String searchUrl = "https://slcp.mtc.gob.pe/";
-    private boolean headless = false;
-    private int timeoutMs = 30000;
+    private boolean headless = true;
+    private int timeoutMs = 90000;
     private long sessionTtlSeconds = 120L;
+
+    private boolean proxyEnabled = false;
+    private String proxyServer;
+    private String proxyBypass;
+    private String proxyUsername;
+    private String proxyPassword;
 
     /**
      * Directorio donde guardar evidencia de debug:
@@ -46,6 +52,46 @@ public class MtcLicenseProperties {
 
     public void setSessionTtlSeconds(long sessionTtlSeconds) {
         this.sessionTtlSeconds = sessionTtlSeconds;
+    }
+
+    public boolean isProxyEnabled() {
+        return proxyEnabled;
+    }
+
+    public void setProxyEnabled(boolean proxyEnabled) {
+        this.proxyEnabled = proxyEnabled;
+    }
+
+    public String getProxyServer() {
+        return proxyServer;
+    }
+
+    public void setProxyServer(String proxyServer) {
+        this.proxyServer = proxyServer;
+    }
+
+    public String getProxyBypass() {
+        return proxyBypass;
+    }
+
+    public void setProxyBypass(String proxyBypass) {
+        this.proxyBypass = proxyBypass;
+    }
+
+    public String getProxyUsername() {
+        return proxyUsername;
+    }
+
+    public void setProxyUsername(String proxyUsername) {
+        this.proxyUsername = proxyUsername;
+    }
+
+    public String getProxyPassword() {
+        return proxyPassword;
+    }
+
+    public void setProxyPassword(String proxyPassword) {
+        this.proxyPassword = proxyPassword;
     }
 
     public String getDebugDir() {
