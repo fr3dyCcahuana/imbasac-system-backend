@@ -27,6 +27,7 @@ public class ProformaItemRowMapper implements RowMapper<ProformaItem> {
                 .affectsStock(rs.getBoolean("affects_stock"))
                 .createdAt(rs.getTimestamp("created_at").toLocalDateTime())
                 .warehouseLocation(rs.getString("warehouse_location"))
+                .stockAvailable(rs.getBigDecimal("stock_available"))
                 .build();
     }
 }

@@ -83,5 +83,11 @@ public class ProformaV2Response {
         private Boolean facturableSunat;
         private Boolean affectsStock;
         private String warehouseLocation;
+
+        /**
+         * Stock real actual en almacén. Este valor no incluye la cantidad de la proforma;
+         * el frontend debe sumar quantity para calcular el máximo editable si corresponde.
+         */
+        private BigDecimal stockAvailable;
     }
 }

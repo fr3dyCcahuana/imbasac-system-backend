@@ -33,4 +33,11 @@ public class ProformaItem {
 
     private LocalDateTime createdAt;
     private String warehouseLocation;
+
+    /**
+     * Stock real actual del producto en almacén al momento de consultar la proforma.
+     * Para productos serializados se calcula contando unidades EN_ALMACEN.
+     * Para productos no serializados se toma desde product_stock.quantity_on_hand.
+     */
+    private BigDecimal stockAvailable;
 }

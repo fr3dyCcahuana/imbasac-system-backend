@@ -69,6 +69,7 @@ public class ProformaMapper {
                 .facturableSunat(it.getFacturableSunat())
                 .affectsStock(it.getAffectsStock())
                 .warehouseLocation(it.getWarehouseLocation())
+                .stockAvailable(it.getStockAvailable())
                 .build();
     }
 }

@@ -67,9 +67,25 @@ public class PostgresProformaItemRepository implements ProformaItemRepository {
         String sql = """
           SELECT
             pi.*,
-            p.warehouse_location AS warehouse_location
+            p.warehouse_location AS warehouse_location,
+            CASE
+              WHEN p.manage_by_serial = TRUE THEN COALESCE(su_agg.serial_qty, 0)
+              ELSE COALESCE(ps.quantity_on_hand, 0)
+            END AS stock_available
           FROM proforma_item pi
-          JOIN product p ON p.id = pi.product_id
+          JOIN product p
+            ON p.id = pi.product_id
+          LEFT JOIN product_stock ps
+            ON ps.product_id = p.id
+          LEFT JOIN (
+            SELECT
+              product_id,
+              COUNT(*)::numeric(14,3) AS serial_qty
+            FROM product_serial_unit
+            WHERE status = 'EN_ALMACEN'
+            GROUP BY product_id
+          ) su_agg
+            ON su_agg.product_id = p.id
           WHERE pi.proforma_id = ?
           ORDER BY pi.line_number ASC
           """;
