@@ -198,18 +198,18 @@ class CounterSaleSunatCombinationComposer {
     }
 
     private void ensureCompatible(CounterSaleDetailResponse anchor, CounterSaleDetailResponse current, List<String> errors) {
-        if (!Objects.equals(anchor.getStationId(), current.getStationId())) {
-            errors.add("Las operaciones de ventanilla deben pertenecer a la misma estación. counterSaleId=" + current.getCounterSaleId());
-        }
         if (!Objects.equals(blank(anchor.getCurrency()), blank(current.getCurrency()))) {
             errors.add("Las operaciones de ventanilla deben compartir la misma moneda. counterSaleId=" + current.getCounterSaleId());
         }
+
         if (!Objects.equals(blank(anchor.getTaxStatus()), blank(current.getTaxStatus()))) {
             errors.add("Las operaciones de ventanilla deben compartir el mismo taxStatus. counterSaleId=" + current.getCounterSaleId());
         }
+
         if (nz(anchor.getIgvRate()).compareTo(nz(current.getIgvRate())) != 0) {
             errors.add("Las operaciones de ventanilla deben compartir el mismo igvRate. counterSaleId=" + current.getCounterSaleId());
         }
+
         if (!Objects.equals(Boolean.TRUE.equals(anchor.getIgvIncluded()), Boolean.TRUE.equals(current.getIgvIncluded()))) {
             errors.add("Las operaciones de ventanilla deben compartir el mismo igvIncluded. counterSaleId=" + current.getCounterSaleId());
         }

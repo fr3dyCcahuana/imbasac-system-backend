@@ -53,7 +53,7 @@ public class EmitCounterSaleSunatCombinationService implements EmitCounterSaleSu
         if (!Boolean.TRUE.equals(result.getCanEmit())) {
             throw new InvalidCounterSaleException("La combinación de counter-sales no es emitible: " + result.getValidationMessages());
         }
-
+        lockSelectedCounterSalesAndAssertAvailable(result);
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new InvalidCounterSaleException("Usuario inválido: " + username));
 
@@ -249,6 +249,64 @@ public class EmitCounterSaleSunatCombinationService implements EmitCounterSaleSu
             updateSaleSunat(generatedSaleId, "ERROR", null, ex.getMessage(), null, null, null, null, LocalDateTime.now());
             throw new InvalidCounterSaleException("No se pudo emitir la venta diaria: " + ex.getMessage());
         }
+    }
+
+    private void lockSelectedCounterSalesAndAssertAvailable(
+            CounterSaleSunatCombinationComposer.ComposedResult result
+    ) {
+        List<Long> ids = result.getSelectedCounterSales()
+                .stream()
+                .map(row -> row.getDetail().getCounterSaleId())
+                .toList();
+
+        if (ids.isEmpty()) {
+            throw new InvalidCounterSaleException("No hay ventas de ventanilla seleccionadas para emitir.");
+        }
+
+        String placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+
+        String sql = """
+            SELECT id,
+                   status,
+                   COALESCE(associated_to_sunat, FALSE) AS associated_to_sunat
+              FROM counter_sale
+             WHERE id IN (%s)
+             FOR UPDATE
+            """.formatted(placeholders);
+
+        List<CounterSaleLockRow> rows = jdbcClient.sql(sql)
+                .params(ids.toArray())
+                .query((rs, rowNum) -> new CounterSaleLockRow(
+                        rs.getLong("id"),
+                        rs.getString("status"),
+                        rs.getBoolean("associated_to_sunat")
+                ))
+                .list();
+
+        if (rows.size() != ids.size()) {
+            throw new InvalidCounterSaleException("Una o más ventas de ventanilla ya no existen o no pudieron bloquearse.");
+        }
+
+        for (CounterSaleLockRow row : rows) {
+            if (!"EMITIDA".equalsIgnoreCase(row.status())) {
+                throw new InvalidCounterSaleException(
+                        "La venta de ventanilla ya no está EMITIDA. counterSaleId=" + row.id()
+                );
+            }
+
+            if (row.associatedToSunat()) {
+                throw new InvalidCounterSaleException(
+                        "La venta de ventanilla ya fue asociada a SUNAT. counterSaleId=" + row.id()
+                );
+            }
+        }
+    }
+
+    private record CounterSaleLockRow(
+            Long id,
+            String status,
+            boolean associatedToSunat
+    ) {
     }
 
     private Long insertCombo(CounterSaleSunatCombinationComposer.ComposedResult result, Long saleId, User user) {
