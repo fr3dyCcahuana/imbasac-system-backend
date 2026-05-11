@@ -174,7 +174,9 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
                        chassis_number AS chassisNumber,
                        engine_number AS engineNumber,
                        color,
-                       year_make AS yearMake
+                       year_make AS yearMake,
+                       dua_number AS duaNumber,
+                       dua_item AS duaItem
                   FROM product_serial_unit
                  WHERE id = ?
             """;
@@ -186,7 +188,9 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
                             rs.getString("chassisNumber"),
                             rs.getString("engineNumber"),
                             rs.getString("color"),
-                            (Integer) rs.getObject("yearMake")
+                            (Integer) rs.getObject("yearMake"),
+                            rs.getString("duaNumber"),
+                            (Integer) rs.getObject("duaItem")
                     })
                     .optional()
                     .orElse(null);
@@ -197,6 +201,8 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
                 header.getItem().setEngineNumber((String) unit[2]);
                 header.getItem().setColor((String) unit[3]);
                 header.getItem().setYearMake((Integer) unit[4]);
+                header.getItem().setDuaNumber((String) unit[5]);
+                header.getItem().setDuaItem((Integer) unit[6]);
             }
         }
 

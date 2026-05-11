@@ -78,5 +78,7 @@ public class ContractDetailResponse {
         private String engineNumber;
         private String color;
         private Integer yearMake;
+        private String duaNumber;
+        private Integer duaItem;
     }
 }

@@ -60,13 +60,13 @@ public class CorrectProductSerialUnitService implements CorrectProductSerialUnit
                 .saleItemId(before.getSaleItemId())
                 .stockAdjustmentId(before.getStockAdjustmentId())
                 .status(before.getStatus())
-                .vin(norm(request.getVin()))
-                .chassisNumber(norm(request.getChassisNumber()))
-                .engineNumber(norm(request.getEngineNumber()))
-                .color(norm(request.getColor()))
-                .yearMake(request.getYearMake())
-                .duaNumber(norm(request.getDuaNumber()))
-                .duaItem(request.getDuaItem())
+                .vin(preserveIfNull(request.getVin(), before.getVin()))
+                .chassisNumber(preserveIfNull(request.getChassisNumber(), before.getChassisNumber()))
+                .engineNumber(preserveIfNull(request.getEngineNumber(), before.getEngineNumber()))
+                .color(preserveIfNull(request.getColor(), before.getColor()))
+                .yearMake(request.getYearMake() != null ? request.getYearMake() : before.getYearMake())
+                .duaNumber(preserveIfNull(request.getDuaNumber(), before.getDuaNumber()))
+                .duaItem(request.getDuaItem() != null ? request.getDuaItem() : before.getDuaItem())
                 .createdAt(before.getCreatedAt())
                 .updatedAt(before.getUpdatedAt())
                 .build();
@@ -192,6 +192,14 @@ public class CorrectProductSerialUnitService implements CorrectProductSerialUnit
 
     private String category(Product product) {
         return nzs(product.getCategory()).trim().toUpperCase();
+    }
+
+    private String preserveIfNull(String newValue, String currentValue) {
+        if (newValue == null) {
+            return currentValue;
+        }
+
+        return norm(newValue);
     }
 
     private String norm(String value) {
