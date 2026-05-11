@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Getter
@@ -70,8 +69,7 @@ public class Customer {
      * - Debe existir 1 fiscal (fiscal=true) si se quiere generar guía.
      * - Puede incluir locales anexos (fiscal=false).
      */
-    @Builder.Default
-    private List<CustomerAddress> addresses = new ArrayList<>();
+    private List<CustomerAddress> addresses;
 
     private boolean enabled;
 }

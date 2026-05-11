@@ -6,10 +6,13 @@ import com.paulfernandosr.possystembackend.customer.domain.Customer;
 import com.paulfernandosr.possystembackend.customer.domain.CustomerAddress;
 import com.paulfernandosr.possystembackend.customer.domain.DocumentType;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface CustomerRepository {
     void create(Customer customer);
+
+    void update(Customer customer);
 
     Optional<Customer> findById(Long customerId);
 
@@ -19,6 +22,8 @@ public interface CustomerRepository {
 
     boolean existsByDocument(DocumentType documentType, String documentNumber);
 
+    boolean existsByDocumentExcludingId(DocumentType documentType, String documentNumber, Long excludedCustomerId);
+
     boolean existsById(Long customerId);
 
     boolean existsAddress(Long customerId, String address, String ubigeo);
@@ -26,6 +31,8 @@ public interface CustomerRepository {
     boolean hasFiscalAddress(Long customerId);
 
     CustomerAddress createAddress(Long customerId, CustomerAddress customerAddress);
+
+    void replaceAddresses(Long customerId, List<CustomerAddress> addresses);
 
     void updateResolvedData(Long customerId, Customer customer);
 }

@@ -111,6 +111,80 @@ public class PostgresCustomerRepository implements CustomerRepository {
         createCustomerAddresses(customer);
     }
 
+    @Override
+    public void update(Customer customer) {
+        String updateCustomerSql = """
+                UPDATE customers
+                SET legal_name = ?,
+                    document_type = ?,
+                    document_number = ?,
+                    given_names = ?,
+                    last_name = ?,
+                    second_last_name = ?,
+                    address = ?,
+                    ubigeo = ?,
+                    department = ?,
+                    province = ?,
+                    district = ?,
+                    sunat_status = ?,
+                    sunat_condition = ?,
+                    street_type = ?,
+                    street_name = ?,
+                    zone_code = ?,
+                    zone_type = ?,
+                    address_number = ?,
+                    interior = ?,
+                    lot = ?,
+                    apartment = ?,
+                    block = ?,
+                    kilometer = ?,
+                    retention_agent = ?,
+                    good_contributor = ?,
+                    sunat_type = ?,
+                    economic_activity = ?,
+                    number_of_employees = ?,
+                    billing_type = ?,
+                    accounting_type = ?,
+                    foreign_trade = ?
+                WHERE id = ?
+                """;
+
+        jdbcClient.sql(updateCustomerSql)
+                .params(customer.getLegalName(),
+                        customer.getDocumentType().toString(),
+                        customer.getDocumentNumber(),
+                        customer.getGivenNames(),
+                        customer.getLastName(),
+                        customer.getSecondLastName(),
+                        customer.getAddress(),
+                        customer.getUbigeo(),
+                        customer.getDepartment(),
+                        customer.getProvince(),
+                        customer.getDistrict(),
+                        customer.getSunatStatus(),
+                        customer.getSunatCondition(),
+                        customer.getStreetType(),
+                        customer.getStreetName(),
+                        customer.getZoneCode(),
+                        customer.getZoneType(),
+                        customer.getAddressNumber(),
+                        customer.getInterior(),
+                        customer.getLot(),
+                        customer.getApartment(),
+                        customer.getBlock(),
+                        customer.getKilometer(),
+                        customer.isRetentionAgent(),
+                        customer.isGoodContributor(),
+                        customer.getSunatType(),
+                        customer.getEconomicActivity(),
+                        customer.getNumberOfEmployees(),
+                        customer.getBillingType(),
+                        customer.getAccountingType(),
+                        customer.getForeignTrade(),
+                        customer.getId())
+                .update();
+    }
+
     private void createCustomerAddresses(Customer customer) {
         if (customer.getId() == null) return;
 
@@ -372,6 +446,23 @@ public class PostgresCustomerRepository implements CustomerRepository {
     }
 
     @Override
+    public boolean existsByDocumentExcludingId(DocumentType documentType, String documentNumber, Long excludedCustomerId) {
+        String selectExistsByDocumentExcludingIdSql = """
+                    SELECT EXISTS(
+                        SELECT 1 FROM customers
+                        WHERE document_type = ?
+                          AND document_number = ?
+                          AND id <> ?
+                    )
+                """;
+
+        return jdbcClient.sql(selectExistsByDocumentExcludingIdSql)
+                .params(documentType.toString(), documentNumber, excludedCustomerId)
+                .query(Boolean.class)
+                .single();
+    }
+
+    @Override
     public boolean existsById(Long customerId) {
         String selectExistsCustomerByIdSql = """
                     SELECT EXISTS(
@@ -476,6 +567,63 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 .param(customerId)
                 .query(Integer.class)
                 .single();
+    }
+
+    @Override
+    public void replaceAddresses(Long customerId, List<CustomerAddress> addresses) {
+        if (addresses == null) return;
+
+        String deleteAddressesSql = """
+                    DELETE FROM customer_address
+                    WHERE customer_id = ?
+                """;
+
+        jdbcClient.sql(deleteAddressesSql)
+                .param(customerId)
+                .update();
+
+        for (CustomerAddress address : addresses) {
+            if (address == null) continue;
+            if (address.getAddress() == null || address.getAddress().isBlank()) continue;
+
+            insertCustomerAddress(customerId, address);
+        }
+    }
+
+    private void insertCustomerAddress(Long customerId, CustomerAddress address) {
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+
+        String insertAddressSql = """
+                INSERT INTO customer_address(
+                    customer_id,
+                    address,
+                    ubigeo,
+                    department,
+                    province,
+                    district,
+                    fiscal,
+                    enabled,
+                    position
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+
+        jdbcClient.sql(insertAddressSql)
+                .params(customerId,
+                        address.getAddress(),
+                        address.getUbigeo(),
+                        address.getDepartment(),
+                        address.getProvince(),
+                        address.getDistrict(),
+                        address.isFiscal(),
+                        address.isEnabled(),
+                        address.getPosition())
+                .update(keyHolder, "id");
+
+        Optional.ofNullable(keyHolder.getKey())
+                .map(Number::longValue)
+                .ifPresent(address::setId);
+
+        address.setCustomerId(customerId);
     }
 
     @Override
