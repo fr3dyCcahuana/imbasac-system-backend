@@ -10,6 +10,14 @@ public interface ProductSerialUnitRepository {
 
     ProductSerialUnit create(ProductSerialUnit unit);
 
+    Optional<ProductSerialUnit> lockById(Long serialUnitId);
+
+    ProductSerialUnit updateCorrection(ProductSerialUnit unit);
+
+    boolean existsCounterSaleLink(Long serialUnitId);
+
+    Optional<String> findContractCorrectionBlockReason(Long serialUnitId);
+
     Page<ProductSerialUnit> findPage(Long productId, String query, String status, Pageable pageable);
 
     // ✅ NUEVO (2026): soporte para ajustes manuales de stock

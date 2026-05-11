@@ -6,6 +6,7 @@ import com.paulfernandosr.possystembackend.common.infrastructure.mapper.PageMapp
 import com.paulfernandosr.possystembackend.common.infrastructure.response.SuccessResponse;
 import com.paulfernandosr.possystembackend.product.domain.ProductSerialUnit;
 import com.paulfernandosr.possystembackend.product.domain.port.input.CreateProductSerialUnitUseCase;
+import com.paulfernandosr.possystembackend.product.domain.port.input.CorrectProductSerialUnitUseCase;
 import com.paulfernandosr.possystembackend.product.domain.port.input.GetPageOfProductSerialUnitsUseCase;
 import jakarta.validation.Valid;
 import lombok.Getter;
@@ -15,7 +16,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.security.Principal;
 import java.util.Collection;
+import com.paulfernandosr.possystembackend.product.infrastructure.adapter.input.dto.ProductSerialUnitCorrectionRequest;
 
 @RestController
 @RequiredArgsConstructor
@@ -24,6 +27,7 @@ public class ProductSerialUnitRestController {
 
     private final CreateProductSerialUnitUseCase createProductSerialUnitUseCase;
     private final GetPageOfProductSerialUnitsUseCase getPageOfProductSerialUnitsUseCase;
+    private final CorrectProductSerialUnitUseCase correctProductSerialUnitUseCase;
 
     @PostMapping
     public ResponseEntity<SuccessResponse<ProductSerialUnit>> create(
@@ -45,6 +49,20 @@ public class ProductSerialUnitRestController {
         ProductSerialUnit created = createProductSerialUnitUseCase.create(productId, unit);
         URI location = URI.create("/products/" + productId + "/serial-units/" + created.getId());
         return ResponseEntity.created(location).body(SuccessResponse.ok(created));
+    }
+
+
+    @PutMapping("/{serialUnitId}/correction")
+    public ResponseEntity<SuccessResponse<ProductSerialUnit>> correct(
+            @PathVariable Long productId,
+            @PathVariable Long serialUnitId,
+            @Valid @RequestBody ProductSerialUnitCorrectionRequest body,
+            Principal principal
+    ) {
+        String username = principal == null ? null : principal.getName();
+        ProductSerialUnit corrected = correctProductSerialUnitUseCase.correct(productId, serialUnitId, body, username);
+
+        return ResponseEntity.ok(SuccessResponse.ok(corrected));
     }
 
     @GetMapping
