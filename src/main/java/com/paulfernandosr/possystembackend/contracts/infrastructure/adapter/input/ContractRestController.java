@@ -17,6 +17,7 @@ import java.security.Principal;
 public class ContractRestController {
 
     private final CreateContractUseCase createContractUseCase;
+    private final UpdateContractUseCase updateContractUseCase;
     private final ConfirmContractUseCase confirmContractUseCase;
     private final VoidContractUseCase voidContractUseCase;
     private final GetContractsPageUseCase getContractsPageUseCase;
@@ -37,6 +38,15 @@ public class ContractRestController {
     @GetMapping("/{id}")
     public ResponseEntity<SuccessResponse<ContractDetailResponse>> getById(@PathVariable("id") Long id) {
         return ResponseEntity.ok(SuccessResponse.ok(getContractUseCase.getById(id)));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<SuccessResponse<ContractDetailResponse>> update(@PathVariable("id") Long id,
+                                                                          @RequestBody ContractUpdateRequest request,
+                                                                          Principal principal) {
+        return ResponseEntity.ok(SuccessResponse.ok(
+                updateContractUseCase.update(id, request, principal.getName())
+        ));
     }
 
     @GetMapping

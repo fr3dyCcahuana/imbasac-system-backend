@@ -69,6 +69,14 @@ public class Purchase {
 
     private PurchaseSummary summary;
 
+    // Auditoría de edición
+    private String editReason;
+    private String editStatus;
+    private Integer editCount;
+    private LocalDateTime lastEditedAt;
+    private String lastEditedBy;
+    private String lastEditReason;
+
     // Detalle
     private List<PurchaseItem> items;
 }

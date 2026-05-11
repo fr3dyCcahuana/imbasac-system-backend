@@ -68,6 +68,17 @@ public class PostgresContractInstallmentRepository implements ContractInstallmen
     }
 
     @Override
+    public void deleteByContractId(Long contractId) {
+        String sql = """
+            DELETE FROM contract_installment
+             WHERE contract_id = ?
+        """;
+        jdbcClient.sql(sql)
+                .param(contractId)
+                .update();
+    }
+
+    @Override
     public LocalDate findLastDueDate(Long contractId) {
         String sql = """
             SELECT MAX(due_date)

@@ -97,4 +97,15 @@ public class PostgresContractCustomerProfileRepository implements ContractCustom
                 .optional()
                 .orElse(null);
     }
+    @Override
+    public void deleteByContractId(Long contractId) {
+        String sql = """
+            DELETE FROM contract_customer_profile
+             WHERE contract_id = ?
+        """;
+        jdbcClient.sql(sql)
+                .param(contractId)
+                .update();
+    }
+
 }

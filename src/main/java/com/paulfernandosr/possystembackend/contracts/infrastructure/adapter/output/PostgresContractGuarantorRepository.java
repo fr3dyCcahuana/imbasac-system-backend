@@ -72,4 +72,15 @@ public class PostgresContractGuarantorRepository implements ContractGuarantorRep
                 .optional()
                 .orElse(null);
     }
+    @Override
+    public void deleteByContractId(Long contractId) {
+        String sql = """
+            DELETE FROM contract_guarantor
+             WHERE contract_id = ?
+        """;
+        jdbcClient.sql(sql)
+                .param(contractId)
+                .update();
+    }
+
 }

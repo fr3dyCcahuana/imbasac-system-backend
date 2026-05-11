@@ -5,4 +5,5 @@ import com.paulfernandosr.possystembackend.contracts.domain.model.ContractCustom
 public interface ContractCustomerProfileRepository {
     void upsert(Long contractId, ContractCustomerProfile profile);
     ContractCustomerProfile findByContractId(Long contractId);
+    void deleteByContractId(Long contractId);
 }

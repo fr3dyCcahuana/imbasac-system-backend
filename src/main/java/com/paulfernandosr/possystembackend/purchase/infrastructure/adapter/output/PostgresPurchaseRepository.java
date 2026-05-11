@@ -290,7 +290,12 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                     p.updated_at,
                     p.delivery_guide_series,
                     p.delivery_guide_number,
-                    p.delivery_guide_company
+                    p.delivery_guide_company,
+                    p.edit_status,
+                    p.edit_count,
+                    p.last_edited_at,
+                    p.last_edited_by,
+                    p.last_edit_reason
                 FROM purchase p
                 WHERE p.id = ?
                 """;
@@ -336,6 +341,11 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                             .deliveryGuideSeries(rs.getString("delivery_guide_series"))
                             .deliveryGuideNumber(rs.getString("delivery_guide_number"))
                             .deliveryGuideCompany(rs.getString("delivery_guide_company"))
+                            .editStatus(rs.getString("edit_status"))
+                            .editCount(rs.getObject("edit_count", Integer.class))
+                            .lastEditedAt(rs.getTimestamp("last_edited_at") != null ? rs.getTimestamp("last_edited_at").toLocalDateTime() : null)
+                            .lastEditedBy(rs.getString("last_edited_by"))
+                            .lastEditReason(rs.getString("last_edit_reason"))
                             .build();
 
                     return List.of(purchase);
@@ -365,9 +375,14 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                     pi.total_cost,
                     pi.lot_code,
                     pi.expiration_date,
-                    pi.created_at
+                    pi.created_at,
+                    COALESCE(pi.status, 'ACTIVE') AS purchase_item_status,
+                    pi.removed_at,
+                    pi.removed_by,
+                    pi.edit_reason
                 FROM purchase_item pi
                 WHERE pi.purchase_id = ?
+                  AND COALESCE(pi.status, 'ACTIVE') = 'ACTIVE'
                 ORDER BY pi.line_number
                 """;
 
@@ -697,6 +712,292 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
 
     private static LocalDateTime toLocalDateTime(java.sql.Timestamp ts) {
         return ts != null ? ts.toLocalDateTime() : null;
+    }
+
+
+    @Override
+    @Transactional
+    public Optional<Purchase> findByIdWithItemsForUpdate(Long purchaseId) {
+        jdbcClient.sql("SELECT id FROM purchase WHERE id = ? FOR UPDATE")
+                .param(purchaseId)
+                .query(Long.class)
+                .optional();
+        return findByIdWithItems(purchaseId);
+    }
+
+    @Override
+    public boolean existsDocumentForAnotherPurchase(Long purchaseId,
+                                                    String supplierRuc,
+                                                    String documentType,
+                                                    String documentSeries,
+                                                    String documentNumber) {
+        String sql = """
+                SELECT COUNT(1)
+                  FROM purchase
+                 WHERE id <> ?
+                   AND supplier_ruc = ?
+                   AND document_type = ?
+                   AND document_series = ?
+                   AND document_number = ?
+                """;
+
+        Long count = jdbcClient.sql(sql)
+                .params(purchaseId, supplierRuc, documentType, documentSeries, documentNumber)
+                .query(Long.class)
+                .single();
+        return count != null && count > 0;
+    }
+
+    @Override
+    public void updateHeaderForEdit(Purchase purchase, String username, String editReason) {
+        String sql = """
+                UPDATE purchase
+                   SET document_type = ?,
+                       document_series = ?,
+                       document_number = ?,
+                       issue_date = ?,
+                       entry_date = ?,
+                       due_date = ?,
+                       currency = ?,
+                       exchange_rate = ?,
+                       payment_type = ?,
+                       credit_days = ?,
+                       supplier_ruc = ?,
+                       supplier_business_name = ?,
+                       supplier_address = ?,
+                       igv_rate = ?,
+                       igv_included = ?,
+                       apply_igv_to_cost = ?,
+                       discount_type = ?,
+                       discount_value = ?,
+                       freight_amount = ?,
+                       perception_amount = ?,
+                       subtotal = ?,
+                       igv_amount = ?,
+                       total = ?,
+                       notes = ?,
+                       delivery_guide_series = ?,
+                       delivery_guide_number = ?,
+                       delivery_guide_company = ?,
+                       updated_by = ?,
+                       updated_at = NOW(),
+                       edit_status = 'EDITADA',
+                       edit_count = COALESCE(edit_count, 0) + 1,
+                       last_edited_at = NOW(),
+                       last_edited_by = ?,
+                       last_edit_reason = ?
+                 WHERE id = ?
+                """;
+
+        try {
+            jdbcClient.sql(sql)
+                    .params(
+                            purchase.getDocumentType(),
+                            purchase.getDocumentSeries(),
+                            purchase.getDocumentNumber(),
+                            purchase.getIssueDate(),
+                            purchase.getEntryDate(),
+                            purchase.getDueDate(),
+                            purchase.getCurrency(),
+                            purchase.getExchangeRate(),
+                            purchase.getPaymentType(),
+                            resolveCreditDaysForUpdate(purchase.getPaymentType(), purchase.getCreditDays()),
+                            purchase.getSupplierRuc(),
+                            purchase.getSupplierBusinessName(),
+                            purchase.getSupplierAddress(),
+                            purchase.getIgvRate(),
+                            purchase.getIgvIncluded(),
+                            purchase.getApplyIgvToCost(),
+                            purchase.getDiscountType(),
+                            purchase.getDiscountValue(),
+                            purchase.getFreightAmount(),
+                            purchase.getPerceptionAmount(),
+                            purchase.getSubtotal(),
+                            purchase.getIgvAmount(),
+                            purchase.getTotal(),
+                            purchase.getNotes(),
+                            purchase.getDeliveryGuideSeries(),
+                            purchase.getDeliveryGuideNumber(),
+                            purchase.getDeliveryGuideCompany(),
+                            username,
+                            username,
+                            editReason,
+                            purchase.getId()
+                    )
+                    .update();
+        } catch (DuplicateKeyException ex) {
+            throw new DuplicatePurchaseDocumentException(
+                    "Ya existe una compra registrada con el mismo proveedor y documento ("
+                            + purchase.getSupplierRuc() + " - "
+                            + purchase.getDocumentType() + " "
+                            + purchase.getDocumentSeries() + "-"
+                            + purchase.getDocumentNumber() + ")."
+            );
+        }
+    }
+
+    @Override
+    public Long insertItem(Long purchaseId, PurchaseItem item) {
+        String sql = """
+                INSERT INTO purchase_item(
+                    purchase_id,
+                    line_number,
+                    product_id,
+                    description,
+                    presentation,
+                    quantity,
+                    unit_cost,
+                    discount_percent,
+                    discount_amount,
+                    igv_rate,
+                    igv_amount,
+                    freight_allocated,
+                    total_cost,
+                    lot_code,
+                    expiration_date,
+                    status
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+                RETURNING id
+                """;
+
+        Long id = jdbcClient.sql(sql)
+                .params(
+                        purchaseId,
+                        item.getLineNumber(),
+                        item.getProductId(),
+                        item.getDescription(),
+                        item.getPresentation(),
+                        item.getQuantity(),
+                        item.getUnitCost(),
+                        item.getDiscountPercent(),
+                        item.getDiscountAmount(),
+                        item.getIgvRate(),
+                        item.getIgvAmount(),
+                        item.getFreightAllocated(),
+                        item.getTotalCost(),
+                        item.getLotCode(),
+                        item.getExpirationDate()
+                )
+                .query(Long.class)
+                .single();
+
+        item.setId(id);
+        item.setPurchaseId(purchaseId);
+        return id;
+    }
+
+    @Override
+    public void updateItemForEdit(Long purchaseId, PurchaseItem item) {
+        String sql = """
+                UPDATE purchase_item
+                   SET line_number = ?,
+                       description = ?,
+                       presentation = ?,
+                       quantity = ?,
+                       unit_cost = ?,
+                       discount_percent = ?,
+                       discount_amount = ?,
+                       igv_rate = ?,
+                       igv_amount = ?,
+                       freight_allocated = ?,
+                       total_cost = ?,
+                       lot_code = ?,
+                       expiration_date = ?
+                 WHERE id = ?
+                   AND purchase_id = ?
+                   AND COALESCE(status, 'ACTIVE') = 'ACTIVE'
+                """;
+
+        jdbcClient.sql(sql)
+                .params(
+                        item.getLineNumber(),
+                        item.getDescription(),
+                        item.getPresentation(),
+                        item.getQuantity(),
+                        item.getUnitCost(),
+                        item.getDiscountPercent(),
+                        item.getDiscountAmount(),
+                        item.getIgvRate(),
+                        item.getIgvAmount(),
+                        item.getFreightAllocated(),
+                        item.getTotalCost(),
+                        item.getLotCode(),
+                        item.getExpirationDate(),
+                        item.getId(),
+                        purchaseId
+                )
+                .update();
+    }
+
+    @Override
+    public void markItemRemoved(Long purchaseId, Long purchaseItemId, String username, String editReason) {
+        String sql = """
+                UPDATE purchase_item
+                   SET status = 'REMOVED',
+                       removed_at = NOW(),
+                       removed_by = ?,
+                       edit_reason = ?
+                 WHERE id = ?
+                   AND purchase_id = ?
+                   AND COALESCE(status, 'ACTIVE') = 'ACTIVE'
+                """;
+
+        jdbcClient.sql(sql)
+                .params(username, editReason, purchaseItemId, purchaseId)
+                .update();
+    }
+
+    @Override
+    public BigDecimal findStockOnHand(Long productId) {
+        String sql = """
+                SELECT COALESCE(quantity_on_hand, 0)
+                  FROM product_stock
+                 WHERE product_id = ?
+                """;
+        return jdbcClient.sql(sql)
+                .param(productId)
+                .query(BigDecimal.class)
+                .optional()
+                .orElse(BigDecimal.ZERO);
+    }
+
+    @Override
+    public int getNextEditNumber(Long purchaseId) {
+        String sql = "SELECT COALESCE(edit_count, 0) + 1 FROM purchase WHERE id = ?";
+        return jdbcClient.sql(sql)
+                .param(purchaseId)
+                .query(Integer.class)
+                .single();
+    }
+
+    @Override
+    public void insertEditHistory(Long purchaseId,
+                                  int editNumber,
+                                  String editReason,
+                                  String editedBy,
+                                  String beforeSnapshotJson,
+                                  String afterSnapshotJson) {
+        String sql = """
+                INSERT INTO purchase_edit_history(
+                    purchase_id,
+                    edit_number,
+                    edit_reason,
+                    edited_by,
+                    edited_at,
+                    before_snapshot,
+                    after_snapshot
+                ) VALUES (?, ?, ?, ?, NOW(), ?::jsonb, ?::jsonb)
+                """;
+
+        jdbcClient.sql(sql)
+                .params(purchaseId, editNumber, editReason, editedBy, beforeSnapshotJson, afterSnapshotJson)
+                .update();
+    }
+
+    private static Integer resolveCreditDaysForUpdate(String paymentType, Integer creditDays) {
+        if (paymentType == null) return creditDays;
+        return "CONTADO".equalsIgnoreCase(paymentType) ? null : creditDays;
     }
 
     @Override

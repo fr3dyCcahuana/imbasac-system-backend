@@ -9,6 +9,10 @@ public interface ContractRepository {
 
     Contract findById(Long id);
 
+    Contract lockById(Long id);
+
+    void updateEditableFields(Contract contract, Long editedBy, String editedByUsername, String editReason);
+
     void updateStatusAndSale(Long contractId, ContractStatus status, Long saleId, String notes);
 
     void updateStatus(Long contractId, ContractStatus status, String notes);

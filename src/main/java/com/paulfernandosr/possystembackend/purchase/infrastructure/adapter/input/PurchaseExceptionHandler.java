@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.purchase.infrastructure.adapter.input;
 
 import com.paulfernandosr.possystembackend.purchase.domain.exception.PurchaseApiException;
+import com.paulfernandosr.possystembackend.purchase.domain.exception.DuplicatePurchaseDocumentException;
 import com.paulfernandosr.possystembackend.purchase.domain.exception.PurchaseFieldError;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -26,6 +27,32 @@ public class PurchaseExceptionHandler {
         body.put("timestamp", OffsetDateTime.now().toString());
         body.put("errors", ex.getErrors() == null ? List.of() : ex.getErrors());
         return ResponseEntity.status(ex.getStatus()).body(body);
+    }
+
+
+    @ExceptionHandler(DuplicatePurchaseDocumentException.class)
+    public ResponseEntity<Map<String, Object>> handleDuplicatePurchaseDocument(DuplicatePurchaseDocumentException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("status", 409);
+        body.put("code", "DUPLICATE_PURCHASE_DOCUMENT");
+        body.put("message", ex.getMessage());
+        body.put("timestamp", OffsetDateTime.now().toString());
+        body.put("errors", List.of());
+        return ResponseEntity.status(409).body(body);
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalState(IllegalStateException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("status", 422);
+        body.put("code", "INVALID_PURCHASE_STATE");
+        body.put("message", ex.getMessage());
+        body.put("timestamp", OffsetDateTime.now().toString());
+        body.put("errors", List.of(PurchaseFieldError.builder()
+                .path("")
+                .message(ex.getMessage())
+                .build()));
+        return ResponseEntity.status(422).body(body);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

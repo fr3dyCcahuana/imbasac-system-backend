@@ -20,9 +20,18 @@ public class PostgresPurchaseProductSerialUnitRepository implements ProductSeria
     public List<SerialIdentifierConflict> findExistingIdentifiers(Set<String> vins,
                                                                   Set<String> engineNumbers,
                                                                   Set<String> chassisNumbers) {
+        return findExistingIdentifiersExcluding(vins, engineNumbers, chassisNumbers, Set.of());
+    }
+
+    @Override
+    public List<SerialIdentifierConflict> findExistingIdentifiersExcluding(Set<String> vins,
+                                                                           Set<String> engineNumbers,
+                                                                           Set<String> chassisNumbers,
+                                                                           Set<Long> excludedSerialUnitIds) {
         Set<String> v = vins == null ? Set.of() : vins;
         Set<String> e = engineNumbers == null ? Set.of() : engineNumbers;
         Set<String> c = chassisNumbers == null ? Set.of() : chassisNumbers;
+        Set<Long> excluded = excludedSerialUnitIds == null ? Set.of() : excludedSerialUnitIds;
 
         if (v.isEmpty() && e.isEmpty() && c.isEmpty()) return List.of();
 
@@ -45,7 +54,12 @@ public class PostgresPurchaseProductSerialUnitRepository implements ProductSeria
         String sql = """
             SELECT id, product_id, vin, engine_number, chassis_number
             FROM product_serial_unit
-            WHERE """ + String.join(" OR ", clauses);
+            WHERE (""" + String.join(" OR ", clauses) + ")";
+
+        if (!excluded.isEmpty()) {
+            sql += " AND id NOT IN (" + placeholders(excluded.size()) + ")";
+            params.addAll(excluded);
+        }
 
         return jdbcClient.sql(sql)
                 .params(params.toArray())
@@ -102,6 +116,123 @@ public class PostgresPurchaseProductSerialUnitRepository implements ProductSeria
                     )
                     .update();
         }
+    }
+
+    @Override
+    public void updateInboundSerialUnit(PurchaseSerialUnit u) {
+        String sql = """
+            UPDATE product_serial_unit
+               SET vin = ?,
+                   chassis_number = ?,
+                   engine_number = ?,
+                   color = ?,
+                   year_make = ?,
+                   dua_number = ?,
+                   dua_item = ?,
+                   updated_at = NOW()
+             WHERE id = ?
+               AND purchase_item_id = ?
+               AND status = 'EN_ALMACEN'
+               AND sale_item_id IS NULL
+               AND contract_id IS NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                      FROM counter_sale_serial_unit cssu
+                     WHERE cssu.serial_unit_id = product_serial_unit.id
+               )
+            """;
+
+        int updated = jdbcClient.sql(sql)
+                .params(
+                        emptyToNull(u.getVin()),
+                        emptyToNull(u.getChassisNumber()),
+                        emptyToNull(u.getEngineNumber()),
+                        emptyToNull(u.getColor()),
+                        u.getYearMake(),
+                        emptyToNull(u.getDuaNumber()),
+                        u.getDuaItem(),
+                        u.getId(),
+                        u.getPurchaseItemId()
+                )
+                .update();
+
+        if (updated == 0) {
+            throw new IllegalStateException("No se pudo actualizar el serial. Puede estar vendido, reservado, en contrato o no pertenecer al ítem de compra.");
+        }
+    }
+
+    @Override
+    public int countBlockedSerialUnitsByPurchaseItemId(Long purchaseItemId) {
+        String sql = """
+            SELECT COUNT(1)
+              FROM product_serial_unit psu
+             WHERE psu.purchase_item_id = ?
+               AND (
+                    psu.status <> 'EN_ALMACEN'
+                    OR psu.sale_item_id IS NOT NULL
+                    OR psu.contract_id IS NOT NULL
+                    OR EXISTS (
+                        SELECT 1
+                          FROM counter_sale_serial_unit cssu
+                         WHERE cssu.serial_unit_id = psu.id
+                    )
+               )
+            """;
+
+        Long count = jdbcClient.sql(sql)
+                .param(purchaseItemId)
+                .query(Long.class)
+                .single();
+        return count == null ? 0 : count.intValue();
+    }
+
+    @Override
+    public int countBlockedSerialUnitsByPurchaseId(Long purchaseId) {
+        String sql = """
+            SELECT COUNT(1)
+              FROM product_serial_unit psu
+              JOIN purchase_item pi ON pi.id = psu.purchase_item_id
+             WHERE pi.purchase_id = ?
+               AND COALESCE(pi.status, 'ACTIVE') = 'ACTIVE'
+               AND (
+                    psu.status <> 'EN_ALMACEN'
+                    OR psu.sale_item_id IS NOT NULL
+                    OR psu.contract_id IS NOT NULL
+                    OR EXISTS (
+                        SELECT 1
+                          FROM counter_sale_serial_unit cssu
+                         WHERE cssu.serial_unit_id = psu.id
+                    )
+               )
+            """;
+
+        Long count = jdbcClient.sql(sql)
+                .param(purchaseId)
+                .query(Long.class)
+                .single();
+        return count == null ? 0 : count.intValue();
+    }
+
+    @Override
+    public void markSerialUnitsByPurchaseItemAsBaja(Long purchaseItemId) {
+        String sql = """
+            UPDATE product_serial_unit
+               SET status = 'BAJA',
+                   updated_at = NOW()
+             WHERE purchase_item_id = ?
+               AND status = 'EN_ALMACEN'
+               AND sale_item_id IS NULL
+               AND contract_id IS NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                      FROM counter_sale_serial_unit cssu
+                     WHERE cssu.serial_unit_id = product_serial_unit.id
+               )
+            """;
+
+        jdbcClient.sql(sql)
+                .param(purchaseItemId)
+                .update();
     }
 
     private static String placeholders(int n) {

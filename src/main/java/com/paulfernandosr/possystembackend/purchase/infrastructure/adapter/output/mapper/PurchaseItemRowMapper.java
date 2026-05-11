@@ -32,6 +32,22 @@ public class PurchaseItemRowMapper implements RowMapper<PurchaseItem> {
                 .createdAt(rs.getTimestamp("created_at") != null
                         ? rs.getTimestamp("created_at").toLocalDateTime()
                         : null)
+                .status(hasColumn(rs, "purchase_item_status") ? rs.getString("purchase_item_status") : null)
+                .removedAt(hasColumn(rs, "removed_at") && rs.getTimestamp("removed_at") != null
+                        ? rs.getTimestamp("removed_at").toLocalDateTime()
+                        : null)
+                .removedBy(hasColumn(rs, "removed_by") ? rs.getString("removed_by") : null)
+                .editReason(hasColumn(rs, "edit_reason") ? rs.getString("edit_reason") : null)
                 .build();
     }
+
+    private static boolean hasColumn(ResultSet rs, String columnName) {
+        try {
+            rs.findColumn(columnName);
+            return true;
+        } catch (SQLException ignored) {
+            return false;
+        }
+    }
 }
+

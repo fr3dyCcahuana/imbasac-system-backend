@@ -14,9 +14,24 @@ public interface ProductSerialUnitRepository {
             Set<String> chassisNumbers
     );
 
+    List<SerialIdentifierConflict> findExistingIdentifiersExcluding(
+            Set<String> vins,
+            Set<String> engineNumbers,
+            Set<String> chassisNumbers,
+            Set<Long> excludedSerialUnitIds
+    );
+
     void insertInboundSerialUnits(
             Long purchaseItemId,
             Long productId,
             List<PurchaseSerialUnit> serialUnits
     );
+
+    void updateInboundSerialUnit(PurchaseSerialUnit serialUnit);
+
+    int countBlockedSerialUnitsByPurchaseItemId(Long purchaseItemId);
+
+    int countBlockedSerialUnitsByPurchaseId(Long purchaseId);
+
+    void markSerialUnitsByPurchaseItemAsBaja(Long purchaseItemId);
 }

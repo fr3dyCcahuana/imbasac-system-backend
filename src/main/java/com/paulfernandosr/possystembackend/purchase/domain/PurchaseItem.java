@@ -40,6 +40,12 @@ public class PurchaseItem {
 
     private LocalDateTime createdAt;
 
+    // Edición lógica: no borrar físicamente para no romper kardex/source_id
+    private String status;
+    private LocalDateTime removedAt;
+    private String removedBy;
+    private String editReason;
+
     private PurchaseProduct product;
     private List<PurchaseSerialUnit> serialUnits;
 }

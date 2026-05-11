@@ -13,6 +13,7 @@ import com.paulfernandosr.possystembackend.purchase.domain.port.input.CancelPurc
 import com.paulfernandosr.possystembackend.purchase.domain.port.input.CreatePurchaseUseCase;
 import com.paulfernandosr.possystembackend.purchase.domain.port.input.GetPageOfPurchasesUseCase;
 import com.paulfernandosr.possystembackend.purchase.domain.port.input.GetPurchaseDetailUseCase;
+import com.paulfernandosr.possystembackend.purchase.domain.port.input.UpdatePurchaseUseCase;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -30,6 +31,7 @@ public class PurchaseRestController {
     private final GetPageOfPurchasesUseCase getPageOfPurchasesUseCase;
     private final GetPurchaseDetailUseCase getPurchaseDetailUseCase;
     private final CancelPurchaseUseCase cancelPurchaseUseCase;
+    private final UpdatePurchaseUseCase updatePurchaseUseCase;
     private final ProductImagePublicUrlService imageUrlService;
 
     // POST /purchases
@@ -63,6 +65,20 @@ public class PurchaseRestController {
         Purchase purchase = getPurchaseDetailUseCase.getPurchaseById(purchaseId);
         enrichProductImages(purchase);
         return ResponseEntity.ok(SuccessResponse.ok(purchase));
+    }
+
+
+    // PUT /purchases/{purchaseId}
+    @PutMapping("/{purchaseId}")
+    public ResponseEntity<SuccessResponse<Purchase>> updatePurchase(
+            @PathVariable Long purchaseId,
+            @Valid @RequestBody Purchase purchase,
+            Principal principal
+    ) {
+        String username = principal != null ? principal.getName() : null;
+        Purchase updated = updatePurchaseUseCase.updatePurchase(purchaseId, purchase, username);
+        enrichProductImages(updated);
+        return ResponseEntity.ok(SuccessResponse.ok(updated));
     }
 
     // PUT /purchases/{purchaseId}/cancel

@@ -10,5 +10,7 @@ public interface ContractSerialUnitRepository {
 
     void releaseFromContract(Long contractId);
 
+    void releaseSpecificFromContract(Long contractId, Long serialUnitId);
+
     void assertStillReserved(Long contractId, Long serialUnitId);
 }

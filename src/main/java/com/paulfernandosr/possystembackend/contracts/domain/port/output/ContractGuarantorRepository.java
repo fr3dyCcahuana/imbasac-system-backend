@@ -5,4 +5,5 @@ import com.paulfernandosr.possystembackend.contracts.domain.model.ContractGuaran
 public interface ContractGuarantorRepository {
     void upsert(Long contractId, ContractGuarantor guarantor);
     ContractGuarantor findByContractId(Long contractId);
+    void deleteByContractId(Long contractId);
 }

@@ -70,6 +70,23 @@ public class PostgresContractSerialUnitRepository implements ContractSerialUnitR
     }
 
     @Override
+    public void releaseSpecificFromContract(Long contractId, Long serialUnitId) {
+        String sql = """
+            UPDATE product_serial_unit
+               SET status = 'EN_ALMACEN',
+                   contract_id = NULL,
+                   updated_at = NOW()
+             WHERE id = ?
+               AND contract_id = ?
+               AND status = 'RESERVADO'
+        """;
+
+        jdbcClient.sql(sql)
+                .params(serialUnitId, contractId)
+                .update();
+    }
+
+    @Override
     public void assertStillReserved(Long contractId, Long serialUnitId) {
         String sql = """
             SELECT COUNT(*)

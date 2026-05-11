@@ -61,4 +61,33 @@ public class PostgresContractItemRepository implements ContractItemRepository {
                 .optional()
                 .orElse(null);
     }
+    @Override
+    public void updateByContractId(ContractItem i) {
+        String sql = """
+            UPDATE contract_item
+               SET product_id = ?,
+                   serial_unit_id = ?,
+                   sku = ?,
+                   description = ?,
+                   brand = ?,
+                   model = ?,
+                   unit_price = ?
+             WHERE contract_id = ?
+        """;
+
+        int updated = jdbcClient.sql(sql)
+                .params(
+                        i.getProductId(), i.getSerialUnitId(),
+                        i.getSku(), i.getDescription(), i.getBrand(), i.getModel(),
+                        i.getUnitPrice(), i.getContractId()
+                )
+                .update();
+
+        if (updated == 0) {
+            throw new com.paulfernandosr.possystembackend.contracts.domain.exception.InvalidContractException(
+                    "No se pudo actualizar el item del contrato."
+            );
+        }
+    }
+
 }
