@@ -23,11 +23,25 @@ public class VehicleDetailsResponse {
 
     private Integer anioFabricacion;
 
-    private String capacidadMotor;   // lo formateamos tipo "150CC"
+    private String capacidadMotor;
     private String combustible;
 
     private Integer numCilindros;
 
     private BigDecimal pesoNeto;
     private BigDecimal pesoBruto;
+
+    // Campos completos para PDF motocicleta / SUNAT
+    private String clase;
+    private String carroceria;
+    private String potenciaMotor;
+    private String formaRodante;
+    private Integer numAsientos;
+    private Integer numPasajeros;
+    private Integer numEjes;
+    private Integer numRuedas;
+    private BigDecimal cargaUtil;
+    private BigDecimal largo;
+    private BigDecimal ancho;
+    private BigDecimal alto;
 }

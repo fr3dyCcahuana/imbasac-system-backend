@@ -19,6 +19,7 @@ import org.springframework.web.client.RestClient;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 
 @Slf4j
 @Service
@@ -78,6 +79,8 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
                     throw new InvalidSaleV2Exception("La emisión SUNAT desacoplada no soporta obsequios u otros tipos de línea. Línea=" + i.getLineNumber());
                 });
 
+        validateMotorcycleItems(visibleItems);
+
         DocumentRequest request = SaleV2SunatMapper.map(sunatProps, sale, visibleItems);
 
         log.info("SUNAT V2 request: {}", request);
@@ -127,7 +130,8 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
             }
 
             String code = textValue(data, "respuesta_sunat_codigo");
-            String description = defaultIfBlank(textValue(data, "respuesta_sunat_descripcion"), "Respuesta vacía de SUNAT");String hashCode = extractHashCode(data != null ? data.path("codigo_hash") : null);
+            String description = defaultIfBlank(textValue(data, "respuesta_sunat_descripcion"), "Respuesta vacía de SUNAT");
+            String hashCode = extractHashCode(data != null ? data.path("codigo_hash") : null);
             String xmlPath = textValue(data, "ruta_xml");
             String cdrPath = textValue(data, "ruta_cdr");
             String pdfPath = textValue(data, "ruta_pdf");
@@ -164,7 +168,7 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
         if (!"EMITIDA".equalsIgnoreCase(blankIfNull(sale.getStatus()))) {
             throw new InvalidSaleV2Exception("Solo se puede emitir a SUNAT una venta EMITIDA. Estado actual: " + sale.getStatus());
         }
-        String docType = blankIfNull(sale.getDocType()).toUpperCase();
+        String docType = blankIfNull(sale.getDocType()).toUpperCase(Locale.ROOT);
         if (!"BOLETA".equals(docType) && !"FACTURA".equals(docType)) {
             throw new InvalidSaleV2Exception("Solo BOLETA/FACTURA se envían a SUNAT. docType=" + sale.getDocType());
         }
@@ -192,6 +196,47 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
         };
     }
 
+
+    private void validateMotorcycleItems(List<SaleV2SunatRepository.SaleItemForSunat> items) {
+        for (SaleV2SunatRepository.SaleItemForSunat item : items) {
+            if (!isMotorcycleItem(item)) {
+                continue;
+            }
+
+            if (item.getQuantity() == null || item.getQuantity().compareTo(BigDecimal.ONE) != 0) {
+                throw new InvalidSaleV2Exception(
+                        "Cada motocicleta debe emitirse con cantidad 1 para SUNAT. Línea=" + item.getLineNumber()
+                );
+            }
+
+            requireMotorcycleValue(item.getBrand(), "Marca", item);
+            requireMotorcycleValue(item.getModel(), "Modelo", item);
+            requireMotorcycleValue(item.getVehicleClass(), "Clase/categoría vehicular", item);
+            requireMotorcycleValue(item.getEngineNumber(), "Número de motor", item);
+            requireMotorcycleValue(item.getChassisNumber(), "Número de chasis", item);
+            requireMotorcycleValue(item.getVin(), "VIN", item);
+            requireMotorcycleValue(item.getColor(), "Color", item);
+            requireMotorcycleValue(item.getYearMake(), "Año fabricación", item);
+            requireMotorcycleValue(item.getEngineCapacity(), "Capacidad motor", item);
+            requireMotorcycleValue(item.getFuel(), "Combustible", item);
+        }
+    }
+
+    private boolean isMotorcycleItem(SaleV2SunatRepository.SaleItemForSunat item) {
+        String category = blankIfNull(item.getProductCategory()).trim().toUpperCase(Locale.ROOT);
+        return category.contains("MOTOCIC")
+                || "MOTO".equals(category)
+                || "MOTOCICLETA".equals(category)
+                || "MOTOCICLETAS".equals(category);
+    }
+
+    private void requireMotorcycleValue(Object value, String label, SaleV2SunatRepository.SaleItemForSunat item) {
+        if (value == null || String.valueOf(value).trim().isEmpty()) {
+            throw new InvalidSaleV2Exception(
+                    "Falta dato de motocicleta para SUNAT: " + label + ". Línea=" + item.getLineNumber()
+            );
+        }
+    }
 
     private String textValue(JsonNode node, String fieldName) {
         if (node == null || node.isMissingNode() || node.isNull()) {

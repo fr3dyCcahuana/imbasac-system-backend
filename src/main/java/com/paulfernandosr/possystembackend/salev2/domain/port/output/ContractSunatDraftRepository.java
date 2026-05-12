@@ -66,5 +66,36 @@ public interface ContractSunatDraftRepository {
         private BigDecimal revenueTotal;
         private String lineKind;
         private Boolean visibleInDocument;
+
+        private Long serialUnitId;
+        private String vin;
+        private String chassisNumber;
+        private String engineNumber;
+        private String color;
+        private Integer yearMake;
+        private String duaNumber;
+        private Integer duaItem;
+
+        private String brand;
+        private String model;
+
+        private String vehicleType;
+        private String bodywork;
+        private String engineCapacity;
+        private String fuel;
+        private Integer cylinders;
+        private BigDecimal netWeight;
+        private BigDecimal payload;
+        private BigDecimal grossWeight;
+        private String vehicleClass;
+        private String enginePower;
+        private String rollingForm;
+        private Integer seats;
+        private Integer passengers;
+        private Integer axles;
+        private Integer wheels;
+        private BigDecimal length;
+        private BigDecimal width;
+        private BigDecimal height;
     }
 }

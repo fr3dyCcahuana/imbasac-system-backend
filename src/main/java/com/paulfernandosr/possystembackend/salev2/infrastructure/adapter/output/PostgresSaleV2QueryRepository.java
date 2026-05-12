@@ -507,11 +507,30 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
             vs.fuel AS v_combustible,
             vs.cylinders AS v_num_cilindros,
             vs.net_weight AS v_peso_neto,
-            vs.gross_weight AS v_peso_bruto
+            vs.gross_weight AS v_peso_bruto,
+            vs.vehicle_class AS v_clase,
+            vs.bodywork AS v_carroceria,
+            vs.engine_power AS v_potencia_motor,
+            vs.rolling_form AS v_forma_rodante,
+            vs.seats AS v_num_asientos,
+            vs.passengers AS v_num_pasajeros,
+            vs.axles AS v_num_ejes,
+            vs.wheels AS v_num_ruedas,
+            vs.payload AS v_carga_util,
+            vs.length AS v_largo,
+            vs.width AS v_ancho,
+            vs.height AS v_alto
 
           FROM sale_item si
+          JOIN sale s ON s.id = si.sale_id
           JOIN product p ON p.id = si.product_id
-          LEFT JOIN product_serial_unit psu ON psu.sale_item_id = si.id
+          LEFT JOIN contract_item ci
+                 ON s.contract_id IS NOT NULL
+                AND ci.contract_id = s.contract_id
+                AND ci.product_id = si.product_id
+          LEFT JOIN product_serial_unit psu
+                 ON psu.sale_item_id = si.id
+                 OR psu.id = ci.serial_unit_id
           LEFT JOIN product_vehicle_specs vs ON vs.product_id = p.id
          WHERE si.sale_id = ?
          ORDER BY si.line_number ASC
@@ -528,11 +547,7 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
             if (isVehicle) {
                 String engineNumber = rs.getString("v_num_motor");
                 if (engineNumber != null && !engineNumber.trim().isEmpty()) {
-                    String cap = null;
-                    var capVal = rs.getBigDecimal("v_engine_capacity");
-                    if (capVal != null) {
-                        cap = capVal.stripTrailingZeros().toPlainString() + "CC";
-                    }
+                    String cap = formatEngineCapacity(rs.getString("v_engine_capacity"));
 
                     vehicleDetails = VehicleDetailsResponse.builder()
                             .marca(rs.getString("v_marca"))
@@ -542,13 +557,25 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                             .numChasis(rs.getString("v_num_chasis"))
                             .numVin(rs.getString("v_num_vin"))
                             .dua(rs.getString("v_dua"))
-                            .itemDua((Integer) rs.getObject("v_item_dua"))
-                            .anioFabricacion((Integer) rs.getObject("v_anio_fabricacion"))
+                            .itemDua(rs.getObject("v_item_dua", Integer.class))
+                            .anioFabricacion(rs.getObject("v_anio_fabricacion", Integer.class))
                             .capacidadMotor(cap)
                             .combustible(rs.getString("v_combustible"))
-                            .numCilindros((Integer) rs.getObject("v_num_cilindros"))
+                            .numCilindros(rs.getObject("v_num_cilindros", Integer.class))
                             .pesoNeto(rs.getBigDecimal("v_peso_neto"))
                             .pesoBruto(rs.getBigDecimal("v_peso_bruto"))
+                            .clase(rs.getString("v_clase"))
+                            .carroceria(rs.getString("v_carroceria"))
+                            .potenciaMotor(rs.getString("v_potencia_motor"))
+                            .formaRodante(rs.getString("v_forma_rodante"))
+                            .numAsientos(rs.getObject("v_num_asientos", Integer.class))
+                            .numPasajeros(rs.getObject("v_num_pasajeros", Integer.class))
+                            .numEjes(rs.getObject("v_num_ejes", Integer.class))
+                            .numRuedas(rs.getObject("v_num_ruedas", Integer.class))
+                            .cargaUtil(rs.getBigDecimal("v_carga_util"))
+                            .largo(rs.getBigDecimal("v_largo"))
+                            .ancho(rs.getBigDecimal("v_ancho"))
+                            .alto(rs.getBigDecimal("v_alto"))
                             .build();
                 }
             }
@@ -574,7 +601,7 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                     .totalCostSnapshot(rs.getBigDecimal("total_cost_snapshot"))
                     .revenueTotal(rs.getBigDecimal("revenue_total"))
                     .productCategory(category)
-                    .serialUnitId((Long) rs.getObject("serial_unit_id"))
+                    .serialUnitId(rs.getObject("serial_unit_id") != null ? rs.getLong("serial_unit_id") : null)
                     .serialUnitStatus(rs.getString("serial_unit_status"))
                     .createdAt(rs.getTimestamp("created_at") != null
                             ? rs.getTimestamp("created_at").toLocalDateTime()
@@ -587,6 +614,13 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                 .param(saleId)
                 .query(mapper)
                 .list();
+    }
+
+    private static String formatEngineCapacity(String value) {
+        if (value == null) return null;
+        String v = value.trim();
+        if (v.isEmpty()) return null;
+        return v.toUpperCase().contains("CC") ? v : v + "CC";
     }
 
     @Override

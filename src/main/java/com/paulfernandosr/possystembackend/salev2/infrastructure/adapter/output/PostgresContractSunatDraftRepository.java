@@ -383,9 +383,49 @@ public class PostgresContractSunatDraftRepository implements ContractSunatDraftR
                 di.quantity,
                 di.sunat_revenue_total AS revenue_total,
                 'VENDIDO' AS line_kind,
-                TRUE AS visible_in_document
+                TRUE AS visible_in_document,
+
+                psu.id AS serial_unit_id,
+                psu.vin AS vin,
+                psu.chassis_number AS chassis_number,
+                psu.engine_number AS engine_number,
+                psu.color AS color,
+                psu.year_make AS year_make,
+                psu.dua_number AS dua_number,
+                psu.dua_item AS dua_item,
+
+                p.brand AS brand,
+                p.model AS model,
+
+                vs.vehicle_type AS vehicle_type,
+                vs.bodywork AS bodywork,
+                vs.engine_capacity AS engine_capacity,
+                vs.fuel AS fuel,
+                vs.cylinders AS cylinders,
+                vs.net_weight AS net_weight,
+                vs.payload AS payload,
+                vs.gross_weight AS gross_weight,
+                vs.vehicle_class AS vehicle_class,
+                vs.engine_power AS engine_power,
+                vs.rolling_form AS rolling_form,
+                vs.seats AS seats,
+                vs.passengers AS passengers,
+                vs.axles AS axles,
+                vs.wheels AS wheels,
+                vs.length AS length,
+                vs.width AS width,
+                vs.height AS height
             FROM sale_contract_sunat_draft_item di
+            JOIN sale_contract_sunat_draft d ON d.id = di.draft_id
             LEFT JOIN product p ON p.id = di.product_id
+            LEFT JOIN contract_item ci
+                   ON ci.contract_id = d.contract_id
+                  AND ci.product_id = di.product_id
+            LEFT JOIN product_serial_unit psu
+                   ON psu.sale_item_id = di.sale_item_id
+                   OR psu.id = ci.serial_unit_id
+                   OR psu.contract_id = d.contract_id
+            LEFT JOIN product_vehicle_specs vs ON vs.product_id = p.id
             WHERE di.draft_id = ?
             ORDER BY di.line_number
         """;
@@ -402,6 +442,34 @@ public class PostgresContractSunatDraftRepository implements ContractSunatDraftR
                         .revenueTotal(rs.getBigDecimal("revenue_total"))
                         .lineKind(rs.getString("line_kind"))
                         .visibleInDocument(rs.getBoolean("visible_in_document"))
+                        .serialUnitId(rs.getObject("serial_unit_id") != null ? rs.getLong("serial_unit_id") : null)
+                        .vin(rs.getString("vin"))
+                        .chassisNumber(rs.getString("chassis_number"))
+                        .engineNumber(rs.getString("engine_number"))
+                        .color(rs.getString("color"))
+                        .yearMake(rs.getObject("year_make", Integer.class))
+                        .duaNumber(rs.getString("dua_number"))
+                        .duaItem(rs.getObject("dua_item", Integer.class))
+                        .brand(rs.getString("brand"))
+                        .model(rs.getString("model"))
+                        .vehicleType(rs.getString("vehicle_type"))
+                        .bodywork(rs.getString("bodywork"))
+                        .engineCapacity(rs.getString("engine_capacity"))
+                        .fuel(rs.getString("fuel"))
+                        .cylinders(rs.getObject("cylinders", Integer.class))
+                        .netWeight(rs.getBigDecimal("net_weight"))
+                        .payload(rs.getBigDecimal("payload"))
+                        .grossWeight(rs.getBigDecimal("gross_weight"))
+                        .vehicleClass(rs.getString("vehicle_class"))
+                        .enginePower(rs.getString("engine_power"))
+                        .rollingForm(rs.getString("rolling_form"))
+                        .seats(rs.getObject("seats", Integer.class))
+                        .passengers(rs.getObject("passengers", Integer.class))
+                        .axles(rs.getObject("axles", Integer.class))
+                        .wheels(rs.getObject("wheels", Integer.class))
+                        .length(rs.getBigDecimal("length"))
+                        .width(rs.getBigDecimal("width"))
+                        .height(rs.getBigDecimal("height"))
                         .build())
                 .list();
     }

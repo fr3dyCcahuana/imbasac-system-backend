@@ -15,11 +15,13 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 
 public final class SaleV2SunatMapper {
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final String MOTORCYCLE_SUNAT_CODE = "25101801";
 
     private SaleV2SunatMapper() {
     }
@@ -33,6 +35,8 @@ public final class SaleV2SunatMapper {
         LocalDateTime emissionDateTime = sale.getIssueDate() != null
                 ? sale.getIssueDate().atTime(baseDateTime.toLocalTime())
                 : baseDateTime;
+
+        validateMotorcycleItems(items);
 
         return DocumentRequest.builder()
                 .business(DocumentRequest.Business.builder()
@@ -85,30 +89,201 @@ public final class SaleV2SunatMapper {
         BigDecimal basePrice = nz(item.getRevenueTotal())
                 .divide(qty, 6, RoundingMode.HALF_UP);
 
-        String description = required(item.getDescription(), "description");
         String productCategory = required(item.getProductCategory(), "productCategory");
+        boolean motorcycle = isMotorcycle(item);
+        String productDescription = motorcycle
+                ? buildMotorcycleSunatDescription(item)
+                : required(item.getDescription(), "description");
 
-        String inferredSunatCode;
-        try {
-            inferredSunatCode = SunatCodeInferer.infer(description, productCategory);
-        } catch (Exception ex) {
-            throw new InvalidSaleV2Exception(
-                    "No se pudo inferir código SUNAT para la línea " + item.getLineNumber()
-                            + " producto=" + description
-                            + " categoría=" + productCategory
-                            + ". Detalle: " + ex.getMessage()
-            );
+        String sunatCode;
+        if (motorcycle) {
+            sunatCode = MOTORCYCLE_SUNAT_CODE;
+        } else {
+            try {
+                sunatCode = SunatCodeInferer.infer(productDescription, productCategory);
+            } catch (Exception ex) {
+                throw new InvalidSaleV2Exception(
+                        "No se pudo inferir código SUNAT para la línea " + item.getLineNumber()
+                                + " producto=" + productDescription
+                                + " categoría=" + productCategory
+                                + ". Detalle: " + ex.getMessage()
+                );
+            }
         }
 
         return DocumentRequest.Item.builder()
-                .product(description)
+                .product(productDescription)
                 .quantity(qty.stripTrailingZeros().toPlainString())
                 .basePrice(basePrice.toPlainString())
-                .sunatCode(inferredSunatCode)
+                .sunatCode(sunatCode)
                 .productCode(blankIfNull(item.getSku()))
                 .unitCode(UnitOfMeasureType.PRODUCT_UNIT.getCode())
                 .igvTypeCode(resolveIgvTypeCode(sale))
                 .build();
+    }
+
+    private static String buildMotorcycleCommercialDescription(SaleV2SunatRepository.SaleItemForSunat item) {
+        String description = cleanCsv(required(item.getDescription(), "description"));
+        String brand = cleanCsv(item.getBrand());
+        String model = cleanCsv(item.getModel());
+
+        if (brand.isBlank()) {
+            throw new InvalidSaleV2Exception(
+                    "Falta dato de motocicleta para SUNAT: Marca. Línea=" + item.getLineNumber()
+            );
+        }
+
+        if (model.isBlank()) {
+            throw new InvalidSaleV2Exception(
+                    "Falta dato de motocicleta para SUNAT: Modelo. Línea=" + item.getLineNumber()
+            );
+        }
+
+        String result = description;
+
+        if (!containsToken(result, brand)) {
+            result = result + " " + brand;
+        }
+
+        if (!containsToken(result, model)) {
+            result = result + " " + model;
+        }
+
+        return cleanCsv(result);
+    }
+
+    private static boolean containsToken(String text, String token) {
+        if (text == null || token == null || token.isBlank()) {
+            return false;
+        }
+
+        return text.toUpperCase(Locale.ROOT).contains(token.toUpperCase(Locale.ROOT));
+    }
+
+    /**
+     * Formato requerido por el XML de referencia de motocicletas:
+     * DESCRIPCION,L3,,MOTOCICLETA,AÑO_MODELO,AÑO_MODELO,AÑO_FABRICACION,MOTOR,CHASIS,VIN,COLOR,COLOR,
+     * CAPACIDAD,CILINDROS,ASIENTOS,MECANICO,EJES,FORMA_RODANTE,,RUEDAS,,COMBUSTIBLE,PASAJEROS,
+     * PESO_BRUTO,PESO_NETO,CARGA_UTIL,ALTO,LARGO,ANCHO
+     */
+    private static String buildMotorcycleSunatDescription(SaleV2SunatRepository.SaleItemForSunat item) {
+        String yearModel = cleanCsv(item.getYearMake());
+
+        return String.join(",",
+                buildMotorcycleCommercialDescription(item),      // 1: descripción + marca + modelo
+                cleanCsv(item.getVehicleClass()),                          // 2
+                "",                                                        // 3
+                cleanCsv(defaultIfBlank(item.getBodywork(), "MOTOCICLETA")),// 4
+                yearModel,                                                 // 5: tu BD ya no guarda year_model; se usa year_make como fallback
+                yearModel,                                                 // 6: tu BD ya no guarda year_model; se usa year_make como fallback
+                cleanCsv(item.getYearMake()),                              // 7
+                cleanCsv(item.getEngineNumber()),                          // 8
+                cleanCsv(item.getChassisNumber()),                         // 9
+                cleanCsv(item.getVin()),                                   // 10
+                cleanCsv(item.getColor()),                                 // 11
+                cleanCsv(item.getColor()),                                 // 12
+                cleanCsv(formatEngineCapacity(item.getEngineCapacity())),   // 13
+                cleanCsv(item.getCylinders()),                             // 14
+                cleanCsv(item.getSeats()),                                 // 15
+                "MECANICO",                                                // 16
+                cleanCsv(item.getAxles()),                                 // 17
+                cleanCsv(item.getRollingForm()),                           // 18
+                "",                                                        // 19
+                cleanCsv(item.getWheels()),                                // 20
+                "",                                                        // 21
+                cleanCsv(item.getFuel()),                                  // 22
+                cleanCsv(item.getPassengers()),                            // 23
+                cleanCsv(item.getGrossWeight()),                           // 24
+                cleanCsv(item.getNetWeight()),                             // 25
+                cleanCsv(item.getPayload()),                               // 26
+                cleanCsv(item.getHeight()),                                // 27
+                cleanCsv(item.getLength()),                                // 28
+                cleanCsv(item.getWidth())                                  // 29
+        );
+    }
+
+    private static void validateMotorcycleItems(List<SaleV2SunatRepository.SaleItemForSunat> items) {
+        if (items == null) return;
+
+        for (SaleV2SunatRepository.SaleItemForSunat item : items) {
+            if (!isMotorcycle(item)) continue;
+
+            if (nz(item.getQuantity()).compareTo(BigDecimal.ONE) != 0) {
+                throw new InvalidSaleV2Exception(
+                        "Cada motocicleta debe emitirse con cantidad 1. Línea=" + item.getLineNumber()
+                );
+            }
+
+            requireMotorcycle(item.getDescription(), "Descripción", item);
+            requireMotorcycle(item.getVehicleClass(), "Clase vehicular", item);
+            requireMotorcycle(item.getBodywork(), "Carrocería", item);
+            requireMotorcycle(item.getYearMake(), "Año fabricación", item);
+            requireMotorcycle(item.getEngineNumber(), "Número de motor", item);
+            requireMotorcycle(item.getChassisNumber(), "Número de chasis", item);
+            requireMotorcycle(item.getVin(), "VIN", item);
+            requireMotorcycle(item.getColor(), "Color", item);
+            requireMotorcycle(item.getEngineCapacity(), "Capacidad motor", item);
+            requireMotorcycle(item.getCylinders(), "Número de cilindros", item);
+            requireMotorcycle(item.getSeats(), "Número de asientos", item);
+            requireMotorcycle(item.getAxles(), "Número de ejes", item);
+            requireMotorcycle(item.getRollingForm(), "Forma rodante", item);
+            requireMotorcycle(item.getWheels(), "Número de ruedas", item);
+            requireMotorcycle(item.getFuel(), "Combustible", item);
+            requireMotorcycle(item.getPassengers(), "Número de pasajeros", item);
+            requireMotorcycle(item.getGrossWeight(), "Peso bruto", item);
+            requireMotorcycle(item.getNetWeight(), "Peso neto", item);
+            requireMotorcycle(item.getPayload(), "Carga útil", item);
+            requireMotorcycle(item.getHeight(), "Alto", item);
+            requireMotorcycle(item.getLength(), "Largo", item);
+            requireMotorcycle(item.getWidth(), "Ancho", item);
+        }
+    }
+
+    private static void requireMotorcycle(Object value, String label, SaleV2SunatRepository.SaleItemForSunat item) {
+        if (value == null || String.valueOf(value).trim().isBlank()) {
+            throw new InvalidSaleV2Exception(
+                    "Falta dato de motocicleta para SUNAT: " + label + ". Línea=" + item.getLineNumber()
+            );
+        }
+    }
+
+    private static boolean isMotorcycle(SaleV2SunatRepository.SaleItemForSunat item) {
+        String category = normalize(item.getProductCategory());
+        String type = normalize(item.getVehicleType());
+        return "MOTOCICLETAS".equals(category)
+                || "MOTOCICLETA".equals(category)
+                || "MOTOCICLETA".equals(type);
+    }
+
+    private static String normalize(String value) {
+        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private static String formatEngineCapacity(String value) {
+        String v = cleanCsv(value);
+        if (v.isBlank()) return "";
+        String upper = v.toUpperCase(Locale.ROOT);
+        return upper.contains("CC") ? v : v + " CC";
+    }
+
+    private static String cleanCsv(Object value) {
+        if (value == null) return "";
+
+        String text;
+        if (value instanceof BigDecimal bd) {
+            text = bd.stripTrailingZeros().toPlainString();
+        } else {
+            text = String.valueOf(value);
+        }
+
+        return text
+                .trim()
+                .replace(",", " ")
+                .replaceAll("\\s+", " ");
+    }
+
+    private static String defaultIfBlank(String value, String fallback) {
+        return value == null || value.trim().isBlank() ? fallback : value.trim();
     }
 
     private static String mapDocumentCode(String docType) {
