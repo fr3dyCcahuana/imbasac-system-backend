@@ -24,6 +24,7 @@ public class GetProductSalesDetailPageService implements GetProductSalesDetailPa
     public Page<ProductSalesDetail> getPage(
             String query,
             String subQuery,
+            String brand,
             String category,
             boolean onlyWithStock,
             String priceList,
@@ -43,6 +44,7 @@ public class GetProductSalesDetailPageService implements GetProductSalesDetailPa
         return repository.findPage(
                 query == null ? "" : query,
                 subQuery == null ? "" : subQuery,
+                brand == null ? "" : brand,
                 category == null ? "" : category,
                 onlyWithStock,
                 pl,

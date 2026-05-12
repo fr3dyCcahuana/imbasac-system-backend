@@ -96,6 +96,7 @@ public class ProductRestController {
     public ResponseEntity<SuccessResponse<Collection<ProductSalesDetail>>> getSalesDetailPage(
             @RequestParam(defaultValue = "") String query,
             @RequestParam(defaultValue = "") String subQuery,
+            @RequestParam(defaultValue = "") String brand,
             @RequestParam(defaultValue = "") String category,
             @RequestParam(defaultValue = "false") boolean onlyWithStock,
             @RequestParam(defaultValue = "A") String priceList,
@@ -104,12 +105,20 @@ public class ProductRestController {
             @RequestParam(defaultValue = "12") int size
     ) {
         Page<ProductSalesDetail> result = getProductSalesDetailPageUseCase.getPage(
-                query, subQuery, category, onlyWithStock, priceList, context,
+                query,
+                subQuery,
+                brand,
+                category,
+                onlyWithStock,
+                priceList,
+                context,
                 new Pageable(page, size)
         );
+
         for (ProductSalesDetail item : result.getContent()) {
             imageUrlService.enrich(item.getImages());
         }
+
         SuccessResponse.Metadata metadata = PageMapper.mapPage(result);
         return ResponseEntity.ok(SuccessResponse.ok(result.getContent(), metadata));
     }

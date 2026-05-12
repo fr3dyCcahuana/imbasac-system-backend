@@ -10,6 +10,10 @@ import com.paulfernandosr.possystembackend.salev2.domain.port.input.EmitSaleV2To
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.EmitSaleV2SunatWithCounterSalesUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.PreviewSaleV2SunatWithCounterSalesUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.VoidSaleV2UseCase;
+import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetContractSunatDraftUseCase;
+import com.paulfernandosr.possystembackend.salev2.domain.port.input.SaveContractSunatDraftUseCase;
+import com.paulfernandosr.possystembackend.salev2.domain.port.input.PreviewContractSunatDraftUseCase;
+import com.paulfernandosr.possystembackend.salev2.domain.port.input.EmitContractSunatDraftUseCase;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.PageResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2AdminEditRequest;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2ComposeSunatEmitResponse;
@@ -21,6 +25,10 @@ import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.d
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2SummaryResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2SunatEmissionResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.VoidSaleV2Request;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.ContractSunatDraftResponse;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.ContractSunatDraftSaveRequest;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.ContractSunatDraftPreviewResponse;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.ContractSunatDraftEmissionResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -43,6 +51,10 @@ public class SaleV2RestController {
     private final EmitSaleV2ToSunatUseCase emitSaleV2ToSunatUseCase;
     private final PreviewSaleV2SunatWithCounterSalesUseCase previewSaleV2SunatWithCounterSalesUseCase;
     private final EmitSaleV2SunatWithCounterSalesUseCase emitSaleV2SunatWithCounterSalesUseCase;
+    private final GetContractSunatDraftUseCase getContractSunatDraftUseCase;
+    private final SaveContractSunatDraftUseCase saveContractSunatDraftUseCase;
+    private final PreviewContractSunatDraftUseCase previewContractSunatDraftUseCase;
+    private final EmitContractSunatDraftUseCase emitContractSunatDraftUseCase;
 
     @PostMapping
     public ResponseEntity<SuccessResponse<SaleV2DocumentResponse>> create(@RequestBody SaleV2CreateRequest request,
@@ -126,4 +138,38 @@ public class SaleV2RestController {
                 emitSaleV2SunatWithCounterSalesUseCase.emit(saleId, request, principal.getName())
         ));
     }
+
+    @GetMapping("/{saleId}/contract-sunat-draft")
+    public ResponseEntity<SuccessResponse<ContractSunatDraftResponse>> getContractSunatDraft(@PathVariable Long saleId,
+                                                                                              Principal principal) {
+        return ResponseEntity.ok(SuccessResponse.ok(
+                getContractSunatDraftUseCase.getOrCreate(saleId, principal.getName())
+        ));
+    }
+
+    @PutMapping("/{saleId}/contract-sunat-draft")
+    public ResponseEntity<SuccessResponse<ContractSunatDraftResponse>> saveContractSunatDraft(@PathVariable Long saleId,
+                                                                                               @RequestBody ContractSunatDraftSaveRequest request,
+                                                                                               Principal principal) {
+        return ResponseEntity.ok(SuccessResponse.ok(
+                saveContractSunatDraftUseCase.save(saleId, request, principal.getName())
+        ));
+    }
+
+    @PostMapping("/{saleId}/contract-sunat-draft/preview")
+    public ResponseEntity<SuccessResponse<ContractSunatDraftPreviewResponse>> previewContractSunatDraft(@PathVariable Long saleId,
+                                                                                                         @RequestBody ContractSunatDraftSaveRequest request) {
+        return ResponseEntity.ok(SuccessResponse.ok(
+                previewContractSunatDraftUseCase.preview(saleId, request)
+        ));
+    }
+
+    @PostMapping("/{saleId}/contract-sunat-draft/emit")
+    public ResponseEntity<SuccessResponse<ContractSunatDraftEmissionResponse>> emitContractSunatDraft(@PathVariable Long saleId,
+                                                                                                       Principal principal) {
+        return ResponseEntity.ok(SuccessResponse.ok(
+                emitContractSunatDraftUseCase.emit(saleId, principal.getName())
+        ));
+    }
+
 }

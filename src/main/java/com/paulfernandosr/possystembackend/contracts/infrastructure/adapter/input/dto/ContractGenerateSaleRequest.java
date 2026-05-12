@@ -5,7 +5,6 @@ import com.paulfernandosr.possystembackend.salev2.domain.model.PaymentMethod;
 import com.paulfernandosr.possystembackend.salev2.domain.model.TaxStatus;
 import lombok.*;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Getter
@@ -15,17 +14,15 @@ import java.time.LocalDate;
 @Builder
 public class ContractGenerateSaleRequest {
 
-    private Long stationId;
-
+    /**
+     * Genera el comprobante en ventas SIN emitir SUNAT.
+     * Para contratos de motocicleta se usará B004/F004 según docType.
+     */
     private DocType docType;
-    private String series;
     private LocalDate issueDate;
-
     private TaxStatus taxStatus;
     private Boolean igvIncluded;
-    private BigDecimal igvRate;
 
+    /** Solo aplica cuando el contrato es CONTADO. */
     private PaymentMethod paymentMethod;
-
-    private Boolean useTotalAmountAsUnitPrice;
 }

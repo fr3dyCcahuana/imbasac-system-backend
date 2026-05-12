@@ -26,6 +26,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
     public Page<ProductSalesDetail> findPage(
             String query,
             String subQuery,
+            String brand,
             String category,
             boolean onlyWithStock,
             String priceList,
@@ -296,5 +297,10 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                 .totalElements(totalElements)
                 .totalPages(totalPages)
                 .build();
+    }
+
+    @Override
+    public List<String> findAvailableBrands(String context) {
+        return List.of();
     }
 }

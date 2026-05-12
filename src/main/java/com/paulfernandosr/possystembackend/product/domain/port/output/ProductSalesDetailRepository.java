@@ -9,10 +9,13 @@ public interface ProductSalesDetailRepository {
     Page<ProductSalesDetail> findPage(
             String query,
             String subQuery,
+            String brand,
             String category,
             boolean onlyWithStock,
             String priceList,
             String context,
             Pageable pageable
     );
+
+    java.util.List<String> findAvailableBrands(String context);
 }
