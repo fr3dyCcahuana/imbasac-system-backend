@@ -16,6 +16,4 @@ public interface ProductSalesDetailRepository {
             String context,
             Pageable pageable
     );
-
-    java.util.List<String> findAvailableBrands(String context);
 }

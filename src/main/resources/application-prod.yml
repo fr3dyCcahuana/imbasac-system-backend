@@ -106,6 +106,8 @@ app:
     products-images-base-url: http://imbasac.cloud/images/products
     manual-pdfs-dir: /var/www/files/manual-pdfs
     manual-pdfs-public-path: /files/manual-pdfs
+    sunat-xml-public-path: /sunat-files/xml
+    sunat-cdr-public-path: /sunat-files/cdr
   document-series:
     documents:
       SIMPLE:

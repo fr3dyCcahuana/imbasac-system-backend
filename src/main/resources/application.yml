@@ -2,7 +2,8 @@ spring:
   application:
     name: pos-system-backend
   datasource:
-    url: jdbc:postgresql://localhost:5432/imbasac
+    #url: jdbc:postgresql://localhost:5432/imbasac
+    url: jdbc:postgresql://localhost:5432/imbasac_prod_local
     username: imbasac
     password: imbasac
   data:
@@ -113,6 +114,8 @@ app:
 
     manual-pdfs-dir: ./storage/manual-pdfs
     manual-pdfs-public-path: /files/manual-pdfs
+    sunat-xml-public-path: /sunat-files/xml
+    sunat-cdr-public-path: /sunat-files/cdr
   document-series:
     documents:
       SIMPLE:

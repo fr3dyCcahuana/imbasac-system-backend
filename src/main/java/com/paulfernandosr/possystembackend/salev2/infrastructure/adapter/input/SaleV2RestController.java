@@ -55,6 +55,7 @@ public class SaleV2RestController {
     private final SaveContractSunatDraftUseCase saveContractSunatDraftUseCase;
     private final PreviewContractSunatDraftUseCase previewContractSunatDraftUseCase;
     private final EmitContractSunatDraftUseCase emitContractSunatDraftUseCase;
+    private final SunatFilePublicUrlService sunatFilePublicUrlService;
 
     @PostMapping
     public ResponseEntity<SuccessResponse<SaleV2DocumentResponse>> create(@RequestBody SaleV2CreateRequest request,
@@ -114,12 +115,16 @@ public class SaleV2RestController {
 
     @GetMapping("/{id}")
     public ResponseEntity<SuccessResponse<SaleV2DetailResponse>> getById(@PathVariable("id") Long saleId) {
-        return ResponseEntity.ok(SuccessResponse.ok(getSaleV2UseCase.getById(saleId)));
+        SaleV2DetailResponse response = getSaleV2UseCase.getById(saleId);
+        sunatFilePublicUrlService.enrich(response.getSunat());
+        return ResponseEntity.ok(SuccessResponse.ok(response));
     }
 
     @PostMapping("/{saleId}/emit-sunat")
     public ResponseEntity<SuccessResponse<SaleV2SunatEmissionResponse>> emitSunat(@PathVariable Long saleId) {
-        return ResponseEntity.ok(SuccessResponse.ok(emitSaleV2ToSunatUseCase.emit(saleId)));
+        SaleV2SunatEmissionResponse response = emitSaleV2ToSunatUseCase.emit(saleId);
+        sunatFilePublicUrlService.enrich(response);
+        return ResponseEntity.ok(SuccessResponse.ok(response));
     }
 
     @PostMapping("/{saleId}/sunat-counter-sales/preview")
@@ -132,11 +137,14 @@ public class SaleV2RestController {
 
     @PostMapping("/{saleId}/sunat-counter-sales/emit")
     public ResponseEntity<SuccessResponse<SaleV2ComposeSunatEmitResponse>> emitComposeSunat(@PathVariable Long saleId,
-                                                                                              @RequestBody SaleV2ComposeSunatRequest request,
-                                                                                              Principal principal) {
-        return ResponseEntity.ok(SuccessResponse.ok(
-                emitSaleV2SunatWithCounterSalesUseCase.emit(saleId, request, principal.getName())
-        ));
+                                                                                            @RequestBody SaleV2ComposeSunatRequest request,
+                                                                                            Principal principal) {
+        SaleV2ComposeSunatEmitResponse response =
+                emitSaleV2SunatWithCounterSalesUseCase.emit(saleId, request, principal.getName());
+
+        sunatFilePublicUrlService.enrich(response.getEmission());
+
+        return ResponseEntity.ok(SuccessResponse.ok(response));
     }
 
     @GetMapping("/{saleId}/contract-sunat-draft")
@@ -166,10 +174,13 @@ public class SaleV2RestController {
 
     @PostMapping("/{saleId}/contract-sunat-draft/emit")
     public ResponseEntity<SuccessResponse<ContractSunatDraftEmissionResponse>> emitContractSunatDraft(@PathVariable Long saleId,
-                                                                                                       Principal principal) {
-        return ResponseEntity.ok(SuccessResponse.ok(
-                emitContractSunatDraftUseCase.emit(saleId, principal.getName())
-        ));
+                                                                                                      Principal principal) {
+        ContractSunatDraftEmissionResponse response =
+                emitContractSunatDraftUseCase.emit(saleId, principal.getName());
+
+        sunatFilePublicUrlService.enrich(response);
+
+        return ResponseEntity.ok(SuccessResponse.ok(response));
     }
 
 }

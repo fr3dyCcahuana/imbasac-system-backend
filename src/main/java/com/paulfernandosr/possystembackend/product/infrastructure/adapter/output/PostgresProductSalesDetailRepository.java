@@ -36,6 +36,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
         String like = QueryMapper.formatAsLikeParam(query);
         String sub = subQuery == null ? "" : subQuery.trim();
         String subLike = QueryMapper.formatAsLikeParam(sub);
+        String brandFilter = brand == null ? "" : brand.trim();
         String cat = category == null ? "" : category.trim();
         String pl = priceList == null ? "A" : priceList.trim().toUpperCase();
         String ctx = context == null ? "PROFORMA" : context.trim().toUpperCase();
@@ -63,7 +64,8 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                   FROM product p
                   LEFT JOIN product_stock ps ON ps.product_id = p.id
                   WHERE (p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ?)
-                    AND (? = '' OR p.name ILIKE ?)
+                    AND (? = '' OR p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ? OR p.brand ILIKE ? OR p.model ILIKE ?)
+                    AND (? = '' OR LOWER(TRIM(COALESCE(p.brand, ''))) = LOWER(TRIM(?)))
                     AND (? = '' OR p.category = ?)
                     AND (? <> 'SALE' OR p.facturable_sunat = TRUE)
                 )
@@ -75,7 +77,8 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
         long totalElements = jdbcClient.sql(countSql)
                 .params(
                         like, like, like,
-                        sub, subLike,
+                        sub, subLike, subLike, subLike, subLike, subLike,
+                        brandFilter, brandFilter,
                         cat, cat,
                         ctx,
                         onlyWithStock
@@ -130,7 +133,8 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                   FROM product p
                   LEFT JOIN product_stock ps ON ps.product_id = p.id
                   WHERE (p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ?)
-                    AND (? = '' OR p.name ILIKE ?)
+                    AND (? = '' OR p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ? OR p.brand ILIKE ? OR p.model ILIKE ?)
+                    AND (? = '' OR LOWER(TRIM(COALESCE(p.brand, ''))) = LOWER(TRIM(?)))
                     AND (? = '' OR p.category = ?)
                     AND (? <> 'SALE' OR p.facturable_sunat = TRUE)
                 )
@@ -154,7 +158,8 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                 .params(
                         pl,
                         like, like, like,
-                        sub, subLike,
+                        sub, subLike, subLike, subLike, subLike, subLike,
+                        brandFilter, brandFilter,
                         cat, cat,
                         ctx,
                         onlyWithStock,
@@ -297,10 +302,5 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                 .totalElements(totalElements)
                 .totalPages(totalPages)
                 .build();
-    }
-
-    @Override
-    public List<String> findAvailableBrands(String context) {
-        return List.of();
     }
 }
