@@ -4,22 +4,53 @@ import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.d
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.ContractSunatDraftSaveRequest;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
 public interface ContractSunatDraftRepository {
 
-    ContractSaleBase findContractSaleBase(Long saleId);
+    ContractBase findContractBase(Long contractId);
 
-    ContractSunatDraftResponse findBySaleId(Long saleId);
+    ContractSunatDraftResponse findByContractId(Long contractId);
 
-    ContractSunatDraftResponse createFromSale(Long saleId, Long userId);
+    ContractSunatDraftResponse createFromContract(Long contractId, Long userId);
 
-    ContractSunatDraftResponse saveDraft(Long saleId, ContractSunatDraftSaveRequest request, Long userId);
+    ContractSunatDraftResponse saveDraft(Long contractId, ContractSunatDraftSaveRequest request, Long userId);
 
-    ContractSunatDraftResponse lockDraftForEmission(Long saleId);
+    ContractSunatDraftResponse lockDraftForEmission(Long contractId);
 
     void setDraftNumberAndStatus(Long draftId, Long number, String status);
+
+    void markDraftEmissionResult(Long draftId,
+                                 Long saleId,
+                                 String sunatStatus,
+                                 String sunatCode,
+                                 String sunatDescription,
+                                 String hashCode,
+                                 String xmlPath,
+                                 String cdrPath,
+                                 String pdfPath,
+                                 LocalDateTime emittedAt,
+                                 String draftStatus);
+
+    List<DraftItemForSunat> findDraftItemsForSunat(Long draftId);
+
+    Long createSaleFromDraft(Long draftId,
+                             Long userId,
+                             Long number,
+                             String notes);
+
+    Long createSaleItemFromDraftLine(Long saleId,
+                                      DraftItemForSunat item,
+                                      BigDecimal unitCostSnapshot,
+                                      BigDecimal totalCostSnapshot);
+
+    void updateSaleTotalsFromDraft(Long saleId, Long draftId);
+
+    void linkDraftToSale(Long draftId, Long saleId);
+
+    void linkContractToSale(Long contractId, Long saleId);
 
     void markSaleEmissionResult(
             Long saleId,
@@ -33,22 +64,32 @@ public interface ContractSunatDraftRepository {
             LocalDateTime emittedAt
     );
 
-    void markSaleEmissionError(Long saleId, String description, LocalDateTime emittedAt);
-
-    List<DraftItemForSunat> findDraftItemsForSunat(Long draftId);
-
     @lombok.Getter
     @lombok.Setter
     @lombok.NoArgsConstructor
     @lombok.AllArgsConstructor
     @lombok.Builder
-    class ContractSaleBase {
-        private Long saleId;
+    class ContractBase {
         private Long contractId;
-        private String saleStatus;
-        private String saleDocType;
-        private String sunatStatus;
-        private String draftStatus;
+        private Long saleId;
+        private String contractStatus;
+        private String paymentType;
+        private LocalDate issueDate;
+        private String docType;
+        private String series;
+        private String currency;
+        private BigDecimal exchangeRate;
+        private String priceList;
+        private Long customerId;
+        private String customerDocType;
+        private String customerDocNumber;
+        private String customerName;
+        private String customerAddress;
+        private String customerUbigeo;
+        private String customerDepartment;
+        private String customerProvince;
+        private String customerDistrict;
+        private BigDecimal cashPrice;
     }
 
     @lombok.Getter
@@ -57,13 +98,20 @@ public interface ContractSunatDraftRepository {
     @lombok.AllArgsConstructor
     @lombok.Builder
     class DraftItemForSunat {
+        private Long draftItemId;
         private Integer lineNumber;
         private Long productId;
         private String sku;
         private String description;
+        private String presentation;
+        private BigDecimal factor;
         private String productCategory;
         private BigDecimal quantity;
+        private BigDecimal unitPrice;
         private BigDecimal revenueTotal;
+        private Boolean facturableSunat;
+        private Boolean affectsStock;
+        private Boolean manageBySerial;
         private String lineKind;
         private Boolean visibleInDocument;
 

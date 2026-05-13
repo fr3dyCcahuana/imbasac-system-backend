@@ -7,6 +7,7 @@ import com.paulfernandosr.possystembackend.contracts.domain.port.output.Contract
 import com.paulfernandosr.possystembackend.contracts.domain.port.output.ContractRepository;
 import com.paulfernandosr.possystembackend.contracts.domain.port.output.ContractSerialUnitRepository;
 import com.paulfernandosr.possystembackend.contracts.infrastructure.adapter.input.dto.ContractDetailResponse;
+import com.paulfernandosr.possystembackend.salev2.domain.model.PaymentType;
 import com.paulfernandosr.possystembackend.user.domain.User;
 import com.paulfernandosr.possystembackend.user.domain.port.output.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -36,8 +37,13 @@ public class ConfirmContractService implements ConfirmContractUseCase {
         if (contract == null) throw new InvalidContractException("Contrato no existe: " + contractId);
 
         if (contract.getStatus() == ContractStatus.ANULADO) throw new InvalidContractException("Contrato ya está ANULADO.");
-        if (contract.getStatus() == ContractStatus.VENDIDO) throw new InvalidContractException("Contrato ya está VENDIDO.");
+        if (contract.getStatus() == ContractStatus.FACTURADO) throw new InvalidContractException("Contrato ya está FACTURADO.");
+        if (contract.getStatus() == ContractStatus.RESUELTO_DECOMISO) throw new InvalidContractException("Contrato fue resuelto por decomiso.");
         if (contract.getStatus() != ContractStatus.PENDIENTE) throw new InvalidContractException("Contrato no está PENDIENTE.");
+
+        if (contract.getPaymentType() == PaymentType.CREDITO) {
+            throw new InvalidContractException("Para contratos a crédito use /contracts/{id}/activate para registrar el inicial y activar el crédito.");
+        }
 
         var item = contractItemRepository.findByContractId(contractId);
         if (item == null) throw new InvalidContractException("Contrato no tiene item.");

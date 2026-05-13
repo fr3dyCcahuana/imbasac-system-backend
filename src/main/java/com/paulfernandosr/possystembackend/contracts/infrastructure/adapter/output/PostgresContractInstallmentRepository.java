@@ -137,4 +137,35 @@ public class PostgresContractInstallmentRepository implements ContractInstallmen
                 .params(paidAmount, status, paidAt, paidBy, paidByUsername, contractId, installmentNumber)
                 .update();
     }
+    @Override
+    public boolean allInstallmentsPaid(Long contractId) {
+        String sql = """
+            SELECT COUNT(*)
+              FROM contract_installment
+             WHERE contract_id = ?
+               AND status <> 'PAGADO'
+        """;
+
+        Long count = jdbcClient.sql(sql)
+                .param(contractId)
+                .query(Long.class)
+                .single();
+
+        return count == null || count == 0;
+    }
+
+    @Override
+    public void cancelPendingInstallments(Long contractId) {
+        String sql = """
+            UPDATE contract_installment
+               SET status = 'ANULADO'
+             WHERE contract_id = ?
+               AND status <> 'PAGADO'
+        """;
+
+        jdbcClient.sql(sql)
+                .param(contractId)
+                .update();
+    }
+
 }

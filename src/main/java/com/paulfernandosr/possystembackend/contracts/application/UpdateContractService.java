@@ -58,8 +58,13 @@ public class UpdateContractService implements UpdateContractUseCase {
         if (beforeContract.getStatus() == ContractStatus.ANULADO) {
             throw new InvalidContractException("No se puede editar un contrato ANULADO.");
         }
-        if (beforeContract.getStatus() == ContractStatus.VENDIDO) {
-            throw new InvalidContractException("No se puede editar un contrato VENDIDO. Ya generó venta.");
+        if (beforeContract.getStatus() == ContractStatus.FACTURADO) {
+            throw new InvalidContractException("No se puede editar un contrato FACTURADO. Ya generó venta/comprobante.");
+        }
+        if (beforeContract.getStatus() == ContractStatus.CREDITO_ACTIVO
+                || beforeContract.getStatus() == ContractStatus.PAGADO_PENDIENTE_SUNAT
+                || beforeContract.getStatus() == ContractStatus.RESUELTO_DECOMISO) {
+            throw new InvalidContractException("No se puede editar un contrato en estado " + beforeContract.getStatus() + ".");
         }
         if (beforeContract.getStatus() != ContractStatus.PENDIENTE) {
             throw new InvalidContractException("Solo se puede editar un contrato PENDIENTE.");

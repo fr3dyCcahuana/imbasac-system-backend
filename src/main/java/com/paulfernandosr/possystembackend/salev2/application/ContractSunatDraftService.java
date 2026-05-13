@@ -1,20 +1,29 @@
 package com.paulfernandosr.possystembackend.salev2.application;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.paulfernandosr.possystembackend.common.infrastructure.documentseries.DocumentSeriesPolicy;
+import com.paulfernandosr.possystembackend.contracts.domain.exception.InvalidContractException;
+import com.paulfernandosr.possystembackend.contracts.domain.model.ContractStatus;
+import com.paulfernandosr.possystembackend.contracts.domain.port.output.ContractRepository;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.DocumentRequest;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.SunatProps;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
+import com.paulfernandosr.possystembackend.salev2.domain.model.CostPolicy;
 import com.paulfernandosr.possystembackend.salev2.domain.model.LockedDocumentSeries;
+import com.paulfernandosr.possystembackend.salev2.domain.model.StockMovementBalance;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.EmitContractSunatDraftUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetContractSunatDraftUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.PreviewContractSunatDraftUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.SaveContractSunatDraftUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.output.ContractSunatDraftRepository;
 import com.paulfernandosr.possystembackend.salev2.domain.port.output.DocumentSeriesRepository;
+import com.paulfernandosr.possystembackend.salev2.domain.port.output.ProductCostRepository;
+import com.paulfernandosr.possystembackend.salev2.domain.port.output.ProductSerialUnitRepository;
+import com.paulfernandosr.possystembackend.salev2.domain.port.output.ProductStockMovementRepository;
+import com.paulfernandosr.possystembackend.salev2.domain.port.output.ProductStockRepository;
+import com.paulfernandosr.possystembackend.salev2.domain.port.output.SalePaymentRepository;
 import com.paulfernandosr.possystembackend.salev2.domain.port.output.SaleV2SunatRepository;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.ContractSunatDraftEmissionResponse;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.ContractSunatDraftItemResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.ContractSunatDraftPreviewResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.ContractSunatDraftResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.ContractSunatDraftSaveRequest;
@@ -43,40 +52,45 @@ public class ContractSunatDraftService implements
         PreviewContractSunatDraftUseCase,
         EmitContractSunatDraftUseCase {
 
-    private static final String SUCCESS_RESPONSE = "0";
-
     private final ContractSunatDraftRepository repository;
+    private final ContractRepository contractRepository;
     private final UserRepository userRepository;
     private final DocumentSeriesPolicy documentSeriesPolicy;
     private final DocumentSeriesRepository documentSeriesRepository;
+    private final ProductCostRepository productCostRepository;
+    private final ProductStockRepository productStockRepository;
+    private final ProductStockMovementRepository productStockMovementRepository;
+    private final ProductSerialUnitRepository productSerialUnitRepository;
+    private final SalePaymentRepository salePaymentRepository;
 
     private final RestClient sunatRestClient;
     private final SunatProps sunatProps;
-    private final ObjectMapper objectMapper;
     private final SunatEmissionResultParser sunatEmissionResultParser;
 
     @Override
     @Transactional
-    public ContractSunatDraftResponse getOrCreate(Long saleId, String username) {
-        validateSaleId(saleId);
-
+    public ContractSunatDraftResponse getOrCreate(Long contractId, String username) {
+        validateContractId(contractId);
         User user = findUser(username);
 
-        ContractSunatDraftResponse current = repository.findBySaleId(saleId);
-        if (current != null) {
-            return current;
-        }
+        ContractSunatDraftResponse current = repository.findByContractId(contractId);
+        if (current != null) return current;
 
-        return repository.createFromSale(saleId, user.getId());
+        validateContractCanPrepareSunat(contractId);
+        return repository.createFromContract(contractId, user.getId());
     }
 
     @Override
     @Transactional
-    public ContractSunatDraftResponse save(Long saleId, ContractSunatDraftSaveRequest request, String username) {
-        validateSaleId(saleId);
+    public ContractSunatDraftResponse save(Long contractId, ContractSunatDraftSaveRequest request, String username) {
+        validateContractId(contractId);
         validateSaveRequest(request);
 
         User user = findUser(username);
+        ContractSunatDraftResponse current = repository.findByContractId(contractId);
+        if (current == null) {
+            validateContractCanPrepareSunat(contractId);
+        }
 
         documentSeriesPolicy.requireAllowed(
                 request.getDocType().trim().toUpperCase(),
@@ -84,16 +98,16 @@ public class ContractSunatDraftService implements
                 InvalidSaleV2Exception::new
         );
 
-        return repository.saveDraft(saleId, request, user.getId());
+        return repository.saveDraft(contractId, request, user.getId());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public ContractSunatDraftPreviewResponse preview(Long saleId, ContractSunatDraftSaveRequest request) {
-        validateSaleId(saleId);
+    public ContractSunatDraftPreviewResponse preview(Long contractId, ContractSunatDraftSaveRequest request) {
+        validateContractId(contractId);
         validateSaveRequest(request);
 
-        ContractSunatDraftResponse current = repository.findBySaleId(saleId);
+        ContractSunatDraftResponse current = repository.findByContractId(contractId);
         if (current == null) {
             throw new InvalidSaleV2Exception("Primero debes crear el borrador SUNAT.");
         }
@@ -109,78 +123,72 @@ public class ContractSunatDraftService implements
 
     @Override
     @Transactional(noRollbackFor = Exception.class)
-    public ContractSunatDraftEmissionResponse emit(Long saleId, String username) {
-        validateSaleId(saleId);
-        findUser(username);
+    public ContractSunatDraftEmissionResponse emit(Long contractId, String username) {
+        validateContractId(contractId);
+        User user = findUser(username);
 
-        ContractSunatDraftResponse draft = repository.lockDraftForEmission(saleId);
-
-        if (draft == null) {
-            throw new InvalidSaleV2Exception("No existe borrador SUNAT para esta venta.");
+        var contract = contractRepository.lockById(contractId);
+        if (contract == null) {
+            throw new InvalidSaleV2Exception("Contrato no existe: " + contractId);
         }
 
-        if (!"BORRADOR".equalsIgnoreCase(nz(draft.getStatus()))) {
-            throw new InvalidSaleV2Exception("El borrador SUNAT no está editable. Estado: " + draft.getStatus());
+        validateContractStatusForEmission(contract.getStatus());
+
+        ContractSunatDraftResponse draft = repository.lockDraftForEmission(contractId);
+        if (draft == null) {
+            draft = repository.createFromContract(contractId, user.getId());
+            draft = repository.lockDraftForEmission(contractId);
+        }
+
+        if (draft == null) {
+            throw new InvalidSaleV2Exception("No existe borrador SUNAT para este contrato.");
         }
 
         if ("ACEPTADO".equalsIgnoreCase(nz(draft.getSunatStatus()))) {
-            throw new InvalidSaleV2Exception("Esta venta ya fue aceptada por SUNAT.");
+            throw new InvalidSaleV2Exception("Este contrato ya fue aceptado por SUNAT.");
         }
 
-        documentSeriesPolicy.requireAllowed(
-                draft.getDocType(),
-                draft.getSeries(),
-                InvalidSaleV2Exception::new
-        );
+        if (!"BORRADOR".equalsIgnoreCase(nz(draft.getStatus()))
+                && !"EMITIENDO".equalsIgnoreCase(nz(draft.getStatus()))) {
+            throw new InvalidSaleV2Exception("El borrador SUNAT no está disponible para emisión. Estado: " + draft.getStatus());
+        }
 
-        LockedDocumentSeries lockedSeries = null;
+        documentSeriesPolicy.requireAllowed(draft.getDocType(), draft.getSeries(), InvalidSaleV2Exception::new);
+
+        validateDraftReadyForEmission(draft);
+
         Long sunatNumber = draft.getNumber();
-
-        /*
-         * En contratos la numeración normalmente ya fue reservada cuando se generó
-         * la venta BOLETA/FACTURA. Solo reservamos aquí si el borrador antiguo no
-         * tiene número por compatibilidad con registros previos.
-         */
         if (sunatNumber == null) {
-            lockedSeries = documentSeriesRepository.lockSeries(
-                    draft.getDocType(),
-                    draft.getSeries()
-            );
-
+            LockedDocumentSeries lockedSeries = documentSeriesRepository.lockSeries(draft.getDocType(), draft.getSeries());
             sunatNumber = lockedSeries.getNextNumber();
-            repository.setDraftNumberAndStatus(draft.getId(), sunatNumber, "BORRADOR");
+            repository.setDraftNumberAndStatus(draft.getId(), sunatNumber, "EMITIENDO");
             documentSeriesRepository.incrementNextNumber(lockedSeries.getId());
-            lockedSeries = null;
             draft.setNumber(sunatNumber);
+            draft.setStatus("EMITIENDO");
         }
 
-        List<ContractSunatDraftRepository.DraftItemForSunat> draftItems =
-                repository.findDraftItemsForSunat(draft.getId());
+        Long saleId = draft.getSaleId();
+        if (saleId == null) {
+            saleId = createFinalSaleFromDraft(draft, user);
+            repository.linkDraftToSale(draft.getId(), saleId);
+            repository.linkContractToSale(contractId, saleId);
+            draft.setSaleId(saleId);
+        }
 
+        List<ContractSunatDraftRepository.DraftItemForSunat> draftItems = repository.findDraftItemsForSunat(draft.getId());
         if (draftItems.isEmpty()) {
             throw new InvalidSaleV2Exception("El borrador SUNAT no tiene items.");
         }
 
         SaleV2SunatRepository.LockedSunatSale saleForSunat = buildSaleForSunat(draft);
-
         List<SaleV2SunatRepository.SaleItemForSunat> itemsForSunat = draftItems.stream()
                 .map(this::toSaleItemForSunat)
                 .toList();
 
-        DocumentRequest sunatRequest = SaleV2SunatMapper.map(
-                sunatProps,
-                saleForSunat,
-                itemsForSunat
-        );
+        DocumentRequest sunatRequest = SaleV2SunatMapper.map(sunatProps, saleForSunat, itemsForSunat);
 
-        log.info(
-                "SUNAT contract draft request: saleId={}, contractId={}, docType={}, series={}, number={}",
-                draft.getSaleId(),
-                draft.getContractId(),
-                draft.getDocType(),
-                draft.getSeries(),
-                draft.getNumber()
-        );
+        log.info("SUNAT contract draft request: saleId={}, contractId={}, docType={}, series={}, number={}",
+                draft.getSaleId(), draft.getContractId(), draft.getDocType(), draft.getSeries(), draft.getNumber());
 
         try {
             String rawResponse = sunatRestClient.post()
@@ -192,44 +200,96 @@ public class ContractSunatDraftService implements
 
             SunatEmissionResult result = sunatEmissionResultParser.parse(rawResponse, LocalDateTime.now());
 
-            repository.markSaleEmissionResult(
-                    saleId,
-                    result.getStatus(),
-                    result.getCode(),
-                    result.getDescription(),
-                    result.getHashCode(),
-                    result.getXmlPath(),
-                    result.getCdrPath(),
-                    result.getPdfPath(),
-                    result.getEmittedAt()
-            );
+            persistEmissionResult(draft, saleId, result);
 
             if (result.isAccepted()) {
-                repository.setDraftNumberAndStatus(draft.getId(), sunatNumber, "EMITIDO");
-                if (lockedSeries != null) {
-                    documentSeriesRepository.incrementNextNumber(lockedSeries.getId());
-                }
+                contractRepository.updateStatusAndSale(contractId, ContractStatus.FACTURADO, saleId, contract.getNotes());
             }
 
             return buildEmissionResponse(draft, result);
-
         } catch (Exception ex) {
             SunatEmissionResult result = sunatEmissionResultParser.fromException(ex, LocalDateTime.now());
-
-            repository.markSaleEmissionResult(
-                    saleId,
-                    result.getStatus(),
-                    result.getCode(),
-                    result.getDescription(),
-                    result.getHashCode(),
-                    result.getXmlPath(),
-                    result.getCdrPath(),
-                    result.getPdfPath(),
-                    result.getEmittedAt()
-            );
-
+            persistEmissionResult(draft, saleId, result);
             return buildEmissionResponse(draft, result);
         }
+    }
+
+    private Long createFinalSaleFromDraft(ContractSunatDraftResponse draft, User user) {
+        List<ContractSunatDraftRepository.DraftItemForSunat> items = repository.findDraftItemsForSunat(draft.getId());
+        if (items.isEmpty()) throw new InvalidSaleV2Exception("El borrador SUNAT no tiene items.");
+
+        Long saleId = repository.createSaleFromDraft(
+                draft.getId(),
+                user.getId(),
+                draft.getNumber(),
+                "COMPROBANTE ELECTRÓNICO EMITIDO DESDE CONTRATO #" + draft.getContractId()
+        );
+
+        for (ContractSunatDraftRepository.DraftItemForSunat item : items) {
+            BigDecimal unitCost = productCostRepository.getUnitCost(item.getProductId(), CostPolicy.PROMEDIO);
+            unitCost = unitCost == null ? BigDecimal.ZERO : unitCost;
+            BigDecimal totalCost = unitCost.multiply(nz(item.getQuantity())).setScale(4, java.math.RoundingMode.HALF_UP);
+
+            Long saleItemId = repository.createSaleItemFromDraftLine(saleId, item, unitCost, totalCost);
+
+            if (Boolean.TRUE.equals(item.getAffectsStock())) {
+                StockMovementBalance balance = productStockRepository.decreaseOnHandOrFail(item.getProductId(), nz(item.getQuantity()));
+                productStockMovementRepository.createOutSale(
+                        item.getProductId(),
+                        nz(item.getQuantity()),
+                        saleItemId,
+                        unitCost,
+                        totalCost,
+                        balance.getQuantityOnHand(),
+                        balance.getAverageCost() == null ? unitCost : balance.getAverageCost()
+                );
+            }
+
+            if (Boolean.TRUE.equals(item.getManageBySerial()) && item.getSerialUnitId() != null) {
+                productSerialUnitRepository.markAsSold(item.getSerialUnitId(), saleItemId);
+            }
+        }
+
+        repository.updateSaleTotalsFromDraft(saleId, draft.getId());
+        salePaymentRepository.insert(saleId, defaultIfBlank(draft.getPaymentMethod(), "OTRO"), nz(draft.getTotal()));
+        return saleId;
+    }
+
+    private void persistEmissionResult(ContractSunatDraftResponse draft, Long saleId, SunatEmissionResult result) {
+        String draftStatus = null;
+        if (result.isAccepted()) {
+            draftStatus = "EMITIDO";
+        } else if (result.isRejected()) {
+            draftStatus = "BLOQUEADO";
+        } else if (result.isCommunicationError()) {
+            draftStatus = "EMITIENDO";
+        }
+
+        repository.markSaleEmissionResult(
+                saleId,
+                result.getStatus(),
+                result.getCode(),
+                result.getDescription(),
+                result.getHashCode(),
+                result.getXmlPath(),
+                result.getCdrPath(),
+                result.getPdfPath(),
+                result.getEmittedAt()
+        );
+
+        repository.markDraftEmissionResult(
+                draft.getId(),
+                saleId,
+                result.getStatus(),
+                result.getCode(),
+                result.getDescription(),
+                result.getHashCode(),
+                result.getXmlPath(),
+                result.getCdrPath(),
+                result.getPdfPath(),
+                result.getEmittedAt(),
+                draftStatus
+        );
     }
 
     private SaleV2SunatRepository.LockedSunatSale buildSaleForSunat(ContractSunatDraftResponse draft) {
@@ -257,9 +317,7 @@ public class ContractSunatDraftService implements
                 .build();
     }
 
-    private SaleV2SunatRepository.SaleItemForSunat toSaleItemForSunat(
-            ContractSunatDraftRepository.DraftItemForSunat item
-    ) {
+    private SaleV2SunatRepository.SaleItemForSunat toSaleItemForSunat(ContractSunatDraftRepository.DraftItemForSunat item) {
         return SaleV2SunatRepository.SaleItemForSunat.builder()
                 .lineNumber(item.getLineNumber())
                 .productId(item.getProductId())
@@ -301,16 +359,23 @@ public class ContractSunatDraftService implements
                 .build();
     }
 
-    private ContractSunatDraftResponse calculatePreview(
-            ContractSunatDraftResponse current,
-            ContractSunatDraftSaveRequest request
-    ) {
+    private ContractSunatDraftResponse calculatePreview(ContractSunatDraftResponse current, ContractSunatDraftSaveRequest request) {
         ContractSunatDraftResponse calculated = new ContractSunatDraftResponse();
         copy(current, calculated);
 
         calculated.setDocType(request.getDocType());
         calculated.setSeries(request.getSeries());
         calculated.setIssueDate(request.getIssueDate());
+        calculated.setBillingCustomerId(request.getBillingCustomerId());
+        calculated.setCustomerDocType(request.getBillingDocType());
+        calculated.setCustomerDocNumber(request.getBillingDocNumber());
+        calculated.setCustomerName(request.getBillingName());
+        calculated.setCustomerAddress(request.getBillingAddress());
+        calculated.setCustomerUbigeo(request.getBillingUbigeo());
+        calculated.setCustomerDepartment(request.getBillingDepartment());
+        calculated.setCustomerProvince(request.getBillingProvince());
+        calculated.setCustomerDistrict(request.getBillingDistrict());
+        calculated.setPaymentMethod(request.getPaymentMethod());
         calculated.setTaxStatus(request.getTaxStatus());
         calculated.setTaxReason("NO_GRAVADA".equalsIgnoreCase(request.getTaxStatus()) ? "20" : null);
         calculated.setIgvRate(request.getIgvRate() != null ? request.getIgvRate() : new BigDecimal("18.00"));
@@ -319,7 +384,7 @@ public class ContractSunatDraftService implements
         if (current.getItems() != null) {
             calculated.setItems(current.getItems().stream()
                     .map(item -> {
-                        var clone = com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.ContractSunatDraftItemResponse.builder()
+                        ContractSunatDraftItemResponse clone = ContractSunatDraftItemResponse.builder()
                                 .id(item.getId())
                                 .saleItemId(item.getSaleItemId())
                                 .lineNumber(item.getLineNumber())
@@ -335,14 +400,13 @@ public class ContractSunatDraftService implements
 
                         if (request.getItems() != null) {
                             request.getItems().stream()
-                                    .filter(x -> x.getSaleItemId() != null && x.getSaleItemId().equals(item.getSaleItemId()))
+                                    .filter(x -> x.getLineNumber() != null && x.getLineNumber().equals(item.getLineNumber()))
                                     .findFirst()
                                     .ifPresent(x -> {
                                         clone.setSunatUnitPrice(x.getSunatUnitPrice());
                                         clone.setSunatRevenueTotal(item.getQuantity().multiply(x.getSunatUnitPrice()));
                                     });
                         }
-
                         return clone;
                     })
                     .toList());
@@ -371,25 +435,22 @@ public class ContractSunatDraftService implements
             calculated.setIgvAmount(igv);
             calculated.setTotal(gross.add(igv));
         }
-
         calculated.setDiscountTotal(BigDecimal.ZERO);
-
         return calculated;
     }
 
     private List<String> buildWarnings(ContractSunatDraftResponse draft) {
         List<String> warnings = new ArrayList<>();
-
-        if ("FACTURA".equalsIgnoreCase(draft.getDocType())
-                && !"RUC".equalsIgnoreCase(nz(draft.getCustomerDocType()))) {
+        if ("FACTURA".equalsIgnoreCase(draft.getDocType()) && !"RUC".equalsIgnoreCase(nz(draft.getCustomerDocType()))) {
             warnings.add("FACTURA requiere cliente con RUC.");
         }
-
+        if (draft.getNumber() == null) {
+            warnings.add("La serie y número se asignarán recién al emitir SUNAT.");
+        }
         return warnings;
     }
 
-    private ContractSunatDraftEmissionResponse buildEmissionResponse(ContractSunatDraftResponse draft,
-                                                                       SunatEmissionResult result) {
+    private ContractSunatDraftEmissionResponse buildEmissionResponse(ContractSunatDraftResponse draft, SunatEmissionResult result) {
         return ContractSunatDraftEmissionResponse.builder()
                 .saleId(draft.getSaleId())
                 .contractId(draft.getContractId())
@@ -411,75 +472,49 @@ public class ContractSunatDraftService implements
                 .build();
     }
 
-    private ContractSunatDraftEmissionResponse buildEmissionResponse(
-            ContractSunatDraftResponse draft,
-            String status,
-            String code,
-            String description,
-            String hashCode,
-            String xmlPath,
-            String cdrPath,
-            String pdfPath,
-            LocalDateTime emittedAt
-    ) {
-        return ContractSunatDraftEmissionResponse.builder()
-                .saleId(draft.getSaleId())
-                .contractId(draft.getContractId())
-                .docType(draft.getDocType())
-                .series(draft.getSeries())
-                .number(draft.getNumber())
-                .sunatStatus(status)
-                .sunatCode(code)
-                .sunatDescription(description)
-                .hashCode(hashCode)
-                .xmlPath(xmlPath)
-                .cdrPath(cdrPath)
-                .pdfPath(pdfPath)
-                .emittedAt(emittedAt)
-                .accepted("ACEPTADO".equalsIgnoreCase(status))
-                .rejected("RECHAZADO".equalsIgnoreCase(status))
-                .communicationError("ERROR_COMUNICACION".equalsIgnoreCase(status))
-                .retryable("ERROR_COMUNICACION".equalsIgnoreCase(status) || "ERROR".equalsIgnoreCase(status))
-                .build();
+    private void validateContractCanPrepareSunat(Long contractId) {
+        var contract = contractRepository.findById(contractId);
+        if (contract == null) throw new InvalidSaleV2Exception("Contrato no existe: " + contractId);
+        if (contract.getSaleId() != null) throw new InvalidSaleV2Exception("Contrato ya tiene venta asociada: " + contract.getSaleId());
+        validateContractStatusForEmission(contract.getStatus());
+    }
+
+    private void validateContractStatusForEmission(ContractStatus status) {
+        if (status == ContractStatus.CONFIRMADO || status == ContractStatus.PAGADO_PENDIENTE_SUNAT) return;
+        throw new InvalidSaleV2Exception("Estado de contrato no permitido para SUNAT: " + status + ". Contado debe estar CONFIRMADO; crédito debe estar PAGADO_PENDIENTE_SUNAT.");
+    }
+
+    private void validateDraftReadyForEmission(ContractSunatDraftResponse draft) {
+        if (draft.getDocType() == null || draft.getDocType().isBlank()) throw new InvalidSaleV2Exception("docType es obligatorio.");
+        if (draft.getSeries() == null || draft.getSeries().isBlank()) throw new InvalidSaleV2Exception("series es obligatorio.");
+        if (draft.getIssueDate() == null) throw new InvalidSaleV2Exception("issueDate es obligatorio.");
+        if (draft.getCustomerDocType() == null || draft.getCustomerDocType().isBlank()) throw new InvalidSaleV2Exception("Cliente SUNAT: tipo de documento obligatorio.");
+        if (draft.getCustomerDocNumber() == null || draft.getCustomerDocNumber().isBlank()) throw new InvalidSaleV2Exception("Cliente SUNAT: número de documento obligatorio.");
+        if (draft.getCustomerName() == null || draft.getCustomerName().isBlank()) throw new InvalidSaleV2Exception("Cliente SUNAT: nombre/razón social obligatorio.");
+        if ("FACTURA".equalsIgnoreCase(draft.getDocType()) && !"RUC".equalsIgnoreCase(draft.getCustomerDocType())) {
+            throw new InvalidSaleV2Exception("FACTURA requiere cliente SUNAT con RUC.");
+        }
+        if (draft.getPaymentMethod() == null || draft.getPaymentMethod().isBlank()) {
+            throw new InvalidSaleV2Exception("paymentMethod es obligatorio para registrar el pago de la venta final al emitir SUNAT.");
+        }
     }
 
     private void validateSaveRequest(ContractSunatDraftSaveRequest request) {
-        if (request == null) {
-            throw new InvalidSaleV2Exception("Request obligatorio.");
-        }
-
-        if (request.getDocType() == null || request.getDocType().isBlank()) {
-            throw new InvalidSaleV2Exception("docType es obligatorio.");
-        }
-
-        if (request.getSeries() == null || request.getSeries().isBlank()) {
-            throw new InvalidSaleV2Exception("series es obligatorio.");
-        }
-
-        if (request.getIssueDate() == null) {
-            throw new InvalidSaleV2Exception("issueDate es obligatorio.");
-        }
-
-        if (request.getTaxStatus() == null || request.getTaxStatus().isBlank()) {
-            throw new InvalidSaleV2Exception("taxStatus es obligatorio.");
-        }
-
-        if (request.getEditReason() == null || request.getEditReason().trim().length() < 5) {
-            throw new InvalidSaleV2Exception("editReason es obligatorio y debe tener al menos 5 caracteres.");
-        }
-
-        if (request.getItems() == null || request.getItems().isEmpty()) {
-            throw new InvalidSaleV2Exception("items es obligatorio.");
-        }
+        if (request == null) throw new InvalidSaleV2Exception("Request obligatorio.");
+        if (request.getDocType() == null || request.getDocType().isBlank()) throw new InvalidSaleV2Exception("docType es obligatorio.");
+        if (request.getSeries() == null || request.getSeries().isBlank()) throw new InvalidSaleV2Exception("series es obligatorio.");
+        if (request.getIssueDate() == null) throw new InvalidSaleV2Exception("issueDate es obligatorio.");
+        if (request.getBillingDocType() == null || request.getBillingDocType().isBlank()) throw new InvalidSaleV2Exception("billingDocType es obligatorio.");
+        if (request.getBillingDocNumber() == null || request.getBillingDocNumber().isBlank()) throw new InvalidSaleV2Exception("billingDocNumber es obligatorio.");
+        if (request.getBillingName() == null || request.getBillingName().isBlank()) throw new InvalidSaleV2Exception("billingName es obligatorio.");
+        if (request.getPaymentMethod() == null || request.getPaymentMethod().isBlank()) throw new InvalidSaleV2Exception("paymentMethod es obligatorio.");
+        if (request.getTaxStatus() == null || request.getTaxStatus().isBlank()) throw new InvalidSaleV2Exception("taxStatus es obligatorio.");
+        if (request.getEditReason() == null || request.getEditReason().trim().length() < 5) throw new InvalidSaleV2Exception("editReason es obligatorio y debe tener al menos 5 caracteres.");
+        if (request.getItems() == null || request.getItems().isEmpty()) throw new InvalidSaleV2Exception("items es obligatorio.");
 
         for (ContractSunatDraftSaveRequest.Item item : request.getItems()) {
-            if (item.getSaleItemId() == null) {
-                throw new InvalidSaleV2Exception("saleItemId es obligatorio en cada item.");
-            }
-
-            if (item.getSunatUnitPrice() == null || item.getSunatUnitPrice().compareTo(BigDecimal.ZERO) < 0) {
-                throw new InvalidSaleV2Exception("sunatUnitPrice no puede ser nulo ni negativo.");
-            }
+            if (item.getLineNumber() == null) throw new InvalidSaleV2Exception("lineNumber es obligatorio en cada item.");
+            if (item.getSunatUnitPrice() == null || item.getSunatUnitPrice().compareTo(BigDecimal.ZERO) < 0) throw new InvalidSaleV2Exception("sunatUnitPrice no puede ser nulo ni negativo.");
         }
     }
 
@@ -488,10 +523,8 @@ public class ContractSunatDraftService implements
                 .orElseThrow(() -> new InvalidSaleV2Exception("Usuario inválido: " + username));
     }
 
-    private void validateSaleId(Long saleId) {
-        if (saleId == null) {
-            throw new InvalidSaleV2Exception("saleId es obligatorio.");
-        }
+    private void validateContractId(Long contractId) {
+        if (contractId == null) throw new InvalidSaleV2Exception("contractId es obligatorio.");
     }
 
     private void copy(ContractSunatDraftResponse source, ContractSunatDraftResponse target) {
@@ -502,10 +535,16 @@ public class ContractSunatDraftService implements
         target.setSeries(source.getSeries());
         target.setNumber(source.getNumber());
         target.setIssueDate(source.getIssueDate());
+        target.setBillingCustomerId(source.getBillingCustomerId());
         target.setCustomerDocType(source.getCustomerDocType());
         target.setCustomerDocNumber(source.getCustomerDocNumber());
         target.setCustomerName(source.getCustomerName());
         target.setCustomerAddress(source.getCustomerAddress());
+        target.setCustomerUbigeo(source.getCustomerUbigeo());
+        target.setCustomerDepartment(source.getCustomerDepartment());
+        target.setCustomerProvince(source.getCustomerProvince());
+        target.setCustomerDistrict(source.getCustomerDistrict());
+        target.setPaymentMethod(source.getPaymentMethod());
         target.setTaxStatus(source.getTaxStatus());
         target.setTaxReason(source.getTaxReason());
         target.setIgvRate(source.getIgvRate());
@@ -520,49 +559,7 @@ public class ContractSunatDraftService implements
         target.setItems(source.getItems());
     }
 
-    private String textValue(JsonNode node, String fieldName) {
-        if (node == null || node.isMissingNode() || node.isNull()) return null;
-        JsonNode child = node.path(fieldName);
-        if (child.isMissingNode() || child.isNull()) return null;
-        return child.asText();
-    }
-
-    private String extractHashCode(JsonNode node) {
-        if (node == null || node.isMissingNode() || node.isNull()) return null;
-
-        if (node.isArray()) {
-            for (JsonNode item : node) {
-                if (item != null && !item.isNull()) {
-                    String value = item.asText();
-                    if (value != null && !value.trim().isEmpty()) return value;
-                }
-            }
-            return null;
-        }
-
-        if (node.isObject()) {
-            JsonNode codeNode = node.path("codigo");
-            if (!codeNode.isMissingNode() && !codeNode.isNull()) return codeNode.asText();
-
-            JsonNode hashNode = node.path("hash");
-            if (!hashNode.isMissingNode() && !hashNode.isNull()) return hashNode.asText();
-
-            return node.toString();
-        }
-
-        String value = node.asText();
-        return value == null || value.trim().isEmpty() ? null : value;
-    }
-
-    private String defaultIfBlank(String value, String fallback) {
-        return value == null || value.isBlank() ? fallback : value;
-    }
-
-    private String nz(String value) {
-        return value == null ? "" : value;
-    }
-
-    private BigDecimal nz(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value;
-    }
+    private String nz(String value) { return value == null ? "" : value; }
+    private BigDecimal nz(BigDecimal value) { return value == null ? BigDecimal.ZERO : value; }
+    private String defaultIfBlank(String value, String fallback) { return value == null || value.isBlank() ? fallback : value; }
 }

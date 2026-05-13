@@ -20,13 +20,22 @@ public class ContractSunatDraftResponse {
 
     private String docType;
     private String series;
+    /** NULL hasta emitir SUNAT. */
     private Long number;
     private LocalDate issueDate;
 
+    /** Cliente del comprobante SUNAT. Puede ser distinto al cliente del contrato. */
+    private Long billingCustomerId;
     private String customerDocType;
     private String customerDocNumber;
     private String customerName;
     private String customerAddress;
+    private String customerUbigeo;
+    private String customerDepartment;
+    private String customerProvince;
+    private String customerDistrict;
+
+    private String paymentMethod;
 
     private String taxStatus;
     private String taxReason;

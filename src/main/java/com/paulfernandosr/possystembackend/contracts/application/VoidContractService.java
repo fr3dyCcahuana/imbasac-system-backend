@@ -31,8 +31,22 @@ public class VoidContractService implements VoidContractUseCase {
         var contract = contractRepository.findById(contractId);
         if (contract == null) throw new InvalidContractException("Contrato no existe: " + contractId);
 
-        if (contract.getStatus() == ContractStatus.VENDIDO) {
-            throw new InvalidContractException("No se puede anular un contrato que ya generó venta.");
+        if (contract.getStatus() == ContractStatus.FACTURADO) {
+            throw new InvalidContractException("No se puede anular un contrato FACTURADO.");
+        }
+        if (contract.getStatus() == ContractStatus.CREDITO_ACTIVO) {
+            throw new InvalidContractException("No se puede anular directamente un crédito activo. Use resolver por decomiso si corresponde.");
+        }
+        if (contract.getStatus() == ContractStatus.PAGADO_PENDIENTE_SUNAT) {
+            throw new InvalidContractException("No se puede anular directamente un crédito pagado. Revise el proceso SUNAT o regularización administrativa.");
+        }
+        if (contract.getStatus() == ContractStatus.RESUELTO_DECOMISO) {
+            return ContractVoidResponse.builder()
+                    .contractId(contractId)
+                    .previousStatus("RESUELTO_DECOMISO")
+                    .status("RESUELTO_DECOMISO")
+                    .message("Contrato ya fue resuelto por decomiso.")
+                    .build();
         }
         if (contract.getStatus() == ContractStatus.ANULADO) {
             return ContractVoidResponse.builder()
@@ -50,8 +64,8 @@ public class VoidContractService implements VoidContractUseCase {
         String notes = contract.getNotes();
         if (reason != null && !reason.isBlank()) {
             notes = (notes == null || notes.isBlank())
-                    ? ("ANULADO: " + reason)
-                    : (notes + "\nANULADO: " + reason);
+                    ? ("ANULADO: " + reason + " | usuario=" + user.getUsername())
+                    : (notes + "\nANULADO: " + reason + " | usuario=" + user.getUsername());
         }
 
         contractRepository.updateStatus(contractId, ContractStatus.ANULADO, notes);

@@ -18,6 +18,10 @@ public interface ContractInstallmentRepository {
     void updatePaidAmountAndStatus(Long contractId, int installmentNumber, BigDecimal paidAmount, String status,
                                  java.time.LocalDateTime paidAt, Long paidBy, String paidByUsername);
 
+    boolean allInstallmentsPaid(Long contractId);
+
+    void cancelPendingInstallments(Long contractId);
+
 
     class LockedInstallment {
         private Long id;
