@@ -227,6 +227,6 @@ public class PostgresSaleV2SunatRepository implements SaleV2SunatRepository {
 
     @Override
     public void markEmissionError(Long saleId, String description, LocalDateTime emittedAt) {
-        updateEmissionResult(saleId, "ERROR", null, description, null, null, null, null, emittedAt);
+        updateEmissionResult(saleId, "ERROR_COMUNICACION", null, description, null, null, null, null, emittedAt);
     }
 }

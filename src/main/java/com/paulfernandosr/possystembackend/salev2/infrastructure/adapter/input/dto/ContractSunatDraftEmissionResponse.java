@@ -28,4 +28,9 @@ public class ContractSunatDraftEmissionResponse {
     private String pdfPath;
 
     private LocalDateTime emittedAt;
+
+    private Boolean accepted;
+    private Boolean rejected;
+    private Boolean communicationError;
+    private Boolean retryable;
 }

@@ -33,7 +33,20 @@ public class PostgresSaleV2CounterSaleCompositionRepository implements SaleV2Cou
                    cs.associated_number,
                    cs.total,
                    cs.discount_total,
-                   cs.associated_at
+                   cs.associated_at,
+                   EXISTS (
+                       SELECT 1
+                         FROM sale_counter_sale_sunat_link l
+                        WHERE l.counter_sale_id = cs.id
+                          AND l.reservation_status IN ('PENDING', 'ERROR_COMUNICACION')
+                   ) AS has_pending_sale_link,
+                   EXISTS (
+                       SELECT 1
+                         FROM counter_sale_sunat_combo_member m
+                         JOIN counter_sale_sunat_combo c ON c.id = m.combo_id
+                        WHERE m.counter_sale_id = cs.id
+                          AND c.combo_status IN ('PENDING', 'ERROR_COMUNICACION', 'ERROR')
+                   ) AS has_pending_direct_combo
               FROM counter_sale cs
              WHERE cs.id IN (%s)
              FOR UPDATE
@@ -53,6 +66,8 @@ public class PostgresSaleV2CounterSaleCompositionRepository implements SaleV2Cou
                         .total(rs.getBigDecimal("total"))
                         .discountTotal(rs.getBigDecimal("discount_total"))
                         .associatedAt(rs.getTimestamp("associated_at") != null ? rs.getTimestamp("associated_at").toLocalDateTime() : null)
+                        .hasPendingSaleLink(rs.getObject("has_pending_sale_link", Boolean.class))
+                        .hasPendingDirectCombo(rs.getObject("has_pending_direct_combo", Boolean.class))
                         .build())
                 .list();
     }
@@ -97,7 +112,7 @@ public class PostgresSaleV2CounterSaleCompositionRepository implements SaleV2Cou
                    updated_at = NOW()
              WHERE sale_id = ?
                AND counter_sale_id IN (%s)
-               AND reservation_status = 'PENDING'
+               AND reservation_status IN ('PENDING', 'ERROR_COMUNICACION', 'RECHAZADO')
         """, placeholders);
         Object[] params = new Object[counterSaleIds.size() + 2];
         params[0] = releaseReason;
@@ -106,6 +121,38 @@ public class PostgresSaleV2CounterSaleCompositionRepository implements SaleV2Cou
             params[i + 2] = counterSaleIds.get(i);
         }
         jdbcClient.sql(sql).params(params).update();
+    }
+
+    @Override
+    public void markCommunicationPending(Long saleId, List<Long> counterSaleIds, String reason) {
+        if (counterSaleIds == null || counterSaleIds.isEmpty()) {
+            return;
+        }
+
+        String placeholders = counterSaleIds.stream().map(id -> "?").collect(Collectors.joining(","));
+        String sql = String.format("""
+            UPDATE sale_counter_sale_sunat_link
+               SET reservation_status = 'ERROR_COMUNICACION',
+                   release_reason = ?,
+                   updated_at = NOW()
+             WHERE sale_id = ?
+               AND counter_sale_id IN (%s)
+               AND reservation_status = 'PENDING'
+        """, placeholders);
+
+        Object[] params = new Object[counterSaleIds.size() + 2];
+        params[0] = truncate(reason, 4000);
+        params[1] = saleId;
+        for (int i = 0; i < counterSaleIds.size(); i++) {
+            params[i + 2] = counterSaleIds.get(i);
+        }
+
+        jdbcClient.sql(sql).params(params).update();
+    }
+
+    private String truncate(String value, int max) {
+        if (value == null) return null;
+        return value.length() <= max ? value : value.substring(0, max);
     }
 
     @Override
@@ -124,7 +171,7 @@ public class PostgresSaleV2CounterSaleCompositionRepository implements SaleV2Cou
                    updated_at = NOW()
              WHERE sale_id = ?
                AND counter_sale_id = ?
-               AND reservation_status = 'PENDING'
+               AND reservation_status IN ('PENDING', 'ERROR_COMUNICACION')
         """;
         jdbcClient.sql(updateLink)
                 .params(emittedDocType, emittedSeries, emittedNumber, saleId, counterSaleId)

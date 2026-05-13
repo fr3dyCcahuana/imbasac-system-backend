@@ -66,6 +66,14 @@ public class SaleV2CounterSaleCompositionPersistenceService {
                 throw new InvalidSaleV2Exception("Counter-sale ya asociado a SUNAT. counterSaleId=" + locked.getId());
             }
 
+            if (Boolean.TRUE.equals(locked.getHasPendingSaleLink())
+                    || Boolean.TRUE.equals(locked.getHasPendingDirectCombo())) {
+                throw new InvalidSaleV2Exception(
+                        "Counter-sale tiene una emisión SUNAT pendiente. Debes reintentar o resolver esa emisión antes de usarlo en otra composición. counterSaleId="
+                                + locked.getId()
+                );
+            }
+
             compositionRepository.reserveCounterSale(
                     saleId,
                     locked.getId(),
@@ -125,6 +133,19 @@ public class SaleV2CounterSaleCompositionPersistenceService {
                                   String reason) {
         release(saleId, plan, reason);
         adminEditSaleV2BeforeSunatUseCase.edit(saleId, restoreRequest, username);
+    }
+
+    @Transactional
+    public void markCommunicationPending(Long saleId,
+                                         SaleV2CounterSaleCompositionCalculator.CompositionPlan plan,
+                                         String reason) {
+        List<Long> counterSaleIds = plan.getSources().stream()
+                .map(SaleV2CounterSaleCompositionCalculator.SourceCounterSale::getCounterSaleId)
+                .toList();
+
+        if (!counterSaleIds.isEmpty()) {
+            compositionRepository.markCommunicationPending(saleId, counterSaleIds, reason);
+        }
     }
 
     @Transactional

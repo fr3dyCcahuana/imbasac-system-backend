@@ -1,7 +1,5 @@
 package com.paulfernandosr.possystembackend.salev2.application;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.paulfernandosr.possystembackend.common.infrastructure.documentseries.DocumentSeriesPolicy;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.DocumentRequest;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.SunatProps;
@@ -10,6 +8,8 @@ import com.paulfernandosr.possystembackend.salev2.domain.port.input.EmitSaleV2To
 import com.paulfernandosr.possystembackend.salev2.domain.port.output.SaleV2SunatRepository;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2SunatEmissionResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.SaleV2SunatMapper;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.sunat.SunatEmissionResult;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.sunat.SunatEmissionResultParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,17 +26,17 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
 
-    private static final String SUCCESS_RESPONSE = "0";
     private static final BigDecimal GENERIC_CUSTOMER_TOTAL_LIMIT = new BigDecimal("700.00");
 
     private final SaleV2SunatRepository saleV2SunatRepository;
     private final DocumentSeriesPolicy documentSeriesPolicy;
     private final RestClient sunatRestClient;
     private final SunatProps sunatProps;
-    private final ObjectMapper objectMapper;
+    private final SunatEmissionResultParser sunatEmissionResultParser;
+    private final SaleV2SunatRelationFinalizerService relationFinalizerService;
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = Exception.class)
     public SaleV2SunatEmissionResponse emit(Long saleId) {
         if (saleId == null) {
             throw new InvalidSaleV2Exception("saleId es obligatorio.");
@@ -50,9 +50,20 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
         validateSale(sale);
 
         if ("ACEPTADO".equalsIgnoreCase(blankIfNull(sale.getSunatStatus()))) {
-            return buildResponse(sale.getSaleId(), sale.getDocType(), sale.getSeries(), sale.getNumber(), sale.getSunatStatus(),
-                    sale.getSunatResponseCode(), sale.getSunatResponseDescription(), sale.getSunatHashCode(),
-                    sale.getSunatXmlPath(), sale.getSunatCdrPath(), sale.getSunatPdfPath(), sale.getSunatSentAt());
+            return buildResponse(
+                    sale.getSaleId(),
+                    sale.getDocType(),
+                    sale.getSeries(),
+                    sale.getNumber(),
+                    sale.getSunatStatus(),
+                    sale.getSunatResponseCode(),
+                    sale.getSunatResponseDescription(),
+                    sale.getSunatHashCode(),
+                    sale.getSunatXmlPath(),
+                    sale.getSunatCdrPath(),
+                    sale.getSunatPdfPath(),
+                    sale.getSunatSentAt()
+            );
         }
 
         List<SaleV2SunatRepository.SaleItemForSunat> items = saleV2SunatRepository.findItems(saleId);
@@ -83,7 +94,14 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
 
         DocumentRequest request = SaleV2SunatMapper.map(sunatProps, sale, visibleItems);
 
-        log.info("SUNAT V2 request: {}", request);
+        log.info(
+                "SUNAT V2 request: saleId={}, docType={}, series={}, number={}, total={}",
+                sale.getSaleId(),
+                sale.getDocType(),
+                sale.getSeries(),
+                sale.getNumber(),
+                sale.getTotal()
+        );
 
         try {
             String rawResponse = sunatRestClient.post()
@@ -93,75 +111,69 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
 
             log.info("SUNAT V2 response: {}", rawResponse);
 
-            JsonNode root = objectMapper.readTree(rawResponse);
-            JsonNode data = root != null ? root.path("data") : null;
+            SunatEmissionResult result = sunatEmissionResultParser.parse(rawResponse, LocalDateTime.now());
+            persistAndFinalize(saleId, sale, result);
+            return buildResponse(sale, result);
 
-            String providerError = textValue(data, "error");
-            if (providerError != null && !providerError.isBlank()) {
-                String finalStatus = "ERROR";
-                LocalDateTime emittedAt = LocalDateTime.now();
-
-                saleV2SunatRepository.updateEmissionResult(
-                        saleId,
-                        finalStatus,
-                        null,
-                        providerError,
-                        null,
-                        null,
-                        null,
-                        null,
-                        emittedAt
-                );
-
-                return buildResponse(
-                        saleId,
-                        sale.getDocType(),
-                        sale.getSeries(),
-                        sale.getNumber(),
-                        finalStatus,
-                        null,
-                        providerError,
-                        null,
-                        null,
-                        null,
-                        null,
-                        emittedAt
-                );
-            }
-
-            String code = textValue(data, "respuesta_sunat_codigo");
-            String description = defaultIfBlank(textValue(data, "respuesta_sunat_descripcion"), "Respuesta vacía de SUNAT");
-            String hashCode = extractHashCode(data != null ? data.path("codigo_hash") : null);
-            String xmlPath = textValue(data, "ruta_xml");
-            String cdrPath = textValue(data, "ruta_cdr");
-            String pdfPath = textValue(data, "ruta_pdf");
-            String finalStatus = SUCCESS_RESPONSE.equals(code) ? "ACEPTADO" : "RECHAZADO";
-            LocalDateTime emittedAt = LocalDateTime.now();
-
-            saleV2SunatRepository.updateEmissionResult(
-                    saleId,
-                    finalStatus,
-                    code,
-                    description,
-                    hashCode,
-                    xmlPath,
-                    cdrPath,
-                    pdfPath,
-                    emittedAt
-            );
-
-            return buildResponse(saleId, sale.getDocType(), sale.getSeries(), sale.getNumber(), finalStatus,
-                    code, description, hashCode, xmlPath, cdrPath, pdfPath, emittedAt);
-
-        } catch (RuntimeException ex) {
-            LocalDateTime emittedAt = LocalDateTime.now();
-            saleV2SunatRepository.markEmissionError(saleId, ex.getMessage(), emittedAt);
-            throw ex;
         } catch (Exception ex) {
-            LocalDateTime emittedAt = LocalDateTime.now();
-            saleV2SunatRepository.markEmissionError(saleId, ex.getMessage(), emittedAt);
-            throw new InvalidSaleV2Exception("No se pudo interpretar la respuesta de SUNAT: " + ex.getMessage());
+            SunatEmissionResult result = sunatEmissionResultParser.fromException(ex, LocalDateTime.now());
+            persistAndFinalize(saleId, sale, result);
+            return buildResponse(sale, result);
         }
+    }
+
+    private void persistAndFinalize(Long saleId,
+                                    SaleV2SunatRepository.LockedSunatSale sale,
+                                    SunatEmissionResult result) {
+        saleV2SunatRepository.updateEmissionResult(
+                saleId,
+                result.getStatus(),
+                result.getCode(),
+                result.getDescription(),
+                result.getHashCode(),
+                result.getXmlPath(),
+                result.getCdrPath(),
+                result.getPdfPath(),
+                result.getEmittedAt()
+        );
+
+        if (result.isAccepted()) {
+            relationFinalizerService.onAccepted(
+                    saleId,
+                    sale.getDocType(),
+                    sale.getSeries(),
+                    sale.getNumber(),
+                    result.getEmittedAt()
+            );
+        } else {
+            relationFinalizerService.onNotAccepted(
+                    saleId,
+                    result.getStatus(),
+                    result.getDescription()
+            );
+        }
+    }
+
+    private SaleV2SunatEmissionResponse buildResponse(SaleV2SunatRepository.LockedSunatSale sale,
+                                                      SunatEmissionResult result) {
+        return SaleV2SunatEmissionResponse.builder()
+                .saleId(sale.getSaleId())
+                .docType(sale.getDocType())
+                .series(sale.getSeries())
+                .number(sale.getNumber())
+                .sunatStatus(result.getStatus())
+                .sunatCode(result.getCode())
+                .sunatDescription(result.getDescription())
+                .hashCode(result.getHashCode())
+                .xmlPath(result.getXmlPath())
+                .cdrPath(result.getCdrPath())
+                .pdfPath(result.getPdfPath())
+                .emittedAt(result.getEmittedAt())
+                .accepted(result.isAccepted())
+                .rejected(result.isRejected())
+                .communicationError(result.isCommunicationError())
+                .retryable(result.isRetryable())
+                .build();
     }
 
     private void validateSale(SaleV2SunatRepository.LockedSunatSale sale) {
@@ -238,54 +250,13 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
         }
     }
 
-    private String textValue(JsonNode node, String fieldName) {
-        if (node == null || node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        JsonNode child = node.path(fieldName);
-        if (child.isMissingNode() || child.isNull()) {
-            return null;
-        }
-        return child.asText();
-    }
-
-    private String extractHashCode(JsonNode node) {
-        if (node == null || node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        if (node.isArray()) {
-            for (JsonNode item : node) {
-                if (item != null && !item.isNull()) {
-                    String value = item.asText();
-                    if (value != null && !value.trim().isEmpty()) {
-                        return value;
-                    }
-                }
-            }
-            return null;
-        }
-        if (node.isObject()) {
-            JsonNode codeNode = node.path("codigo");
-            if (!codeNode.isMissingNode() && !codeNode.isNull()) {
-                return codeNode.asText();
-            }
-            JsonNode hashNode = node.path("hash");
-            if (!hashNode.isMissingNode() && !hashNode.isNull()) {
-                return hashNode.asText();
-            }
-        }
-        String value = node.asText();
-        return value == null || value.trim().isEmpty() ? null : value;
-    }
-
-    private String defaultIfBlank(String value, String defaultValue) {
-        return value == null || value.trim().isEmpty() ? defaultValue : value;
-    }
 
     private SaleV2SunatEmissionResponse buildResponse(Long saleId, String docType, String series, Long number,
                                                       String sunatStatus, String code, String description,
                                                       String hashCode, String xmlPath, String cdrPath,
                                                       String pdfPath, LocalDateTime emittedAt) {
+        String normalized = sunatStatus == null ? "" : sunatStatus.trim().toUpperCase(Locale.ROOT);
+
         return SaleV2SunatEmissionResponse.builder()
                 .saleId(saleId)
                 .docType(docType)
@@ -299,6 +270,10 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
                 .cdrPath(cdrPath)
                 .pdfPath(pdfPath)
                 .emittedAt(emittedAt)
+                .accepted("ACEPTADO".equals(normalized))
+                .rejected("RECHAZADO".equals(normalized))
+                .communicationError("ERROR_COMUNICACION".equals(normalized))
+                .retryable("ERROR_COMUNICACION".equals(normalized) || "ERROR".equals(normalized))
                 .build();
     }
 

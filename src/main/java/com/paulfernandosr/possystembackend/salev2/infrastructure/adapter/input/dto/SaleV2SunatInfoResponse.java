@@ -18,4 +18,9 @@ public class SaleV2SunatInfoResponse {
     private String cdrPath;
     private String pdfPath;
     private LocalDateTime sentAt;
+
+    private Boolean accepted;
+    private Boolean rejected;
+    private Boolean communicationError;
+    private Boolean retryable;
 }

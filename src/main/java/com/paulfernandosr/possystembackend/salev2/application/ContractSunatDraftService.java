@@ -19,6 +19,8 @@ import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.d
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.ContractSunatDraftResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.ContractSunatDraftSaveRequest;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.SaleV2SunatMapper;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.sunat.SunatEmissionResult;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.sunat.SunatEmissionResultParser;
 import com.paulfernandosr.possystembackend.user.domain.User;
 import com.paulfernandosr.possystembackend.user.domain.port.output.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +53,7 @@ public class ContractSunatDraftService implements
     private final RestClient sunatRestClient;
     private final SunatProps sunatProps;
     private final ObjectMapper objectMapper;
+    private final SunatEmissionResultParser sunatEmissionResultParser;
 
     @Override
     @Transactional
@@ -105,7 +108,7 @@ public class ContractSunatDraftService implements
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = Exception.class)
     public ContractSunatDraftEmissionResponse emit(Long saleId, String username) {
         validateSaleId(saleId);
         findUser(username);
@@ -146,6 +149,8 @@ public class ContractSunatDraftService implements
 
             sunatNumber = lockedSeries.getNextNumber();
             repository.setDraftNumberAndStatus(draft.getId(), sunatNumber, "BORRADOR");
+            documentSeriesRepository.incrementNextNumber(lockedSeries.getId());
+            lockedSeries = null;
             draft.setNumber(sunatNumber);
         }
 
@@ -168,7 +173,14 @@ public class ContractSunatDraftService implements
                 itemsForSunat
         );
 
-        log.info("SUNAT contract draft request: {}", sunatRequest);
+        log.info(
+                "SUNAT contract draft request: saleId={}, contractId={}, docType={}, series={}, number={}",
+                draft.getSaleId(),
+                draft.getContractId(),
+                draft.getDocType(),
+                draft.getSeries(),
+                draft.getNumber()
+        );
 
         try {
             String rawResponse = sunatRestClient.post()
@@ -178,92 +190,45 @@ public class ContractSunatDraftService implements
 
             log.info("SUNAT contract draft response: {}", rawResponse);
 
-            JsonNode root = objectMapper.readTree(rawResponse);
-            JsonNode data = root != null ? root.path("data") : null;
-
-            String providerError = textValue(data, "error");
-
-            if (providerError != null && !providerError.isBlank()) {
-                LocalDateTime emittedAt = LocalDateTime.now();
-
-                repository.markSaleEmissionResult(
-                        saleId,
-                        "ERROR",
-                        null,
-                        providerError,
-                        null,
-                        null,
-                        null,
-                        null,
-                        emittedAt
-                );
-
-                return buildEmissionResponse(
-                        draft,
-                        "ERROR",
-                        null,
-                        providerError,
-                        null,
-                        null,
-                        null,
-                        null,
-                        emittedAt
-                );
-            }
-
-            String code = textValue(data, "respuesta_sunat_codigo");
-            String description = defaultIfBlank(
-                    textValue(data, "respuesta_sunat_descripcion"),
-                    "Respuesta vacía de SUNAT"
-            );
-
-            String hashCode = extractHashCode(data != null ? data.path("codigo_hash") : null);
-            String xmlPath = textValue(data, "ruta_xml");
-            String cdrPath = textValue(data, "ruta_cdr");
-            String pdfPath = textValue(data, "ruta_pdf");
-
-            String finalStatus = SUCCESS_RESPONSE.equals(code) ? "ACEPTADO" : "RECHAZADO";
-            LocalDateTime emittedAt = LocalDateTime.now();
+            SunatEmissionResult result = sunatEmissionResultParser.parse(rawResponse, LocalDateTime.now());
 
             repository.markSaleEmissionResult(
                     saleId,
-                    finalStatus,
-                    code,
-                    description,
-                    hashCode,
-                    xmlPath,
-                    cdrPath,
-                    pdfPath,
-                    emittedAt
+                    result.getStatus(),
+                    result.getCode(),
+                    result.getDescription(),
+                    result.getHashCode(),
+                    result.getXmlPath(),
+                    result.getCdrPath(),
+                    result.getPdfPath(),
+                    result.getEmittedAt()
             );
 
-            if ("ACEPTADO".equals(finalStatus)) {
+            if (result.isAccepted()) {
                 repository.setDraftNumberAndStatus(draft.getId(), sunatNumber, "EMITIDO");
                 if (lockedSeries != null) {
                     documentSeriesRepository.incrementNextNumber(lockedSeries.getId());
                 }
             }
 
-            return buildEmissionResponse(
-                    draft,
-                    finalStatus,
-                    code,
-                    description,
-                    hashCode,
-                    xmlPath,
-                    cdrPath,
-                    pdfPath,
-                    emittedAt
+            return buildEmissionResponse(draft, result);
+
+        } catch (Exception ex) {
+            SunatEmissionResult result = sunatEmissionResultParser.fromException(ex, LocalDateTime.now());
+
+            repository.markSaleEmissionResult(
+                    saleId,
+                    result.getStatus(),
+                    result.getCode(),
+                    result.getDescription(),
+                    result.getHashCode(),
+                    result.getXmlPath(),
+                    result.getCdrPath(),
+                    result.getPdfPath(),
+                    result.getEmittedAt()
             );
 
-        } catch (RuntimeException ex) {
-            LocalDateTime emittedAt = LocalDateTime.now();
-            repository.markSaleEmissionError(saleId, ex.getMessage(), emittedAt);
-            throw ex;
-        } catch (Exception ex) {
-            LocalDateTime emittedAt = LocalDateTime.now();
-            repository.markSaleEmissionError(saleId, ex.getMessage(), emittedAt);
-            throw new InvalidSaleV2Exception("No se pudo interpretar la respuesta de SUNAT: " + ex.getMessage());
+            return buildEmissionResponse(draft, result);
         }
     }
 
@@ -423,6 +388,29 @@ public class ContractSunatDraftService implements
         return warnings;
     }
 
+    private ContractSunatDraftEmissionResponse buildEmissionResponse(ContractSunatDraftResponse draft,
+                                                                       SunatEmissionResult result) {
+        return ContractSunatDraftEmissionResponse.builder()
+                .saleId(draft.getSaleId())
+                .contractId(draft.getContractId())
+                .docType(draft.getDocType())
+                .series(draft.getSeries())
+                .number(draft.getNumber())
+                .sunatStatus(result.getStatus())
+                .sunatCode(result.getCode())
+                .sunatDescription(result.getDescription())
+                .hashCode(result.getHashCode())
+                .xmlPath(result.getXmlPath())
+                .cdrPath(result.getCdrPath())
+                .pdfPath(result.getPdfPath())
+                .emittedAt(result.getEmittedAt())
+                .accepted(result.isAccepted())
+                .rejected(result.isRejected())
+                .communicationError(result.isCommunicationError())
+                .retryable(result.isRetryable())
+                .build();
+    }
+
     private ContractSunatDraftEmissionResponse buildEmissionResponse(
             ContractSunatDraftResponse draft,
             String status,
@@ -448,6 +436,10 @@ public class ContractSunatDraftService implements
                 .cdrPath(cdrPath)
                 .pdfPath(pdfPath)
                 .emittedAt(emittedAt)
+                .accepted("ACEPTADO".equalsIgnoreCase(status))
+                .rejected("RECHAZADO".equalsIgnoreCase(status))
+                .communicationError("ERROR_COMUNICACION".equalsIgnoreCase(status))
+                .retryable("ERROR_COMUNICACION".equalsIgnoreCase(status) || "ERROR".equalsIgnoreCase(status))
                 .build();
     }
 

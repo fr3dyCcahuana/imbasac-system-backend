@@ -7,7 +7,6 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
-import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -96,6 +95,7 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
     private boolean isEditableForList(String saleStatus, String sunatStatus) {
         String normalizedSaleStatus = saleStatus == null ? "" : saleStatus.trim().toUpperCase();
         String normalizedSunatStatus = sunatStatus == null ? "" : sunatStatus.trim().toUpperCase();
+
         return "EMITIDA".equals(normalizedSaleStatus)
                 && ("NO_ENVIADO".equals(normalizedSunatStatus)
                 || "ERROR".equals(normalizedSunatStatus)
@@ -107,10 +107,12 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
         String normalizedSaleStatus = saleStatus == null ? "" : saleStatus.trim().toUpperCase();
         String normalizedDocType = docType == null ? "" : docType.trim().toUpperCase();
         String normalizedSunatStatus = sunatStatus == null ? "" : sunatStatus.trim().toUpperCase();
+
         return "EMITIDA".equals(normalizedSaleStatus)
                 && ("BOLETA".equals(normalizedDocType) || "FACTURA".equals(normalizedDocType))
                 && ("NO_ENVIADO".equals(normalizedSunatStatus)
                 || "ERROR".equals(normalizedSunatStatus)
+                || "ERROR_COMUNICACION".equals(normalizedSunatStatus)
                 || "RECHAZADO".equals(normalizedSunatStatus));
     }
 
@@ -118,6 +120,175 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
         String fullName = ((firstName == null ? "" : firstName.trim()) + " "
                 + (lastName == null ? "" : lastName.trim())).trim();
         return fullName.isBlank() ? null : fullName;
+    }
+
+    private SaleV2RelationInfoResponse buildRelationInfo(java.sql.ResultSet rs) throws java.sql.SQLException {
+        Long proformaId = getLong(rs, "proforma_id");
+        String proformaSeries = rs.getString("proforma_series");
+        Long proformaNumber = getLong(rs, "proforma_number");
+
+        Long contractId = getLong(rs, "contract_id");
+        String contractSeries = rs.getString("contract_series");
+        Long contractNumber = getLong(rs, "contract_number");
+
+        Long directComboId = getLong(rs, "direct_combo_id");
+        String directComboStatus = rs.getString("direct_combo_status");
+        Integer directComboCount = getInteger(rs, "direct_combo_counter_sale_count");
+        String directCounterSaleDocs = rs.getString("direct_counter_sale_documents_label");
+
+        Integer compositionCount = getInteger(rs, "composition_counter_sale_count");
+        Integer compositionPendingCount = getInteger(rs, "composition_pending_counter_sale_count");
+        Integer compositionAcceptedCount = getInteger(rs, "composition_accepted_counter_sale_count");
+        String compositionCounterSaleDocs = rs.getString("composition_counter_sale_documents_label");
+
+        if (contractId != null) {
+            String contractDoc = formatDoc(contractSeries, contractNumber);
+            String label = contractDoc != null ? "Contrato " + contractDoc : "Contrato #" + contractId;
+
+            return SaleV2RelationInfoResponse.builder()
+                    .relationType("CONTRACT")
+                    .relationLabel(label)
+                    .proformaId(null)
+                    .proformaSeries(null)
+                    .proformaNumber(null)
+                    .contractId(contractId)
+                    .contractSeries(contractSeries)
+                    .contractNumber(contractNumber)
+                    .counterSaleComboId(null)
+                    .counterSaleComboStatus(null)
+                    .counterSaleDocumentsLabel(null)
+                    .counterSaleCount(0)
+                    .pendingCounterSaleCount(0)
+                    .acceptedCounterSaleCount(0)
+                    .hasCounterSaleRelation(false)
+                    .hasPendingCounterSaleRelation(false)
+                    .build();
+        }
+
+        if (directComboId != null) {
+            int count = directComboCount == null ? 0 : directComboCount;
+            boolean pending = "PENDING".equalsIgnoreCase(directComboStatus)
+                    || "ERROR_COMUNICACION".equalsIgnoreCase(directComboStatus)
+                    || "ERROR".equalsIgnoreCase(directComboStatus)
+                    || "RECHAZADO".equalsIgnoreCase(directComboStatus);
+
+            String label = hasText(directCounterSaleDocs)
+                    ? "Ventanilla " + directCounterSaleDocs
+                    : "Venta diaria de ventanilla" + (count > 0 ? " (" + count + ")" : "");
+
+            return SaleV2RelationInfoResponse.builder()
+                    .relationType("COUNTER_SALE_DAILY")
+                    .relationLabel(label)
+                    .proformaId(null)
+                    .proformaSeries(null)
+                    .proformaNumber(null)
+                    .contractId(null)
+                    .contractSeries(null)
+                    .contractNumber(null)
+                    .counterSaleComboId(directComboId)
+                    .counterSaleComboStatus(directComboStatus)
+                    .counterSaleDocumentsLabel(directCounterSaleDocs)
+                    .counterSaleCount(count)
+                    .pendingCounterSaleCount(pending ? count : 0)
+                    .acceptedCounterSaleCount("ACEPTADO".equalsIgnoreCase(directComboStatus) ? count : 0)
+                    .hasCounterSaleRelation(count > 0)
+                    .hasPendingCounterSaleRelation(pending)
+                    .build();
+        }
+
+        int compCount = compositionCount == null ? 0 : compositionCount;
+        if (compCount > 0) {
+            int pendingCount = compositionPendingCount == null ? 0 : compositionPendingCount;
+            int acceptedCount = compositionAcceptedCount == null ? 0 : compositionAcceptedCount;
+
+            String label = hasText(compositionCounterSaleDocs)
+                    ? "SUNAT + ventanilla " + compositionCounterSaleDocs
+                    : "SUNAT + ventanilla" + (compCount > 0 ? " (" + compCount + ")" : "");
+
+            return SaleV2RelationInfoResponse.builder()
+                    .relationType("COUNTER_SALE_COMPOSITION")
+                    .relationLabel(label)
+                    .proformaId(null)
+                    .proformaSeries(null)
+                    .proformaNumber(null)
+                    .contractId(null)
+                    .contractSeries(null)
+                    .contractNumber(null)
+                    .counterSaleComboId(null)
+                    .counterSaleComboStatus(null)
+                    .counterSaleDocumentsLabel(compositionCounterSaleDocs)
+                    .counterSaleCount(compCount)
+                    .pendingCounterSaleCount(pendingCount)
+                    .acceptedCounterSaleCount(acceptedCount)
+                    .hasCounterSaleRelation(true)
+                    .hasPendingCounterSaleRelation(pendingCount > 0)
+                    .build();
+        }
+
+        if (proformaId != null) {
+            String proformaDoc = formatDoc(proformaSeries, proformaNumber);
+            String label = proformaDoc != null ? "Proforma " + proformaDoc : "Proforma #" + proformaId;
+
+            return SaleV2RelationInfoResponse.builder()
+                    .relationType("PROFORMA")
+                    .relationLabel(label)
+                    .proformaId(proformaId)
+                    .proformaSeries(proformaSeries)
+                    .proformaNumber(proformaNumber)
+                    .contractId(null)
+                    .contractSeries(null)
+                    .contractNumber(null)
+                    .counterSaleComboId(null)
+                    .counterSaleComboStatus(null)
+                    .counterSaleDocumentsLabel(null)
+                    .counterSaleCount(0)
+                    .pendingCounterSaleCount(0)
+                    .acceptedCounterSaleCount(0)
+                    .hasCounterSaleRelation(false)
+                    .hasPendingCounterSaleRelation(false)
+                    .build();
+        }
+
+        return SaleV2RelationInfoResponse.builder()
+                .relationType("NORMAL")
+                .relationLabel("Venta directa")
+                .proformaId(null)
+                .proformaSeries(null)
+                .proformaNumber(null)
+                .contractId(null)
+                .contractSeries(null)
+                .contractNumber(null)
+                .counterSaleComboId(null)
+                .counterSaleComboStatus(null)
+                .counterSaleDocumentsLabel(null)
+                .counterSaleCount(0)
+                .pendingCounterSaleCount(0)
+                .acceptedCounterSaleCount(0)
+                .hasCounterSaleRelation(false)
+                .hasPendingCounterSaleRelation(false)
+                .build();
+    }
+
+    private String formatDoc(String series, Long number) {
+        if (series == null || series.isBlank() || number == null) {
+            return null;
+        }
+
+        return series.trim() + "-" + String.format("%08d", number);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private Long getLong(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
+        Object value = rs.getObject(column);
+        return value instanceof Number number ? number.longValue() : null;
+    }
+
+    private Integer getInteger(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
+        Object value = rs.getObject(column);
+        return value instanceof Number number ? number.intValue() : null;
     }
 
     @Override
@@ -180,10 +351,74 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
             s.last_edited_at AS last_edited_at,
             u_edit.username AS last_edited_by_username,
             s.created_at AS created_at,
-            s.updated_at AS updated_at
+            s.updated_at AS updated_at,
+
+            COALESCE(sr.proforma_id, s.source_proforma_id) AS proforma_id,
+            COALESCE(pf.series, p_ref.series) AS proforma_series,
+            COALESCE(pf.number, p_ref.number) AS proforma_number,
+
+            s.contract_id AS contract_id,
+            ct.series AS contract_series,
+            ct.number AS contract_number,
+
+            direct_combo.combo_id AS direct_combo_id,
+            direct_combo.combo_status AS direct_combo_status,
+            direct_combo.counter_sale_documents_label AS direct_counter_sale_documents_label,
+            COALESCE(direct_combo.counter_sale_count, 0) AS direct_combo_counter_sale_count,
+
+            comp.counter_sale_documents_label AS composition_counter_sale_documents_label,
+            COALESCE(comp.counter_sale_count, 0) AS composition_counter_sale_count,
+            COALESCE(comp.pending_counter_sale_count, 0) AS composition_pending_counter_sale_count,
+            COALESCE(comp.accepted_counter_sale_count, 0) AS composition_accepted_counter_sale_count
           FROM sale s
           LEFT JOIN users u_edit
                  ON u_edit.id = s.last_edited_by
+          LEFT JOIN sale_reference sr
+                 ON sr.sale_id = s.id
+          LEFT JOIN proforma pf
+                 ON pf.id = sr.proforma_id
+          LEFT JOIN proforma p_ref
+                 ON p_ref.id = s.source_proforma_id
+          LEFT JOIN contract ct
+                 ON ct.id = s.contract_id
+          LEFT JOIN LATERAL (
+                SELECT csc.id AS combo_id,
+                       csc.combo_status AS combo_status,
+                       COUNT(csm.counter_sale_id)::int AS counter_sale_count,
+                       STRING_AGG(
+                           cs.series || '-' || LPAD(cs.number::text, 8, '0'),
+                           ', '
+                           ORDER BY csm.position
+                       ) AS counter_sale_documents_label
+                  FROM counter_sale_sunat_combo csc
+                  LEFT JOIN counter_sale_sunat_combo_member csm
+                         ON csm.combo_id = csc.id
+                  LEFT JOIN counter_sale cs
+                         ON cs.id = csm.counter_sale_id
+                 WHERE csc.generated_sale_id = s.id
+                 GROUP BY csc.id, csc.combo_status
+                 ORDER BY csc.id DESC
+                 LIMIT 1
+          ) direct_combo ON TRUE
+          LEFT JOIN LATERAL (
+                SELECT COUNT(*)::int AS counter_sale_count,
+                       COUNT(*) FILTER (
+                           WHERE l.reservation_status IN ('PENDING', 'ERROR_COMUNICACION')
+                       )::int AS pending_counter_sale_count,
+                       COUNT(*) FILTER (
+                           WHERE l.reservation_status = 'ACEPTADO'
+                       )::int AS accepted_counter_sale_count,
+                       STRING_AGG(
+                           cs.series || '-' || LPAD(cs.number::text, 8, '0'),
+                           ', '
+                           ORDER BY cs.series, cs.number
+                       ) AS counter_sale_documents_label
+                  FROM sale_counter_sale_sunat_link l
+                  JOIN counter_sale cs
+                    ON cs.id = l.counter_sale_id
+                 WHERE l.sale_id = s.id
+                   AND l.reservation_status <> 'LIBERADO'
+          ) comp ON TRUE
          WHERE 1 = 1
     """);
 
@@ -220,11 +455,13 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                     .sunatResponseDescription(rs.getString("sunat_response_description"))
                     .sunatSentAt(rs.getTimestamp("sunat_sent_at") != null ? rs.getTimestamp("sunat_sent_at").toLocalDateTime() : null)
                     .editStatus(rs.getString("edit_status"))
-                    .editCount((Integer) rs.getObject("edit_count"))
+                    .editCount(getInteger(rs, "edit_count"))
                     .lastEditedAt(rs.getTimestamp("last_edited_at") != null ? rs.getTimestamp("last_edited_at").toLocalDateTime() : null)
                     .lastEditedByUsername(rs.getString("last_edited_by_username"))
                     .canEditBeforeSunat(isEditableForList(saleStatusValue, sunatStatusValue))
                     .canEmitSunat(isEmittableForList(saleStatusValue, docTypeValue, sunatStatusValue))
+                    .contractId(getLong(rs, "contract_id"))
+                    .relation(buildRelationInfo(rs))
                     .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null)
                     .updatedAt(rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toLocalDateTime() : null)
                     .build();
@@ -319,8 +556,25 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                 s.created_at      AS created_at,
                 s.updated_at      AS updated_at,
 
+                COALESCE(sr.proforma_id, s.source_proforma_id) AS proforma_id,
+                COALESCE(pf.series, p_ref.series) AS proforma_series,
+                COALESCE(pf.number, p_ref.number) AS proforma_number,
+
+                ct.series AS contract_series,
+                ct.number AS contract_number,
+
+                direct_combo.combo_id AS direct_combo_id,
+                direct_combo.combo_status AS direct_combo_status,
+                direct_combo.counter_sale_documents_label AS direct_counter_sale_documents_label,
+                COALESCE(direct_combo.counter_sale_count, 0) AS direct_combo_counter_sale_count,
+
+                comp.counter_sale_documents_label AS composition_counter_sale_documents_label,
+                COALESCE(comp.counter_sale_count, 0) AS composition_counter_sale_count,
+                COALESCE(comp.pending_counter_sale_count, 0) AS composition_pending_counter_sale_count,
+                COALESCE(comp.accepted_counter_sale_count, 0) AS composition_accepted_counter_sale_count,
+
                 COALESCE(sr.proforma_id, s.source_proforma_id) AS reference_proforma_id,
-                COALESCE(sr.imported_at, p_ref.converted_at)      AS reference_imported_at,
+                COALESCE(sr.imported_at, p_ref.converted_at) AS reference_imported_at,
 
                 s.sunat_status               AS sunat_status,
                 s.sunat_response_code        AS sunat_response_code,
@@ -341,6 +595,8 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
               FROM sale s
               LEFT JOIN sale_reference sr
                      ON sr.sale_id = s.id
+              LEFT JOIN proforma pf
+                     ON pf.id = sr.proforma_id
               LEFT JOIN proforma p_ref
                      ON p_ref.id = s.source_proforma_id
               LEFT JOIN users u_created
@@ -353,6 +609,46 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                      ON s.customer_id IS NULL
                     AND c_doc.document_type = s.customer_doc_type
                     AND c_doc.document_number = s.customer_doc_number
+              LEFT JOIN contract ct
+                     ON ct.id = s.contract_id
+              LEFT JOIN LATERAL (
+                    SELECT csc.id AS combo_id,
+                           csc.combo_status AS combo_status,
+                           COUNT(csm.counter_sale_id)::int AS counter_sale_count,
+                           STRING_AGG(
+                               cs.series || '-' || LPAD(cs.number::text, 8, '0'),
+                               ', '
+                               ORDER BY csm.position
+                           ) AS counter_sale_documents_label
+                      FROM counter_sale_sunat_combo csc
+                      LEFT JOIN counter_sale_sunat_combo_member csm
+                             ON csm.combo_id = csc.id
+                      LEFT JOIN counter_sale cs
+                             ON cs.id = csm.counter_sale_id
+                     WHERE csc.generated_sale_id = s.id
+                     GROUP BY csc.id, csc.combo_status
+                     ORDER BY csc.id DESC
+                     LIMIT 1
+              ) direct_combo ON TRUE
+              LEFT JOIN LATERAL (
+                    SELECT COUNT(*)::int AS counter_sale_count,
+                           COUNT(*) FILTER (
+                               WHERE l.reservation_status IN ('PENDING', 'ERROR_COMUNICACION')
+                           )::int AS pending_counter_sale_count,
+                           COUNT(*) FILTER (
+                               WHERE l.reservation_status = 'ACEPTADO'
+                           )::int AS accepted_counter_sale_count,
+                           STRING_AGG(
+                               cs.series || '-' || LPAD(cs.number::text, 8, '0'),
+                               ', '
+                               ORDER BY cs.series, cs.number
+                           ) AS counter_sale_documents_label
+                      FROM sale_counter_sale_sunat_link l
+                      JOIN counter_sale cs
+                        ON cs.id = l.counter_sale_id
+                     WHERE l.sale_id = s.id
+                       AND l.reservation_status <> 'LIBERADO'
+              ) comp ON TRUE
              WHERE s.id = ?
         """;
 
@@ -394,23 +690,28 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                     .sentAt(rs.getTimestamp("sunat_sent_at") != null
                             ? rs.getTimestamp("sunat_sent_at").toLocalDateTime()
                             : null)
+                    .accepted("ACEPTADO".equalsIgnoreCase(rs.getString("sunat_status")))
+                    .rejected("RECHAZADO".equalsIgnoreCase(rs.getString("sunat_status")))
+                    .communicationError("ERROR_COMUNICACION".equalsIgnoreCase(rs.getString("sunat_status")))
+                    .retryable("ERROR_COMUNICACION".equalsIgnoreCase(rs.getString("sunat_status"))
+                            || "ERROR".equalsIgnoreCase(rs.getString("sunat_status")))
                     .build();
 
             SaleV2EditInfoResponse edit = SaleV2EditInfoResponse.builder()
                     .status(rs.getString("edit_status"))
-                    .count((Integer) rs.getObject("edit_count"))
+                    .count(getInteger(rs, "edit_count"))
                     .lastEditedAt(rs.getTimestamp("last_edited_at") != null
                             ? rs.getTimestamp("last_edited_at").toLocalDateTime()
                             : null)
-                    .lastEditedBy((Long) rs.getObject("last_edited_by"))
+                    .lastEditedBy(getLong(rs, "last_edited_by"))
                     .lastEditedByUsername(rs.getString("last_edited_by_username"))
                     .lastEditReason(rs.getString("last_edit_reason"))
                     .build();
 
             return SaleV2DetailResponse.builder()
                     .saleId(rs.getLong("sale_id"))
-                    .stationId(rs.getLong("station_id"))
-                    .saleSessionId((Long) rs.getObject("sale_session_id"))
+                    .stationId(getLong(rs, "station_id"))
+                    .saleSessionId(getLong(rs, "sale_session_id"))
                     .createdBy(rs.getLong("created_by"))
                     .createdByUser(createdByUser)
                     .docType(rs.getString("doc_type"))
@@ -420,7 +721,7 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                     .currency(rs.getString("currency"))
                     .exchangeRate(rs.getBigDecimal("exchange_rate"))
                     .priceList(rs.getString("price_list"))
-                    .customerId((Long) rs.getObject("customer_id"))
+                    .customerId(getLong(rs, "customer_id"))
                     .customerDocType(rs.getString("customer_doc_type"))
                     .customerDocNumber(rs.getString("customer_doc_number"))
                     .customerName(rs.getString("customer_name"))
@@ -434,7 +735,7 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                     .igvRate(rs.getBigDecimal("igv_rate"))
                     .igvIncluded(rs.getObject("igv_included", Boolean.class))
                     .paymentType(rs.getString("payment_type"))
-                    .creditDays((Integer) rs.getObject("credit_days"))
+                    .creditDays(getInteger(rs, "credit_days"))
                     .dueDate(rs.getDate("due_date") != null ? rs.getDate("due_date").toLocalDate() : null)
                     .subtotal(rs.getBigDecimal("subtotal"))
                     .discountTotal(rs.getBigDecimal("discount_total"))
@@ -443,10 +744,11 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                     .giftCostTotal(rs.getBigDecimal("gift_cost_total"))
                     .notes(rs.getString("notes"))
                     .status(rs.getString("status"))
-                    .contractId((Long) rs.getObject("contract_id"))
+                    .contractId(getLong(rs, "contract_id"))
                     .reference(reference)
                     .sunat(sunat)
                     .edit(edit)
+                    .relation(buildRelationInfo(rs))
                     .createdAt(rs.getTimestamp("created_at") != null
                             ? rs.getTimestamp("created_at").toLocalDateTime()
                             : null)
@@ -643,8 +945,6 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                 .orElse(null);
     }
 
-
-
     @Override
     public List<SaleV2CounterSaleAssociationResponse> findCounterSaleAssociations(Long saleId) {
         String sql = """
@@ -665,11 +965,11 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
         RowMapper<SaleV2CounterSaleAssociationResponse> mapper = (rs, rowNum) -> SaleV2CounterSaleAssociationResponse.builder()
                 .counterSaleId(rs.getLong("counter_sale_id"))
                 .series(rs.getString("series"))
-                .number((Long) rs.getObject("number"))
+                .number(getLong(rs, "number"))
                 .total(rs.getBigDecimal("total"))
                 .associatedDocType(rs.getString("associated_doc_type"))
                 .associatedSeries(rs.getString("associated_series"))
-                .associatedNumber((Long) rs.getObject("associated_number"))
+                .associatedNumber(getLong(rs, "associated_number"))
                 .associatedAt(rs.getTimestamp("associated_at") != null ? rs.getTimestamp("associated_at").toLocalDateTime() : null)
                 .build();
 

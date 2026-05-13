@@ -368,7 +368,7 @@ public class PostgresContractSunatDraftRepository implements ContractSunatDraftR
 
     @Override
     public void markSaleEmissionError(Long saleId, String description, LocalDateTime emittedAt) {
-        markSaleEmissionResult(saleId, "ERROR", null, description, null, null, null, null, emittedAt);
+        markSaleEmissionResult(saleId, "ERROR_COMUNICACION", null, description, null, null, null, null, emittedAt);
     }
 
     @Override

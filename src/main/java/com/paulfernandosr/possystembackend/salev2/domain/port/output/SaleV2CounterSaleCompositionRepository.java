@@ -22,6 +22,10 @@ public interface SaleV2CounterSaleCompositionRepository {
                              List<Long> counterSaleIds,
                              String releaseReason);
 
+    void markCommunicationPending(Long saleId,
+                                  List<Long> counterSaleIds,
+                                  String reason);
+
     void finalizeAcceptedCounterSale(Long saleId,
                                      Long counterSaleId,
                                      String emittedDocType,
@@ -59,5 +63,7 @@ public interface SaleV2CounterSaleCompositionRepository {
         private BigDecimal total;
         private BigDecimal discountTotal;
         private LocalDateTime associatedAt;
+        private Boolean hasPendingSaleLink;
+        private Boolean hasPendingDirectCombo;
     }
 }

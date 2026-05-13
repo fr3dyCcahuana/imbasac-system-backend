@@ -22,7 +22,7 @@ public class GetSalesV2PageService implements GetSalesV2PageUseCase {
 
     private static final Set<String> ALLOWED_DOC_TYPES = Set.of("BOLETA", "FACTURA", "SIMPLE");
     private static final Set<String> ALLOWED_SALE_STATUSES = Set.of("BORRADOR", "EMITIDA", "ANULADA");
-    private static final Set<String> ALLOWED_SUNAT_STATUSES = Set.of("NO_APLICA", "NO_ENVIADO", "ACEPTADO", "RECHAZADO", "ERROR");
+    private static final Set<String> ALLOWED_SUNAT_STATUSES = Set.of("NO_APLICA", "NO_ENVIADO", "ACEPTADO", "RECHAZADO", "ERROR", "ERROR_COMUNICACION");
     private static final Set<String> ALLOWED_EDIT_STATUSES = Set.of("NO_EDITADA", "EDITADA");
     private static final Set<String> ALLOWED_PAYMENT_TYPES = Set.of("CONTADO", "CREDITO");
 
@@ -48,7 +48,7 @@ public class GetSalesV2PageService implements GetSalesV2PageUseCase {
         String normalizedDocType = normalizeDocType(docType);
         String normalizedSeries = normalizeSeries(series);
         String normalizedStatus = normalizeEnum(status, ALLOWED_SALE_STATUSES, "status", "BORRADOR, EMITIDA o ANULADA");
-        String normalizedSunatStatus = normalizeEnum(sunatStatus, ALLOWED_SUNAT_STATUSES, "sunatStatus", "NO_APLICA, NO_ENVIADO, ACEPTADO, RECHAZADO o ERROR");
+        String normalizedSunatStatus = normalizeEnum(sunatStatus, ALLOWED_SUNAT_STATUSES, "sunatStatus", "NO_APLICA, NO_ENVIADO, ACEPTADO, RECHAZADO, ERROR o ERROR_COMUNICACION");
         String normalizedEditStatus = normalizeEnum(editStatus, ALLOWED_EDIT_STATUSES, "editStatus", "NO_EDITADA o EDITADA");
         String normalizedPaymentType = normalizeEnum(paymentType, ALLOWED_PAYMENT_TYPES, "paymentType", "CONTADO o CREDITO");
         validateDateRange(dateFrom, dateTo);

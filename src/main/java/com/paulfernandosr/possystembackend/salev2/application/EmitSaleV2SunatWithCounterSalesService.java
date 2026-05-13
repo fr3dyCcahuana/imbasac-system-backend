@@ -62,23 +62,31 @@ public class EmitSaleV2SunatWithCounterSalesService implements EmitSaleV2SunatWi
 
         persistenceService.reserveAndApply(saleId, username, user.getId(), plan, composedEditRequest);
 
-        SaleV2SunatEmissionResponse emission;
-        try {
-            emission = emitSaleV2ToSunatUseCase.emit(saleId);
-        } catch (RuntimeException ex) {
-            persistenceService.releaseAndRestore(saleId, username, plan, restoreRequest, "ERROR_EMISION: " + safeMessage(ex));
-            throw ex;
+        SaleV2SunatEmissionResponse emission = emitSaleV2ToSunatUseCase.emit(saleId);
+
+        if (emission == null) {
+            persistenceService.markCommunicationPending(
+                    saleId,
+                    plan,
+                    "EMISION_SIN_RESPUESTA"
+            );
+            return buildPendingResponse(plan, null);
         }
 
-        if (emission == null || !"ACEPTADO".equalsIgnoreCase(emission.getSunatStatus())) {
-            String releaseReason = emission == null
-                    ? "EMISION_SIN_RESPUESTA"
-                    : "EMISION_NO_ACEPTADA: " + emission.getSunatStatus();
+        if ("ERROR_COMUNICACION".equalsIgnoreCase(emission.getSunatStatus())) {
+            persistenceService.markCommunicationPending(
+                    saleId,
+                    plan,
+                    emission.getSunatDescription()
+            );
+            return buildPendingResponse(plan, emission);
+        }
+
+        if (!"ACEPTADO".equalsIgnoreCase(emission.getSunatStatus())) {
+            String releaseReason = "EMISION_RECHAZADA: " + emission.getSunatDescription();
             persistenceService.releaseAndRestore(saleId, username, plan, restoreRequest, releaseReason);
             throw new InvalidSaleV2Exception(
-                    emission == null
-                            ? "SUNAT no devolvió respuesta para la emisión compuesta."
-                            : "SUNAT no aceptó la emisión compuesta. sunatStatus=" + emission.getSunatStatus()
+                    "SUNAT rechazó la emisión compuesta: " + emission.getSunatDescription()
             );
         }
 
@@ -106,6 +114,36 @@ public class EmitSaleV2SunatWithCounterSalesService implements EmitSaleV2SunatWi
                         .associatedSeries(emission.getSeries())
                         .associatedNumber(emission.getNumber())
                         .associatedAt(emission.getEmittedAt())
+                        .build()).toList())
+                .build();
+    }
+
+    private SaleV2ComposeSunatEmitResponse buildPendingResponse(
+            SaleV2CounterSaleCompositionCalculator.CompositionPlan plan,
+            SaleV2SunatEmissionResponse emission
+    ) {
+        return SaleV2ComposeSunatEmitResponse.builder()
+                .saleId(plan.getSaleId())
+                .docType(plan.getDocType())
+                .series(plan.getSeries())
+                .number(plan.getNumber())
+                .originalSaleTotal(plan.getOriginalSaleTotal())
+                .composedTotal(plan.getTotals().getTotal())
+                .difference(plan.getDifference())
+                .exactTotalMatch(plan.isExactTotalMatch())
+                .emission(emission)
+                .linkedCounterSales(plan.getSources().stream().map(source -> SaleV2ComposeSunatSourceResponse.builder()
+                        .counterSaleId(source.getCounterSaleId())
+                        .series(source.getSeries())
+                        .number(source.getNumber())
+                        .status(source.getStatus())
+                        .total(source.getTotal())
+                        .discountTotal(source.getDiscountTotal())
+                        .associatedToSunat(false)
+                        .associatedDocType(emission != null ? emission.getDocType() : null)
+                        .associatedSeries(emission != null ? emission.getSeries() : null)
+                        .associatedNumber(emission != null ? emission.getNumber() : null)
+                        .associatedAt(null)
                         .build()).toList())
                 .build();
     }

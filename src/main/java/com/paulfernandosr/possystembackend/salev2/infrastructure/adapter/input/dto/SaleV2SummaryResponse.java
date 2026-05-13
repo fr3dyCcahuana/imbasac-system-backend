@@ -38,6 +38,9 @@ public class SaleV2SummaryResponse {
     private Boolean canEditBeforeSunat;
     private Boolean canEmitSunat;
 
+    private Long contractId;
+    private SaleV2RelationInfoResponse relation;
+
     private java.time.LocalDateTime createdAt;
     private java.time.LocalDateTime updatedAt;
 
