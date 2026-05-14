@@ -1028,6 +1028,7 @@ public class PdfBoxGuideRemissionPdfGenerator implements GuideRemissionPdfGenera
             case "01" -> "Venta";
             case "02" -> "Compra";
             case "04" -> "Traslado entre establecimientos";
+            case "05" -> "Consignación";
             case "08" -> "Importación";
             case "09" -> "Exportación";
             default -> firstNotBlank(code, "-");

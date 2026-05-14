@@ -4,6 +4,7 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Getter
@@ -17,6 +18,7 @@ public class ContractDetailResponse {
 
     private Long stationId;
     private Long createdBy;
+    private String createdByUsername;
 
     private String series;
     private Long number;
@@ -32,6 +34,10 @@ public class ContractDetailResponse {
     private String customerDocNumber;
     private String customerName;
     private String customerAddress;
+    private String customerUbigeo;
+    private String customerDepartment;
+    private String customerProvince;
+    private String customerDistrict;
 
     private String paymentType;
 
@@ -50,6 +56,10 @@ public class ContractDetailResponse {
     private String saleDocType;
     private String saleSeries;
     private Long saleNumber;
+    private String saleSunatStatus;
+    private String saleSunatResponseCode;
+    private String saleSunatResponseDescription;
+    private LocalDateTime saleSunatSentAt;
     private String notes;
 
     private ContractItemDetail item;

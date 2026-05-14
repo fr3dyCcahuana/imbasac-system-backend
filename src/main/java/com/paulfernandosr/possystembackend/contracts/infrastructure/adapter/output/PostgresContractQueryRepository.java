@@ -76,9 +76,14 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
                    s.doc_type AS saleDocType,
                    s.series AS saleSeries,
                    s.number AS saleNumber,
+                   s.sunat_status AS saleSunatStatus,
+                   s.sunat_response_code AS saleSunatResponseCode,
+                   s.sunat_response_description AS saleSunatResponseDescription,
+                   s.sunat_sent_at AS saleSunatSentAt,
                    ci.sku,
                    ci.description,
-                   psu.vin
+                   psu.vin,
+                   psu.status AS serial_status
               FROM contract c
               LEFT JOIN sale s ON s.id = c.sale_id
               LEFT JOIN contract_item ci ON ci.contract_id = c.id
@@ -114,6 +119,7 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
             SELECT c.id AS contractId,
                    c.station_id AS stationId,
                    c.created_by AS createdBy,
+                   u.username AS createdByUsername,
                    c.series,
                    c.number,
                    c.issue_date AS issueDate,
@@ -125,6 +131,10 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
                    c.customer_doc_number AS customerDocNumber,
                    c.customer_name AS customerName,
                    c.customer_address AS customerAddress,
+                   COALESCE(ca.ubigeo, cust.ubigeo) AS customerUbigeo,
+                   COALESCE(ca.department, cust.department) AS customerDepartment,
+                   COALESCE(ca.province, cust.province) AS customerProvince,
+                   COALESCE(ca.district, cust.district) AS customerDistrict,
                    c.payment_type AS paymentType,
                    c.cash_price AS cashPrice,
                    c.interest_rate_monthly AS interestRateMonthly,
@@ -138,9 +148,35 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
                    s.doc_type AS saleDocType,
                    s.series AS saleSeries,
                    s.number AS saleNumber,
+                   s.sunat_status AS saleSunatStatus,
+                   s.sunat_response_code AS saleSunatResponseCode,
+                   s.sunat_response_description AS saleSunatResponseDescription,
+                   s.sunat_sent_at AS saleSunatSentAt,
                    c.notes
               FROM contract c
               LEFT JOIN sale s ON s.id = c.sale_id
+              LEFT JOIN users u ON u.id = c.created_by
+              LEFT JOIN customers cust
+                ON cust.id = c.customer_id
+                OR (
+                  c.customer_id IS NULL
+                  AND cust.document_type = c.customer_doc_type
+                  AND cust.document_number = c.customer_doc_number
+                )
+              LEFT JOIN LATERAL (
+                SELECT ca1.ubigeo,
+                       ca1.department,
+                       ca1.province,
+                       ca1.district
+                  FROM customer_address ca1
+                 WHERE ca1.customer_id = cust.id
+                   AND ca1.enabled = TRUE
+                   AND c.customer_address IS NOT NULL
+                   AND BTRIM(c.customer_address) <> ''
+                   AND UPPER(BTRIM(ca1.address)) = UPPER(BTRIM(c.customer_address))
+                 ORDER BY ca1.fiscal DESC, ca1.position ASC, ca1.id ASC
+                 LIMIT 1
+              ) ca ON TRUE
              WHERE c.id = ?
         """;
 

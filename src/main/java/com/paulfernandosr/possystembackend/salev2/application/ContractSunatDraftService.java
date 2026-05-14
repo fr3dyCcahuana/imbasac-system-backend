@@ -84,7 +84,13 @@ public class ContractSunatDraftService implements
     @Transactional
     public ContractSunatDraftResponse save(Long contractId, ContractSunatDraftSaveRequest request, String username) {
         validateContractId(contractId);
-        validateSaveRequest(request);
+
+        var contract = contractRepository.findById(contractId);
+        if (contract == null) {
+            throw new InvalidSaleV2Exception("Contrato no existe: " + contractId);
+        }
+
+        validateSaveRequest(request, contract.getPaymentType());
 
         User user = findUser(username);
         ContractSunatDraftResponse current = repository.findByContractId(contractId);
@@ -105,7 +111,13 @@ public class ContractSunatDraftService implements
     @Transactional(readOnly = true)
     public ContractSunatDraftPreviewResponse preview(Long contractId, ContractSunatDraftSaveRequest request) {
         validateContractId(contractId);
-        validateSaveRequest(request);
+
+        var contract = contractRepository.findById(contractId);
+        if (contract == null) {
+            throw new InvalidSaleV2Exception("Contrato no existe: " + contractId);
+        }
+
+        validateSaveRequest(request, contract.getPaymentType());
 
         ContractSunatDraftResponse current = repository.findByContractId(contractId);
         if (current == null) {
@@ -155,7 +167,7 @@ public class ContractSunatDraftService implements
 
         documentSeriesPolicy.requireAllowed(draft.getDocType(), draft.getSeries(), InvalidSaleV2Exception::new);
 
-        validateDraftReadyForEmission(draft);
+        validateDraftReadyForEmission(draft, contract.getPaymentType());
 
         Long sunatNumber = draft.getNumber();
         if (sunatNumber == null) {
@@ -484,7 +496,7 @@ public class ContractSunatDraftService implements
         throw new InvalidSaleV2Exception("Estado de contrato no permitido para SUNAT: " + status + ". Contado debe estar CONFIRMADO; crédito debe estar PAGADO_PENDIENTE_SUNAT.");
     }
 
-    private void validateDraftReadyForEmission(ContractSunatDraftResponse draft) {
+    private void validateDraftReadyForEmission(ContractSunatDraftResponse draft, Object paymentType) {
         if (draft.getDocType() == null || draft.getDocType().isBlank()) throw new InvalidSaleV2Exception("docType es obligatorio.");
         if (draft.getSeries() == null || draft.getSeries().isBlank()) throw new InvalidSaleV2Exception("series es obligatorio.");
         if (draft.getIssueDate() == null) throw new InvalidSaleV2Exception("issueDate es obligatorio.");
@@ -494,12 +506,16 @@ public class ContractSunatDraftService implements
         if ("FACTURA".equalsIgnoreCase(draft.getDocType()) && !"RUC".equalsIgnoreCase(draft.getCustomerDocType())) {
             throw new InvalidSaleV2Exception("FACTURA requiere cliente SUNAT con RUC.");
         }
-        if (draft.getPaymentMethod() == null || draft.getPaymentMethod().isBlank()) {
-            throw new InvalidSaleV2Exception("paymentMethod es obligatorio para registrar el pago de la venta final al emitir SUNAT.");
+
+        // Regla de negocio: paymentMethod solo es obligatorio para contratos CONTADO.
+        // En CREDITO, las cuotas ya fueron registradas contra el contrato; al emitir SUNAT
+        // se generará la venta final y, si no hay método, se registrará internamente como OTRO.
+        if (isContado(paymentType) && (draft.getPaymentMethod() == null || draft.getPaymentMethod().isBlank())) {
+            throw new InvalidSaleV2Exception("paymentMethod es obligatorio para contratos al contado.");
         }
     }
 
-    private void validateSaveRequest(ContractSunatDraftSaveRequest request) {
+    private void validateSaveRequest(ContractSunatDraftSaveRequest request, Object paymentType) {
         if (request == null) throw new InvalidSaleV2Exception("Request obligatorio.");
         if (request.getDocType() == null || request.getDocType().isBlank()) throw new InvalidSaleV2Exception("docType es obligatorio.");
         if (request.getSeries() == null || request.getSeries().isBlank()) throw new InvalidSaleV2Exception("series es obligatorio.");
@@ -507,7 +523,9 @@ public class ContractSunatDraftService implements
         if (request.getBillingDocType() == null || request.getBillingDocType().isBlank()) throw new InvalidSaleV2Exception("billingDocType es obligatorio.");
         if (request.getBillingDocNumber() == null || request.getBillingDocNumber().isBlank()) throw new InvalidSaleV2Exception("billingDocNumber es obligatorio.");
         if (request.getBillingName() == null || request.getBillingName().isBlank()) throw new InvalidSaleV2Exception("billingName es obligatorio.");
-        if (request.getPaymentMethod() == null || request.getPaymentMethod().isBlank()) throw new InvalidSaleV2Exception("paymentMethod es obligatorio.");
+        if (isContado(paymentType) && (request.getPaymentMethod() == null || request.getPaymentMethod().isBlank())) {
+            throw new InvalidSaleV2Exception("paymentMethod es obligatorio para contratos al contado.");
+        }
         if (request.getTaxStatus() == null || request.getTaxStatus().isBlank()) throw new InvalidSaleV2Exception("taxStatus es obligatorio.");
         if (request.getEditReason() == null || request.getEditReason().trim().length() < 5) throw new InvalidSaleV2Exception("editReason es obligatorio y debe tener al menos 5 caracteres.");
         if (request.getItems() == null || request.getItems().isEmpty()) throw new InvalidSaleV2Exception("items es obligatorio.");
@@ -516,6 +534,10 @@ public class ContractSunatDraftService implements
             if (item.getLineNumber() == null) throw new InvalidSaleV2Exception("lineNumber es obligatorio en cada item.");
             if (item.getSunatUnitPrice() == null || item.getSunatUnitPrice().compareTo(BigDecimal.ZERO) < 0) throw new InvalidSaleV2Exception("sunatUnitPrice no puede ser nulo ni negativo.");
         }
+    }
+
+    private boolean isContado(Object paymentType) {
+        return "CONTADO".equalsIgnoreCase(String.valueOf(paymentType));
     }
 
     private User findUser(String username) {

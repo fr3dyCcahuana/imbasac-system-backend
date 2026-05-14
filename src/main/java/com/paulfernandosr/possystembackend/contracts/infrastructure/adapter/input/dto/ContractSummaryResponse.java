@@ -4,6 +4,7 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -37,4 +38,12 @@ public class ContractSummaryResponse {
     private String saleDocType;
     private String saleSeries;
     private Long saleNumber;
+
+    // Estado SUNAT de la venta asociada.
+    // El frontend lo usa para decidir si el comprobante es realmente final.
+    private String saleSunatStatus;
+    private String saleSunatResponseCode;
+    private String saleSunatResponseDescription;
+    private LocalDateTime saleSunatSentAt;
+    private String serialStatus;
 }
