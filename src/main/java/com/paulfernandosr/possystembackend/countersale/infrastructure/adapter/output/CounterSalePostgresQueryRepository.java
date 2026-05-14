@@ -91,9 +91,72 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                    cs.associated_series AS associated_series,
                    cs.associated_number AS associated_number,
                    cs.associated_at AS associated_at,
+                   linked.linked_to_sale AS linked_to_sale,
+                   linked.linked_sale_id AS linked_sale_id,
+                   linked.linked_doc_type AS linked_doc_type,
+                   linked.linked_series AS linked_series,
+                   linked.linked_number AS linked_number,
+                   linked.linked_sunat_status AS linked_sunat_status,
+                   linked.linked_sunat_description AS linked_sunat_description,
+                   linked.linked_process_status AS linked_process_status,
+                   linked.linked_process_type AS linked_process_type,
+                   linked.linked_combo_id AS linked_combo_id,
+                   linked.linked_at AS linked_at,
                    cs.created_at AS created_at,
                    cs.updated_at AS updated_at
               FROM counter_sale cs
+              LEFT JOIN LATERAL (
+                  SELECT TRUE AS linked_to_sale,
+                         x.linked_sale_id,
+                         x.linked_doc_type,
+                         x.linked_series,
+                         x.linked_number,
+                         x.linked_sunat_status,
+                         x.linked_sunat_description,
+                         x.linked_process_status,
+                         x.linked_process_type,
+                         x.linked_combo_id,
+                         x.linked_at
+                    FROM (
+                          SELECT c.generated_sale_id AS linked_sale_id,
+                                 s.doc_type AS linked_doc_type,
+                                 s.series AS linked_series,
+                                 s.number AS linked_number,
+                                 s.sunat_status AS linked_sunat_status,
+                                 s.sunat_response_description AS linked_sunat_description,
+                                 c.combo_status AS linked_process_status,
+                                 'DIRECT_COMBO' AS linked_process_type,
+                                 c.id AS linked_combo_id,
+                                 COALESCE(c.associated_at, c.updated_at, c.created_at) AS linked_at,
+                                 COALESCE(c.updated_at, c.created_at) AS sort_at
+                            FROM counter_sale_sunat_combo_member m
+                            JOIN counter_sale_sunat_combo c
+                              ON c.id = m.combo_id
+                            JOIN sale s
+                              ON s.id = c.generated_sale_id
+                           WHERE m.counter_sale_id = cs.id
+                             AND c.generated_sale_id IS NOT NULL
+                          UNION ALL
+                          SELECT l.sale_id AS linked_sale_id,
+                                 s.doc_type AS linked_doc_type,
+                                 s.series AS linked_series,
+                                 s.number AS linked_number,
+                                 s.sunat_status AS linked_sunat_status,
+                                 s.sunat_response_description AS linked_sunat_description,
+                                 l.reservation_status AS linked_process_status,
+                                 'SALE_LINK' AS linked_process_type,
+                                 NULL::BIGINT AS linked_combo_id,
+                                 COALESCE(l.associated_at, l.updated_at, l.reserved_at) AS linked_at,
+                                 COALESCE(l.updated_at, l.reserved_at) AS sort_at
+                            FROM sale_counter_sale_sunat_link l
+                            JOIN sale s
+                              ON s.id = l.sale_id
+                           WHERE l.counter_sale_id = cs.id
+                             AND l.sale_id IS NOT NULL
+                         ) x
+                   ORDER BY x.sort_at DESC NULLS LAST, x.linked_sale_id DESC
+                   LIMIT 1
+              ) linked ON TRUE
              WHERE 1 = 1
         """);
         List<Object> params = new ArrayList<>();
@@ -107,6 +170,7 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
 
         RowMapper<CounterSaleSummaryResponse> mapper = (rs, rowNum) -> {
             boolean associatedToSunat = Boolean.TRUE.equals(rs.getObject("associated_to_sunat", Boolean.class));
+            boolean linkedToSale = Boolean.TRUE.equals(rs.getObject("linked_to_sale", Boolean.class));
             String statusValue = rs.getString("status");
             return CounterSaleSummaryResponse.builder()
                     .counterSaleId(rs.getLong("counter_sale_id"))
@@ -124,7 +188,18 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                     .associatedSeries(rs.getString("associated_series"))
                     .associatedNumber((Long) rs.getObject("associated_number"))
                     .associatedAt(rs.getTimestamp("associated_at") != null ? rs.getTimestamp("associated_at").toLocalDateTime() : null)
-                    .canVoid("EMITIDA".equalsIgnoreCase(statusValue) && !associatedToSunat)
+                    .linkedToSale(linkedToSale)
+                    .linkedSaleId((Long) rs.getObject("linked_sale_id"))
+                    .linkedDocType(rs.getString("linked_doc_type"))
+                    .linkedSeries(rs.getString("linked_series"))
+                    .linkedNumber((Long) rs.getObject("linked_number"))
+                    .linkedSunatStatus(rs.getString("linked_sunat_status"))
+                    .linkedSunatDescription(rs.getString("linked_sunat_description"))
+                    .linkedProcessStatus(rs.getString("linked_process_status"))
+                    .linkedProcessType(rs.getString("linked_process_type"))
+                    .linkedComboId((Long) rs.getObject("linked_combo_id"))
+                    .linkedAt(rs.getTimestamp("linked_at") != null ? rs.getTimestamp("linked_at").toLocalDateTime() : null)
+                    .canVoid("EMITIDA".equalsIgnoreCase(statusValue) && !associatedToSunat && !linkedToSale)
                     .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null)
                     .updatedAt(rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toLocalDateTime() : null)
                     .build();
@@ -215,6 +290,17 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                    cs.associated_series AS associated_series,
                    cs.associated_number AS associated_number,
                    cs.associated_at AS associated_at,
+                   linked.linked_to_sale AS linked_to_sale,
+                   linked.linked_sale_id AS linked_sale_id,
+                   linked.linked_doc_type AS linked_doc_type,
+                   linked.linked_series AS linked_series,
+                   linked.linked_number AS linked_number,
+                   linked.linked_sunat_status AS linked_sunat_status,
+                   linked.linked_sunat_description AS linked_sunat_description,
+                   linked.linked_process_status AS linked_process_status,
+                   linked.linked_process_type AS linked_process_type,
+                   linked.linked_combo_id AS linked_combo_id,
+                   linked.linked_at AS linked_at,
                    cs.voided_at AS voided_at,
                    cs.voided_by AS voided_by,
                    u_void.username AS voided_by_username,
@@ -224,10 +310,63 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
               FROM counter_sale cs
               JOIN users u_create ON u_create.id = cs.created_by
               LEFT JOIN users u_void ON u_void.id = cs.voided_by
+              LEFT JOIN LATERAL (
+                  SELECT TRUE AS linked_to_sale,
+                         x.linked_sale_id,
+                         x.linked_doc_type,
+                         x.linked_series,
+                         x.linked_number,
+                         x.linked_sunat_status,
+                         x.linked_sunat_description,
+                         x.linked_process_status,
+                         x.linked_process_type,
+                         x.linked_combo_id,
+                         x.linked_at
+                    FROM (
+                          SELECT c.generated_sale_id AS linked_sale_id,
+                                 s.doc_type AS linked_doc_type,
+                                 s.series AS linked_series,
+                                 s.number AS linked_number,
+                                 s.sunat_status AS linked_sunat_status,
+                                 s.sunat_response_description AS linked_sunat_description,
+                                 c.combo_status AS linked_process_status,
+                                 'DIRECT_COMBO' AS linked_process_type,
+                                 c.id AS linked_combo_id,
+                                 COALESCE(c.associated_at, c.updated_at, c.created_at) AS linked_at,
+                                 COALESCE(c.updated_at, c.created_at) AS sort_at
+                            FROM counter_sale_sunat_combo_member m
+                            JOIN counter_sale_sunat_combo c
+                              ON c.id = m.combo_id
+                            JOIN sale s
+                              ON s.id = c.generated_sale_id
+                           WHERE m.counter_sale_id = cs.id
+                             AND c.generated_sale_id IS NOT NULL
+                          UNION ALL
+                          SELECT l.sale_id AS linked_sale_id,
+                                 s.doc_type AS linked_doc_type,
+                                 s.series AS linked_series,
+                                 s.number AS linked_number,
+                                 s.sunat_status AS linked_sunat_status,
+                                 s.sunat_response_description AS linked_sunat_description,
+                                 l.reservation_status AS linked_process_status,
+                                 'SALE_LINK' AS linked_process_type,
+                                 NULL::BIGINT AS linked_combo_id,
+                                 COALESCE(l.associated_at, l.updated_at, l.reserved_at) AS linked_at,
+                                 COALESCE(l.updated_at, l.reserved_at) AS sort_at
+                            FROM sale_counter_sale_sunat_link l
+                            JOIN sale s
+                              ON s.id = l.sale_id
+                           WHERE l.counter_sale_id = cs.id
+                             AND l.sale_id IS NOT NULL
+                         ) x
+                   ORDER BY x.sort_at DESC NULLS LAST, x.linked_sale_id DESC
+                   LIMIT 1
+              ) linked ON TRUE
              WHERE cs.id = ?
         """;
         RowMapper<CounterSaleDetailResponse> mapper = (rs, rowNum) -> {
             boolean associatedToSunat = Boolean.TRUE.equals(rs.getObject("associated_to_sunat", Boolean.class));
+            boolean linkedToSale = Boolean.TRUE.equals(rs.getObject("linked_to_sale", Boolean.class));
             String statusValue = rs.getString("status");
             return CounterSaleDetailResponse.builder()
                     .counterSaleId(rs.getLong("counter_sale_id"))
@@ -263,7 +402,18 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                     .associatedSeries(rs.getString("associated_series"))
                     .associatedNumber((Long) rs.getObject("associated_number"))
                     .associatedAt(rs.getTimestamp("associated_at") != null ? rs.getTimestamp("associated_at").toLocalDateTime() : null)
-                    .canVoid("EMITIDA".equalsIgnoreCase(statusValue) && !associatedToSunat)
+                    .linkedToSale(linkedToSale)
+                    .linkedSaleId((Long) rs.getObject("linked_sale_id"))
+                    .linkedDocType(rs.getString("linked_doc_type"))
+                    .linkedSeries(rs.getString("linked_series"))
+                    .linkedNumber((Long) rs.getObject("linked_number"))
+                    .linkedSunatStatus(rs.getString("linked_sunat_status"))
+                    .linkedSunatDescription(rs.getString("linked_sunat_description"))
+                    .linkedProcessStatus(rs.getString("linked_process_status"))
+                    .linkedProcessType(rs.getString("linked_process_type"))
+                    .linkedComboId((Long) rs.getObject("linked_combo_id"))
+                    .linkedAt(rs.getTimestamp("linked_at") != null ? rs.getTimestamp("linked_at").toLocalDateTime() : null)
+                    .canVoid("EMITIDA".equalsIgnoreCase(statusValue) && !associatedToSunat && !linkedToSale)
                     .voidInfo(CounterSaleVoidInfoResponse.builder()
                             .voidedAt(rs.getTimestamp("voided_at") != null ? rs.getTimestamp("voided_at").toLocalDateTime() : null)
                             .voidedBy((Long) rs.getObject("voided_by"))

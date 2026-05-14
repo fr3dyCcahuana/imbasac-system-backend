@@ -217,4 +217,35 @@ public class CounterSalePostgresRepository implements CounterSaleRepository {
                 .params(voidedBy, voidReason, voidReason, voidReason, counterSaleId)
                 .update();
     }
+
+    @Override
+    public boolean hasGeneratedSunatSale(Long counterSaleId) {
+        String sql = """
+            SELECT
+                EXISTS (
+                    SELECT 1
+                      FROM counter_sale_sunat_combo_member m
+                      JOIN counter_sale_sunat_combo c
+                        ON c.id = m.combo_id
+                     WHERE m.counter_sale_id = ?
+                       AND c.generated_sale_id IS NOT NULL
+                       AND c.combo_status IN ('PENDING', 'ERROR', 'ERROR_COMUNICACION', 'RECHAZADO', 'ACEPTADO')
+                )
+                OR EXISTS (
+                    SELECT 1
+                      FROM sale_counter_sale_sunat_link l
+                     WHERE l.counter_sale_id = ?
+                       AND l.sale_id IS NOT NULL
+                       AND l.reservation_status IN ('PENDING', 'ERROR_COMUNICACION', 'RECHAZADO', 'ACEPTADO')
+                )
+        """;
+
+        return Boolean.TRUE.equals(
+                jdbcClient.sql(sql)
+                        .params(counterSaleId, counterSaleId)
+                        .query(Boolean.class)
+                        .single()
+        );
+    }
+
 }

@@ -147,9 +147,7 @@ public class EmitCounterSaleSunatCombinationService implements EmitCounterSaleSu
         }
 
         if (!"ACEPTADO".equalsIgnoreCase(emission.getSunatStatus())) {
-            String comboStatus = "ERROR_COMUNICACION".equalsIgnoreCase(emission.getSunatStatus())
-                    ? "ERROR_COMUNICACION"
-                    : "RECHAZADO";
+            String comboStatus = normalizeComboStatus(emission.getSunatStatus());
 
             markComboStatus(comboId, comboStatus, emission.getSunatDescription());
 
@@ -246,6 +244,17 @@ public class EmitCounterSaleSunatCombinationService implements EmitCounterSaleSu
                         .associatedSeries(accepted ? result.getSeries() : null)
                         .associatedNumber(accepted ? number : null)
                         .associatedAt(associatedAt)
+                        .linkedToSale(true)
+                        .linkedSaleId(generatedSaleId)
+                        .linkedDocType("BOLETA")
+                        .linkedSeries(result.getSeries())
+                        .linkedNumber(number)
+                        .linkedSunatStatus(sunatStatus)
+                        .linkedSunatDescription(sunatDescription)
+                        .linkedProcessStatus(accepted ? "ACEPTADO" : sunatStatus)
+                        .linkedProcessType("DIRECT_COMBO")
+                        .linkedComboId(comboId)
+                        .linkedAt(associatedAt != null ? associatedAt : emittedAt)
                         .build()).toList())
                 .lines(result.getSelectedLines().stream().map(line -> CounterSaleSunatCombinationLineResponse.builder()
                         .counterSaleId(line.getCounterSaleId())
@@ -288,14 +297,16 @@ public class EmitCounterSaleSunatCombinationService implements EmitCounterSaleSu
                        SELECT 1
                          FROM sale_counter_sale_sunat_link l
                         WHERE l.counter_sale_id = counter_sale.id
-                          AND l.reservation_status IN ('PENDING', 'ERROR_COMUNICACION')
+                          AND l.sale_id IS NOT NULL
+                          AND l.reservation_status IN ('PENDING', 'ERROR_COMUNICACION', 'RECHAZADO', 'ACEPTADO')
                    ) AS has_pending_sale_link,
                    EXISTS (
                        SELECT 1
                          FROM counter_sale_sunat_combo_member m
                          JOIN counter_sale_sunat_combo c ON c.id = m.combo_id
                         WHERE m.counter_sale_id = counter_sale.id
-                          AND c.combo_status IN ('PENDING', 'ERROR_COMUNICACION', 'ERROR')
+                          AND c.generated_sale_id IS NOT NULL
+                          AND c.combo_status IN ('PENDING', 'ERROR_COMUNICACION', 'ERROR', 'RECHAZADO', 'ACEPTADO')
                    ) AS has_pending_direct_combo
               FROM counter_sale
              WHERE id IN (%s)
@@ -332,7 +343,7 @@ public class EmitCounterSaleSunatCombinationService implements EmitCounterSaleSu
 
             if (row.hasPendingSaleLink() || row.hasPendingDirectCombo()) {
                 throw new InvalidCounterSaleException(
-                        "La venta de ventanilla tiene una emisión SUNAT pendiente. Debes reintentar o resolver esa emisión antes de crear otra. counterSaleId=" + row.id()
+                        "La venta de ventanilla ya tiene una venta generada en Historial de Ventas. Debes reintentar o resolver esa emisión desde Historial de Ventas. counterSaleId=" + row.id()
                 );
             }
         }
@@ -584,6 +595,14 @@ public class EmitCounterSaleSunatCombinationService implements EmitCounterSaleSu
 
     private String resolveTaxReason(String taxStatus) {
         return "NO_GRAVADA".equalsIgnoreCase(blankIfNull(taxStatus)) ? "EXONERADA" : null;
+    }
+
+    private String normalizeComboStatus(String sunatStatus) {
+        String value = blankIfNull(sunatStatus).trim().toUpperCase();
+        if ("ERROR_COMUNICACION".equals(value)) return "ERROR_COMUNICACION";
+        if ("RECHAZADO".equals(value)) return "RECHAZADO";
+        if ("ERROR".equals(value)) return "ERROR";
+        return "ERROR";
     }
 
     private String textValue(JsonNode node, String fieldName) {

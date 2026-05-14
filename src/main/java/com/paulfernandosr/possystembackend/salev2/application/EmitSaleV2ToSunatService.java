@@ -50,6 +50,18 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
         validateSale(sale);
 
         if ("ACEPTADO".equalsIgnoreCase(blankIfNull(sale.getSunatStatus()))) {
+            LocalDateTime associatedAt = sale.getSunatSentAt() != null
+                    ? sale.getSunatSentAt()
+                    : LocalDateTime.now();
+
+            relationFinalizerService.onAccepted(
+                    sale.getSaleId(),
+                    sale.getDocType(),
+                    sale.getSeries(),
+                    sale.getNumber(),
+                    associatedAt
+            );
+
             return buildResponse(
                     sale.getSaleId(),
                     sale.getDocType(),

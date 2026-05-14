@@ -28,6 +28,23 @@ public class CounterSaleSummaryResponse {
     private String associatedSeries;
     private Long associatedNumber;
     private LocalDateTime associatedAt;
+
+    /**
+     * TRUE cuando la ventanilla ya generó una venta formal en Sales,
+     * aunque SUNAT todavía esté en ERROR_COMUNICACION/RECHAZADO.
+     */
+    private Boolean linkedToSale;
+    private Long linkedSaleId;
+    private String linkedDocType;
+    private String linkedSeries;
+    private Long linkedNumber;
+    private String linkedSunatStatus;
+    private String linkedSunatDescription;
+    private String linkedProcessStatus;
+    private String linkedProcessType;
+    private Long linkedComboId;
+    private LocalDateTime linkedAt;
+
     private Boolean canVoid;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

@@ -165,6 +165,17 @@ class CounterSaleSunatCombinationComposer {
                 .associatedSeries(d.getAssociatedSeries())
                 .associatedNumber(d.getAssociatedNumber())
                 .associatedAt(d.getAssociatedAt())
+                .linkedToSale(Boolean.TRUE.equals(d.getLinkedToSale()))
+                .linkedSaleId(d.getLinkedSaleId())
+                .linkedDocType(d.getLinkedDocType())
+                .linkedSeries(d.getLinkedSeries())
+                .linkedNumber(d.getLinkedNumber())
+                .linkedSunatStatus(d.getLinkedSunatStatus())
+                .linkedSunatDescription(d.getLinkedSunatDescription())
+                .linkedProcessStatus(d.getLinkedProcessStatus())
+                .linkedProcessType(d.getLinkedProcessType())
+                .linkedComboId(d.getLinkedComboId())
+                .linkedAt(d.getLinkedAt())
                 .build();
     }
 
@@ -194,6 +205,12 @@ class CounterSaleSunatCombinationComposer {
         }
         if (Boolean.TRUE.equals(detail.getAssociatedToSunat())) {
             errors.add("El counter-sale ya está asociado a SUNAT. counterSaleId=" + detail.getCounterSaleId());
+        }
+        if (Boolean.TRUE.equals(detail.getLinkedToSale())) {
+            errors.add(
+                    "El counter-sale ya tiene una venta generada en Historial de Ventas. " +
+                            "Reintenta o regulariza desde Historial. counterSaleId=" + detail.getCounterSaleId()
+            );
         }
     }
 

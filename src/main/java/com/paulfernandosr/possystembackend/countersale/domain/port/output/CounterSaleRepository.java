@@ -59,6 +59,8 @@ public interface CounterSaleRepository {
 
     void markAsVoided(Long counterSaleId, Long voidedBy, String voidReason);
 
+    boolean hasGeneratedSunatSale(Long counterSaleId);
+
     @Getter
     @Setter
     @NoArgsConstructor
