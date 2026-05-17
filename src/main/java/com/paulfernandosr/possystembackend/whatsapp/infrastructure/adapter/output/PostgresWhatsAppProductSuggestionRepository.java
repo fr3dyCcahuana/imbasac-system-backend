@@ -29,6 +29,7 @@ public class PostgresWhatsAppProductSuggestionRepository implements WhatsAppProd
             .stockQuantity(rs.getBigDecimal("stock_quantity"))
             .priceList(rs.getString("price_list"))
             .rawSnapshot(rs.getString("raw_snapshot"))
+            .mainImageUrl(rs.getString("main_image_url"))
             .createdAt(rs.getObject("created_at", OffsetDateTime.class))
             .build();
 
@@ -94,7 +95,8 @@ public class PostgresWhatsAppProductSuggestionRepository implements WhatsAppProd
     @Override
     public Optional<WhatsAppProductSuggestion> findLatestByPosition(Long conversationId, int position) {
         return jdbcClient.sql("""
-                SELECT * FROM whatsapp_product_suggestions
+                SELECT wps.*, wps.raw_snapshot ->> 'mainImageUrl' AS main_image_url
+                FROM whatsapp_product_suggestions wps
                 WHERE conversation_id = :conversationId AND position = :position
                 ORDER BY created_at DESC
                 LIMIT 1
@@ -107,7 +109,7 @@ public class PostgresWhatsAppProductSuggestionRepository implements WhatsAppProd
 
     @Override
     public Optional<WhatsAppProductSuggestion> findById(Long id) {
-        return jdbcClient.sql("SELECT * FROM whatsapp_product_suggestions WHERE id = :id")
+        return jdbcClient.sql("SELECT wps.*, wps.raw_snapshot ->> 'mainImageUrl' AS main_image_url FROM whatsapp_product_suggestions wps WHERE id = :id")
                 .param("id", id)
                 .query(mapper)
                 .optional();
@@ -116,7 +118,8 @@ public class PostgresWhatsAppProductSuggestionRepository implements WhatsAppProd
     @Override
     public List<WhatsAppProductSuggestion> findLatest(Long conversationId, int limit) {
         return jdbcClient.sql("""
-                SELECT * FROM whatsapp_product_suggestions
+                SELECT wps.*, wps.raw_snapshot ->> 'mainImageUrl' AS main_image_url
+                FROM whatsapp_product_suggestions wps
                 WHERE conversation_id = :conversationId
                 ORDER BY position ASC
                 LIMIT :limit
@@ -136,6 +139,7 @@ public class PostgresWhatsAppProductSuggestionRepository implements WhatsAppProd
                     "stock", item.getStock() == null ? "" : item.getStock().toPlainString(),
                     "price", item.getUnitPrice() == null ? "" : item.getUnitPrice().toPlainString(),
                     "priceList", item.getPriceList() == null ? "" : item.getPriceList(),
+                    "mainImageUrl", item.getMainImageUrl() == null ? "" : item.getMainImageUrl(),
                     "requestedQuantity", item.getQuantity() == null ? "1" : item.getQuantity().toPlainString(),
                     "source", "batch"
             ));
@@ -152,7 +156,8 @@ public class PostgresWhatsAppProductSuggestionRepository implements WhatsAppProd
                     "name", product.getName() == null ? "" : product.getName(),
                     "stock", product.getStockQuantity() == null ? "" : product.getStockQuantity().toPlainString(),
                     "price", product.getSelectedPrice() == null ? "" : product.getSelectedPrice().toPlainString(),
-                    "priceList", product.getSelectedPriceList() == null ? "" : product.getSelectedPriceList()
+                    "priceList", product.getSelectedPriceList() == null ? "" : product.getSelectedPriceList(),
+                    "mainImageUrl", product.getMainImageUrl() == null ? "" : product.getMainImageUrl()
             ));
         } catch (Exception ignored) {
             return "{}";

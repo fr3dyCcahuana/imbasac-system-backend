@@ -72,6 +72,7 @@ public class WhatsAppBatchQuoteService {
                     .lineTotal(lineTotal)
                     .stock(stock)
                     .priceList(product.getSelectedPriceList())
+                    .mainImageUrl(product.getMainImageUrl())
                     .build());
         }
         result.setTotal(total);
@@ -131,6 +132,7 @@ public class WhatsAppBatchQuoteService {
                     .lineTotal(lineTotal)
                     .stock(stock)
                     .priceList(suggestion.getPriceList())
+                    .mainImageUrl(suggestion.getMainImageUrl())
                     .build());
         }
         result.setTotal(total);

@@ -5,6 +5,7 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.Locale;
 
 @Getter
@@ -22,6 +23,7 @@ public class WhatsAppIntegrationProperties {
     private Vision vision = new Vision();
     private Campaign campaign = new Campaign();
     private AiAgent aiAgent = new AiAgent();
+    private Debug debug = new Debug();
     @Getter
     @Setter
     public static class Sales {
@@ -40,6 +42,15 @@ public class WhatsAppIntegrationProperties {
         /** Permite activar/desactivar el flujo futuro de generación de proformas desde WhatsApp. */
         private boolean allowProformaGeneration = true;
 
+        /** Valores por defecto para crear proformas desde WhatsApp. */
+        private Long proformaStationId = 1L;
+        private Long proformaCreatedBy = 1L;
+        private String proformaCreatedByUsername;
+        private String proformaSeries = "P001";
+        private String proformaTaxStatus = "NO_GRAVADA";
+        private BigDecimal proformaIgvRate = new BigDecimal("18.00");
+        private boolean proformaIgvIncluded = false;
+
         /** Si true, el bot solo lista productos con stock disponible. */
         private boolean onlyShowProductsWithStock = true;
 
@@ -48,6 +59,12 @@ public class WhatsAppIntegrationProperties {
 
         /** Mensaje de cierre cuando el bot encuentra productos. */
         private String productSearchFooter = "Responde con el número del producto para continuar con la proforma.";
+
+        /** Permite enviar la imagen principal del producto cuando se muestra un producto puntual. */
+        private boolean sendProductImages = true;
+
+        /** Base pública para imágenes de productos. Ejemplo: https://imbasac.cloud/images/products */
+        private String productImagesBaseUrl = "";
 
         /** Permite reconocer listas de códigos pegadas en el chat. */
         private boolean batchListEnabled = true;
@@ -92,6 +109,28 @@ public class WhatsAppIntegrationProperties {
 
         /** Tamaño máximo del archivo descargado desde WhatsApp para enviarlo a visión. */
         private int maxMediaBytes = 5 * 1024 * 1024;
+    }
+
+
+    @Getter
+    @Setter
+    public static class Debug {
+        /**
+         * Activa endpoints internos para simular conversaciones del flujo de WhatsApp.
+         * Mantener apagado en producción.
+         */
+        private boolean simulationEnabled = false;
+
+        /**
+         * Prefijo de waId que se considera simulación y evita enviar mensajes reales a Meta.
+         */
+        private String simulationWaPrefix = "SIM_";
+
+        public boolean isSimulationWaId(String waId) {
+            if (!simulationEnabled || waId == null || waId.isBlank()) return false;
+            String prefix = simulationWaPrefix == null || simulationWaPrefix.isBlank() ? "SIM_" : simulationWaPrefix;
+            return waId.trim().startsWith(prefix);
+        }
     }
 
     @Getter

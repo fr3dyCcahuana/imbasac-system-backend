@@ -7,6 +7,7 @@ import java.util.Optional;
 
 public interface WhatsAppCartRepository {
     WhatsAppCart findOrCreateOpenCart(Long conversationId);
+    WhatsAppCart findOrCreateOpenCartForProforma(Long conversationId, Long proformaId);
     Optional<WhatsAppCart> findOpenByConversationId(Long conversationId);
     void setCurrentProductSuggestion(Long cartId, Long suggestionId);
     void addItem(WhatsAppCartItem item);

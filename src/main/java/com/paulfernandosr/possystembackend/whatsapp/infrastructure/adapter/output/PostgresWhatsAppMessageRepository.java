@@ -91,6 +91,38 @@ public class PostgresWhatsAppMessageRepository implements WhatsAppMessageReposit
                 .list();
     }
 
+
+    @Override
+    public List<WhatsAppMessage> findByConversationAfterId(Long conversationId, Long afterId, int size) {
+        long safeAfterId = afterId == null ? 0L : afterId;
+
+        return jdbcClient.sql("""
+                SELECT * FROM whatsapp_messages
+                WHERE conversation_id = :conversationId
+                  AND id > :afterId
+                ORDER BY message_at ASC, id ASC
+                LIMIT :limit
+                """)
+                .param("conversationId", conversationId)
+                .param("afterId", safeAfterId)
+                .param("limit", size)
+                .query(mapper)
+                .list();
+    }
+
+
+    @Override
+    public Long findMaxIdByConversation(Long conversationId) {
+        return jdbcClient.sql("""
+                SELECT COALESCE(MAX(id), 0)
+                FROM whatsapp_messages
+                WHERE conversation_id = :conversationId
+                """)
+                .param("conversationId", conversationId)
+                .query(Long.class)
+                .single();
+    }
+
     @Override
     public long countByConversation(Long conversationId) {
         Long count = jdbcClient.sql("SELECT count(*) FROM whatsapp_messages WHERE conversation_id = :conversationId")

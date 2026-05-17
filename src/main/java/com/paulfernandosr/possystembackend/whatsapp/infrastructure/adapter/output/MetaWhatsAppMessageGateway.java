@@ -119,6 +119,23 @@ public class MetaWhatsAppMessageGateway implements WhatsAppMessageGateway, Whats
     }
 
     @Override
+    public WhatsAppMessageSendResult sendImageByLink(String toWaId, String imageUrl, String caption) {
+        Map<String, Object> image = new LinkedHashMap<>();
+        image.put("link", imageUrl == null ? "" : imageUrl.trim());
+        if (caption != null && !caption.isBlank()) {
+            image.put("caption", safeCaption(caption));
+        }
+
+        Map<String, Object> payload = Map.of(
+                "messaging_product", "whatsapp",
+                "to", normalizeWaId(toWaId),
+                "type", "image",
+                "image", image
+        );
+        return postMessage(payload);
+    }
+
+    @Override
     public WhatsAppMessageSendResult sendDocumentByLink(String toWaId, String documentUrl, String filename, String caption) {
         Map<String, Object> document = Map.of(
                 "link", documentUrl,
@@ -136,16 +153,7 @@ public class MetaWhatsAppMessageGateway implements WhatsAppMessageGateway, Whats
 
     @Override
     public WhatsAppMessageSendResult sendButtons(String toWaId, String body, List<InteractiveButton> buttons) {
-        List<Map<String, Object>> buttonPayload = buttons.stream()
-                .limit(3)
-                .map(button -> Map.<String, Object>of(
-                        "type", "reply",
-                        "reply", Map.of(
-                                "id", safeId(button.getId()),
-                                "title", safeTitle(button.getTitle(), 20)
-                        )
-                ))
-                .toList();
+        List<Map<String, Object>> buttonPayload = buildButtonPayload(buttons);
 
         Map<String, Object> payload = Map.of(
                 "messaging_product", "whatsapp",
@@ -158,6 +166,43 @@ public class MetaWhatsAppMessageGateway implements WhatsAppMessageGateway, Whats
                 )
         );
         return postMessage(payload);
+    }
+
+    @Override
+    public WhatsAppMessageSendResult sendButtonsWithImageHeader(String toWaId, String body, String imageUrl, List<InteractiveButton> buttons) {
+        if (imageUrl == null || imageUrl.isBlank()) {
+            return sendButtons(toWaId, body, buttons);
+        }
+
+        Map<String, Object> interactive = new LinkedHashMap<>();
+        interactive.put("type", "button");
+        interactive.put("header", Map.of(
+                "type", "image",
+                "image", Map.of("link", imageUrl.trim())
+        ));
+        interactive.put("body", Map.of("text", safeBody(body)));
+        interactive.put("action", Map.of("buttons", buildButtonPayload(buttons)));
+
+        Map<String, Object> payload = Map.of(
+                "messaging_product", "whatsapp",
+                "to", normalizeWaId(toWaId),
+                "type", "interactive",
+                "interactive", interactive
+        );
+        return postMessage(payload);
+    }
+
+    private List<Map<String, Object>> buildButtonPayload(List<InteractiveButton> buttons) {
+        return buttons.stream()
+                .limit(3)
+                .map(button -> Map.<String, Object>of(
+                        "type", "reply",
+                        "reply", Map.of(
+                                "id", safeId(button.getId()),
+                                "title", safeTitle(button.getTitle(), 20)
+                        )
+                ))
+                .toList();
     }
 
     @Override
@@ -383,6 +428,12 @@ public class MetaWhatsAppMessageGateway implements WhatsAppMessageGateway, Whats
         if (value == null) return "";
         String description = value.trim();
         return description.length() > 72 ? description.substring(0, 72) : description;
+    }
+
+    private String safeCaption(String value) {
+        if (value == null) return "";
+        String caption = value.trim();
+        return caption.length() > 1000 ? caption.substring(0, 1000) : caption;
     }
 
     private String safeBody(String value) {

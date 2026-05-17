@@ -10,7 +10,9 @@ public interface WhatsAppMessageGateway {
     WhatsAppMessageSendResult sendText(String toWaId, String body);
     WhatsAppMessageSendResult sendTemplate(String toWaId, String templateName, String languageCode);
     WhatsAppMessageSendResult sendDocumentByLink(String toWaId, String documentUrl, String filename, String caption);
+    WhatsAppMessageSendResult sendImageByLink(String toWaId, String imageUrl, String caption);
     WhatsAppMessageSendResult sendButtons(String toWaId, String body, List<InteractiveButton> buttons);
+    WhatsAppMessageSendResult sendButtonsWithImageHeader(String toWaId, String body, String imageUrl, List<InteractiveButton> buttons);
     WhatsAppMessageSendResult sendList(String toWaId, String body, String buttonText, String sectionTitle, List<InteractiveListRow> rows);
 
     /**

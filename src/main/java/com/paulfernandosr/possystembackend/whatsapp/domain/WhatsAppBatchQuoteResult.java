@@ -65,5 +65,6 @@ public class WhatsAppBatchQuoteResult {
         private BigDecimal lineTotal;
         private BigDecimal stock;
         private String priceList;
+        private String mainImageUrl;
     }
 }

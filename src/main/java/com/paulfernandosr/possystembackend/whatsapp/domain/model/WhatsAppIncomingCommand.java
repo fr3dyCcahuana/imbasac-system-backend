@@ -86,7 +86,7 @@ public record WhatsAppIncomingCommand(
     }
 
     public boolean isNo() {
-        return payloadIs("ADD_MORE_NO") || equalsAny("no", "n", "generar", "generar proforma", "terminar pedido", "finalizar", "listo");
+        return payloadIs("ADD_MORE_NO") || equalsAny("no", "n", "generar", "generar proforma", "actualizar", "actualizar proforma", "guardar", "guardar cambios", "terminar pedido", "finalizar", "listo");
     }
 
     public boolean isCancel() {

@@ -81,6 +81,8 @@ integration:
       departamento: "LIMA"
       modo: 0
 
+
+
 whatsapp:
   # Versión de Graph API que estás usando en Meta Developers.
   api-version: v25.0
@@ -92,7 +94,7 @@ whatsapp:
   # Token Bearer de Meta.
   # Para pruebas puedes usar el temporal.
   # En producción debe ser token permanente desde System User.
-  access-token: "EAAiZAsuwfhKkBRfZADRWxhZCfWXkbb2rCpqP0S5rqlgWkkn8A6xZAsWmFf9Gnhnh2jsv3huZCgDw5vuj6ZBxuYyRHxbFZBcd2VGwUdHA4eB1HUmC9YZAGjXy5ZAqfvUwAg27dmNYZAZBWz2ZCd7xIHGa8YNoCODt2wo24s6KYAitanweTeZCoZC2c0YxpHpQ7yCi4kK9ZAk8xpkIZAGemaSgZC20tIwCvkjrqEpfZCIHYVt9kJiYYLhRZA4L06dJLf8Vs8KUhGsHJMGxhZB5YRYtGWZBNETLPO8PYVlaj"
+  access-token: "EAAiZAsuwfhKkBRcuV2b8bkkOJB2sZCKMNCPfaVCJ5eyXCH48qlctNv3zARbf02bCVvZBXhzvKpO9tcWIx4sdRqQhHbMm9nr1mqOtJxZAwStWDidrsfwQ5Tk9YKzz4mY9vZBdYezonQdN7pfzA63a7YLcOVxHG3MHakusSNBv8SW37nAVhTdLCVy4XG4LLcoRHMbqEaNFS7aa3hRhneUlddZBMySFRCqxmKlzSwvBtJ2ZCiMGG9OrhhB126RwZBTeCasFPpBdlsKnwv30fBAeSM6h8U3l"
 
   # Token inventado por ti para validar el webhook.
   # Este mismo valor debes colocarlo en Meta cuando configures Webhook.
@@ -105,15 +107,31 @@ whatsapp:
   # Tamaño por defecto para listar conversaciones/mensajes en el frontend.
   default-page-size: 20
   sales:
+    send-product-images: true
+    product-images-base-url: https://imbasac.cloud/images/products
     default-price-list: ${WHATSAPP_DEFAULT_PRICE_LIST:B}
     show-stock: ${WHATSAPP_SHOW_STOCK:true}
     max-products-response: ${WHATSAPP_MAX_PRODUCTS_RESPONSE:10}
-    only-show-products-with-stock: ${WHATSAPP_ONLY_SHOW_PRODUCTS_WITH_STOCK:true}
+    only-show-products-with-stock: ${WHATSAPP_ONLY_SHOW_PRODUCTS_WITH_STOCK:false}
     minimum-stock-to-show: ${WHATSAPP_MINIMUM_STOCK_TO_SHOW:1}
     allow-proforma-generation: ${WHATSAPP_ALLOW_PROFORMA_GENERATION:true}
+    proforma-station-id: ${WHATSAPP_PROFORMA_STATION_ID:28}
+    proforma-created-by: ${WHATSAPP_PROFORMA_CREATED_BY:32}
+    proforma-created-by-username: ${WHATSAPP_PROFORMA_CREATED_BY_USERNAME:}
+    proforma-series: ${WHATSAPP_PROFORMA_SERIES:P001}
+    proforma-tax-status: ${WHATSAPP_PROFORMA_TAX_STATUS:NO_GRAVADA}
+    proforma-igv-rate: ${WHATSAPP_PROFORMA_IGV_RATE:18.00}
+    proforma-igv-included: ${WHATSAPP_PROFORMA_IGV_INCLUDED:false}
     batch-list-enabled: ${WHATSAPP_BATCH_LIST_ENABLED:true}
     max-batch-codes-per-message: ${WHATSAPP_MAX_BATCH_CODES_PER_MESSAGE:80}
     default-batch-quantity: ${WHATSAPP_DEFAULT_BATCH_QUANTITY:10}
+  ai-agent:
+    enabled: ${WHATSAPP_AI_AGENT_ENABLED:true}
+    base-url: ${WHATSAPP_AI_AGENT_BASE_URL:http://localhost:8010}
+    api-key: ${WHATSAPP_AI_AGENT_API_KEY:dev-secret}
+    plan-path: ${WHATSAPP_AI_AGENT_PLAN_PATH:/api/v1/agent/plan}
+    connect-timeout-seconds: ${WHATSAPP_AI_AGENT_CONNECT_TIMEOUT_SECONDS:2}
+    read-timeout-seconds: ${WHATSAPP_AI_AGENT_READ_TIMEOUT_SECONDS:8}
   vision:
     enabled: ${WHATSAPP_VISION_ENABLED:false}
     open-ai-api-key: ${OPENAI_API_KEY:}
@@ -125,6 +143,10 @@ whatsapp:
     only-opted-in-by-default: true
     max-recipients-per-campaign: 100
     delay-millis-between-messages: 1000
+  debug:
+    simulation-enabled: true
+    simulation-wa-prefix: SIM_
+
 sale:
   sunat:
     mode: "0"

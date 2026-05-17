@@ -56,6 +56,37 @@ public class PostgresWhatsAppCartRepository implements WhatsAppCartRepository {
     }
 
     @Override
+    public WhatsAppCart findOrCreateOpenCartForProforma(Long conversationId, Long proformaId) {
+        if (proformaId == null) {
+            return findOrCreateOpenCart(conversationId);
+        }
+
+        Optional<WhatsAppCart> existing = jdbcClient.sql("""
+                SELECT * FROM whatsapp_carts
+                WHERE conversation_id = :conversationId
+                  AND proforma_id = :proformaId
+                  AND status IN ('OPEN', 'WAITING_CUSTOMER', 'READY_TO_PROFORMA')
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """)
+                .param("conversationId", conversationId)
+                .param("proformaId", proformaId)
+                .query(cartMapper)
+                .optional();
+        if (existing.isPresent()) return existing.get();
+
+        return jdbcClient.sql("""
+                INSERT INTO whatsapp_carts(conversation_id, proforma_id, status)
+                VALUES (:conversationId, :proformaId, 'OPEN')
+                RETURNING *
+                """)
+                .param("conversationId", conversationId)
+                .param("proformaId", proformaId)
+                .query(cartMapper)
+                .single();
+    }
+
+    @Override
     public Optional<WhatsAppCart> findOpenByConversationId(Long conversationId) {
         return jdbcClient.sql("""
                 SELECT * FROM whatsapp_carts

@@ -21,5 +21,6 @@ public class WhatsAppProductSuggestion {
     private BigDecimal stockQuantity;
     private String priceList;
     private String rawSnapshot;
+    private String mainImageUrl;
     private OffsetDateTime createdAt;
 }
