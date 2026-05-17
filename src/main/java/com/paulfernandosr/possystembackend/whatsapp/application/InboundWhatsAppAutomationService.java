@@ -29,9 +29,37 @@ public class InboundWhatsAppAutomationService {
     private final WhatsAppConversationRepository conversationRepository;
     private final WhatsAppProductSuggestionRepository suggestionRepository;
     private final WhatsAppCartRepository cartRepository;
+    private final WhatsAppBatchCodeExtractorService batchCodeExtractorService;
+    private final WhatsAppBatchQuoteService batchQuoteService;
+    private final WhatsAppMediaCodeExtractionService mediaCodeExtractionService;
 
     public void handleIncomingText(WhatsAppConversation conversation, String text) {
         handleIncomingCommand(conversation, WhatsAppIncomingCommand.fromText(text));
+    }
+
+    public void handleIncomingMedia(WhatsAppConversation conversation, WhatsAppEnums.MessageType type, String mediaId, String mimeType, String caption) {
+        if (!properties.isAutoReplyEnabled()) return;
+        try {
+            if (caption != null && batchCodeExtractorService.looksLikeBatchCodeList(caption)) {
+                handleBatchCodeList(conversation, batchCodeExtractorService.extractCodes(caption), "caption");
+                return;
+            }
+
+            sendTextQuietly(conversation.getId(), "Recibí tu " + mediaLabel(type) + " ✅. Estoy intentando leer los códigos para cotizar.");
+            WhatsAppMediaCodeExtractionService.MediaExtractionResult extraction = mediaCodeExtractionService.extractCodesFromMedia(mediaId, mimeType);
+            if (!extraction.enabled()) {
+                sendTextQuietly(conversation.getId(), extraction.message() + "\nPor ahora puedes enviarme los códigos en texto, uno por línea. Ejemplo:\nIMBA0826\n1300115\nIMBA0386");
+                return;
+            }
+            if (extraction.codes().isEmpty()) {
+                sendTextQuietly(conversation.getId(), "No pude reconocer códigos claros en la imagen. Por favor envía una foto más nítida o copia los códigos en texto, uno por línea.");
+                return;
+            }
+            handleBatchCodeList(conversation, extraction.codes(), "imagen");
+        } catch (Exception exception) {
+            log.error("No se pudo procesar media WhatsApp. conversationId={}, mediaId={}, error={}", conversation.getId(), mediaId, exception.getMessage(), exception);
+            sendTextQuietly(conversation.getId(), "Recibí tu archivo, pero no pude leerlo automáticamente. Un asesor lo validará o puedes enviar los códigos en texto.");
+        }
     }
 
     public void handleIncomingCommand(WhatsAppConversation conversation, WhatsAppIncomingCommand cmd) {
@@ -59,12 +87,22 @@ public class InboundWhatsAppAutomationService {
                     ? WhatsAppEnums.ConversationState.IDLE
                     : conversation.getConversationState();
 
+            if (shouldProcessBatchList(state, cmd)) {
+                handleBatchCodeList(conversation, batchCodeExtractorService.extractCodes(cmd.businessText()), "mensaje");
+                return;
+            }
+
             switch (state) {
                 case WAITING_PRODUCT_QUERY -> handleProductQuery(conversation, cmd);
                 case WAITING_PRODUCT_SELECTION -> handleProductSelection(conversation, cmd);
                 case WAITING_QUANTITY -> handleQuantity(conversation, cmd);
                 case WAITING_ADD_MORE -> handleAddMore(conversation, cmd);
+                case WAITING_BATCH_CONFIRM -> handleBatchConfirm(conversation, cmd);
+                case WAITING_BATCH_QUANTITY -> handleBatchQuantity(conversation, cmd);
+                case WAITING_BATCH_CUSTOM_QUANTITY -> handleBatchCustomQuantity(conversation, cmd);
                 case WAITING_CUSTOMER_DOCUMENT -> handleCustomerDocument(conversation, cmd);
+                case WAITING_DNI_NUMBER -> handleDniNumber(conversation, cmd);
+                case WAITING_RUC_NUMBER -> handleRucNumber(conversation, cmd);
                 case WAITING_CUSTOMER_NAME -> handleCustomerName(conversation, cmd);
                 case GENERATING_PROFORMA, PROFORMA_CREATED -> handlePostProforma(conversation, cmd);
                 default -> handleIdle(conversation, cmd);
@@ -73,6 +111,240 @@ public class InboundWhatsAppAutomationService {
             log.error("No se pudo procesar automatización WhatsApp. conversationId={}, error={}", conversation.getId(), exception.getMessage(), exception);
             sendTextQuietly(conversation.getId(), "Tu mensaje fue recibido ✅. Un asesor validará la información para continuar.");
         }
+    }
+
+    private boolean shouldProcessBatchList(WhatsAppEnums.ConversationState state, WhatsAppIncomingCommand cmd) {
+        if (cmd == null || !properties.getSales().isBatchListEnabled()) return false;
+        if (state == WhatsAppEnums.ConversationState.WAITING_QUANTITY
+                || state == WhatsAppEnums.ConversationState.WAITING_CUSTOMER_DOCUMENT
+                || state == WhatsAppEnums.ConversationState.WAITING_DNI_NUMBER
+                || state == WhatsAppEnums.ConversationState.WAITING_RUC_NUMBER
+                || state == WhatsAppEnums.ConversationState.WAITING_CUSTOMER_NAME
+                || state == WhatsAppEnums.ConversationState.WAITING_PRODUCT_SELECTION
+                || state == WhatsAppEnums.ConversationState.WAITING_BATCH_QUANTITY
+                || state == WhatsAppEnums.ConversationState.WAITING_BATCH_CUSTOM_QUANTITY) {
+            return false;
+        }
+        if (cmd.isGreetingOrReset() || cmd.isCancel() || cmd.isAdvisor() || cmd.isSearchMenu() || cmd.isProformaMenu()) {
+            return false;
+        }
+        return batchCodeExtractorService.looksLikeBatchCodeList(cmd.businessText());
+    }
+
+    private void handleBatchCodeList(WhatsAppConversation conversation, List<WhatsAppBatchCodeLine> codes, String source) {
+        if (codes == null || codes.isEmpty()) {
+            askForProduct(conversation, "No encontré códigos claros. Puedes enviarlos uno por línea. Ejemplo:\nIMBA0826\n1300115\nIMBA0386");
+            return;
+        }
+
+        WhatsAppBatchQuoteResult result = batchQuoteService.previewCodes(conversation.getId(), codes, source);
+        if (result.hasAddedItems()) {
+            sendTextQuietly(conversation.getId(), buildBatchPreviewMessage(result, source));
+            startBatchQuantityFlow(conversation);
+            return;
+        }
+
+        conversationRepository.updateConversationState(conversation.getId(), WhatsAppEnums.ConversationState.WAITING_PRODUCT_QUERY);
+        sendButtonsQuietly(conversation.getId(), buildBatchPreviewMessage(result, source) + "\n\nNo hay productos disponibles para cotizar. Puedes enviar otra lista o pedir ayuda a un asesor.", List.of(
+                new InteractiveButton("MENU_SEARCH", "Buscar otro"),
+                new InteractiveButton("MENU_ADVISOR", "Asesor"),
+                new InteractiveButton("CANCEL", "Cancelar")
+        ));
+    }
+
+    private void handleBatchConfirm(WhatsAppConversation conversation, WhatsAppIncomingCommand cmd) {
+        // Compatibilidad: si el usuario toca un botón antiguo de confirmar, iniciamos el asistente de cantidades.
+        if (cmd.isConfirmBatch()) {
+            startBatchQuantityFlow(conversation);
+            return;
+        }
+
+        if (cmd.isEditBatchQuantities()) {
+            startBatchQuantityFlow(conversation);
+            return;
+        }
+
+        if (cmd.isProformaMenu() || cmd.isNo()) {
+            WhatsAppCart cart = cartRepository.findOrCreateOpenCart(conversation.getId());
+            List<WhatsAppCartItem> items = cartRepository.findItems(cart.getId());
+            if (items.isEmpty()) {
+                startBatchQuantityFlow(conversation);
+                return;
+            }
+            askForCustomerDocument(conversation, cart);
+            return;
+        }
+
+        if (cmd.isSearchMenu()) {
+            askForProduct(conversation, "Escribe el producto que quieres agregar o envía otra lista de códigos.");
+            return;
+        }
+
+        if (cmd.hasProductSearchText()) {
+            if (batchCodeExtractorService.looksLikeBatchCodeList(cmd.businessText())) {
+                handleBatchCodeList(conversation, batchCodeExtractorService.extractCodes(cmd.businessText()), "mensaje");
+            } else {
+                searchAndOfferProducts(conversation, cmd.businessText());
+            }
+            return;
+        }
+
+        sendButtonsQuietly(conversation.getId(),
+                "Ahora definiremos cantidades. Por cada producto elige una cantidad. Si no deseas uno, elige 0 / No agregar.",
+                List.of(
+                        new InteractiveButton("BATCH_CONFIRM", "Definir cant."),
+                        new InteractiveButton("MENU_ADVISOR", "Asesor"),
+                        new InteractiveButton("CANCEL", "Cancelar")
+                ));
+    }
+
+    private void startBatchQuantityFlow(WhatsAppConversation conversation) {
+        WhatsAppCart cart = cartRepository.findOrCreateOpenCart(conversation.getId());
+        List<WhatsAppProductSuggestion> suggestions = suggestionRepository.findLatest(conversation.getId(), Math.max(1, properties.getSales().getMaxBatchCodesPerMessage()));
+        if (suggestions.isEmpty()) {
+            askForProduct(conversation, "No encontré productos disponibles para definir cantidades. Envíame otra lista o escribe el producto que buscas.");
+            return;
+        }
+        cartRepository.setCurrentProductSuggestion(cart.getId(), suggestions.get(0).getId());
+        conversationRepository.updateConversationState(conversation.getId(), WhatsAppEnums.ConversationState.WAITING_BATCH_QUANTITY);
+        askCurrentBatchQuantity(conversation, cart, suggestions.get(0), 1, suggestions.size());
+    }
+
+    private void handleBatchQuantity(WhatsAppConversation conversation, WhatsAppIncomingCommand cmd) {
+        if (cmd.isCancel()) {
+            resetFlow(conversation, "Listo, cancelé la definición de cantidades.");
+            return;
+        }
+        if (cmd.isAdvisor()) {
+            conversationRepository.updateStatus(conversation.getId(), WhatsAppEnums.ConversationStatus.PENDING_HUMAN);
+            sendTextQuietly(conversation.getId(), "Te derivaré con un asesor para validar las cantidades.");
+            return;
+        }
+        if (cmd.isBatchQuantityOther()) {
+            conversationRepository.updateConversationState(conversation.getId(), WhatsAppEnums.ConversationState.WAITING_BATCH_CUSTOM_QUANTITY);
+            sendTextQuietly(conversation.getId(), "Escribe la cantidad para este producto. Si no lo quieres, responde 0.");
+            return;
+        }
+
+        BigDecimal quantity = cmd.isBatchQuantitySelection() ? cmd.batchQuantityValue() : parseQuantity(cmd.businessText());
+        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) < 0) {
+            sendTextQuietly(conversation.getId(), "Elige una cantidad de la lista o escribe un número. Si no deseas este producto, responde 0.");
+            return;
+        }
+        resolveCurrentBatchQuantity(conversation, quantity);
+    }
+
+    private void handleBatchCustomQuantity(WhatsAppConversation conversation, WhatsAppIncomingCommand cmd) {
+        BigDecimal quantity = parseQuantity(cmd.businessText());
+        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) < 0) {
+            sendTextQuietly(conversation.getId(), "Cantidad inválida. Escribe solo número. Ejemplo: 2. Si no lo quieres, responde 0.");
+            return;
+        }
+        resolveCurrentBatchQuantity(conversation, quantity);
+    }
+
+    private void resolveCurrentBatchQuantity(WhatsAppConversation conversation, BigDecimal quantity) {
+        WhatsAppCart cart = cartRepository.findOrCreateOpenCart(conversation.getId());
+        Long currentId = cart.getCurrentProductSuggestionId();
+        if (currentId == null) {
+            startBatchQuantityFlow(conversation);
+            return;
+        }
+
+        Optional<WhatsAppProductSuggestion> currentOpt = suggestionRepository.findById(currentId);
+        if (currentOpt.isEmpty()) {
+            startBatchQuantityFlow(conversation);
+            return;
+        }
+        WhatsAppProductSuggestion suggestion = currentOpt.get();
+        BigDecimal stock = suggestion.getStockQuantity() == null ? BigDecimal.ZERO : suggestion.getStockQuantity();
+        if (quantity.compareTo(stock) > 0) {
+            conversationRepository.updateConversationState(conversation.getId(), WhatsAppEnums.ConversationState.WAITING_BATCH_QUANTITY);
+            sendTextQuietly(conversation.getId(), "Solo hay " + formatStock(stock) + " disponibles de " + nullSafe(suggestion.getProductCode()) + ". Elige una cantidad menor o responde 0 para omitir.");
+            askCurrentBatchQuantity(conversation, cart, suggestion, batchPosition(conversation, suggestion), suggestionRepository.findLatest(conversation.getId(), Math.max(1, properties.getSales().getMaxBatchCodesPerMessage())).size());
+            return;
+        }
+
+        if (quantity.compareTo(BigDecimal.ZERO) > 0) {
+            cartRepository.addItem(WhatsAppCartItem.builder()
+                    .cartId(cart.getId())
+                    .productId(suggestion.getProductId())
+                    .productCode(suggestion.getProductCode())
+                    .productName(suggestion.getProductName())
+                    .quantity(quantity)
+                    .unitPrice(suggestion.getUnitPrice())
+                    .priceList(suggestion.getPriceList())
+                    .build());
+        }
+
+        List<WhatsAppProductSuggestion> suggestions = suggestionRepository.findLatest(conversation.getId(), Math.max(1, properties.getSales().getMaxBatchCodesPerMessage()));
+        int index = 0;
+        for (int i = 0; i < suggestions.size(); i++) {
+            if (suggestions.get(i).getId().equals(currentId)) {
+                index = i;
+                break;
+            }
+        }
+        int next = index + 1;
+        if (next < suggestions.size()) {
+            WhatsAppProductSuggestion nextSuggestion = suggestions.get(next);
+            cartRepository.setCurrentProductSuggestion(cart.getId(), nextSuggestion.getId());
+            conversationRepository.updateConversationState(conversation.getId(), WhatsAppEnums.ConversationState.WAITING_BATCH_QUANTITY);
+            askCurrentBatchQuantity(conversation, cart, nextSuggestion, next + 1, suggestions.size());
+            return;
+        }
+
+        cartRepository.setCurrentProductSuggestion(cart.getId(), null);
+        conversationRepository.updateConversationState(conversation.getId(), WhatsAppEnums.ConversationState.WAITING_ADD_MORE);
+        List<WhatsAppCartItem> items = cartRepository.findItems(cart.getId());
+        if (items.isEmpty()) {
+            sendButtonsQuietly(conversation.getId(),
+                    "No agregaste productos de esta lista. Puedes buscar otro producto o pedir ayuda a un asesor.",
+                    List.of(
+                            new InteractiveButton("MENU_SEARCH", "Buscar producto"),
+                            new InteractiveButton("MENU_ADVISOR", "Asesor"),
+                            new InteractiveButton("CANCEL", "Cancelar")
+                    ));
+            return;
+        }
+        sendButtonsQuietly(conversation.getId(),
+                buildCartSummary(cart.getId()) + "\n\n¿Qué deseas hacer ahora?",
+                List.of(
+                        new InteractiveButton("ADD_MORE_YES", "Agregar otro"),
+                        new InteractiveButton("ADD_MORE_NO", "Generar proforma"),
+                        new InteractiveButton("MENU_ADVISOR", "Asesor")
+                ));
+    }
+
+    private int batchPosition(WhatsAppConversation conversation, WhatsAppProductSuggestion suggestion) {
+        List<WhatsAppProductSuggestion> suggestions = suggestionRepository.findLatest(conversation.getId(), Math.max(1, properties.getSales().getMaxBatchCodesPerMessage()));
+        for (int i = 0; i < suggestions.size(); i++) {
+            if (suggestions.get(i).getId().equals(suggestion.getId())) return i + 1;
+        }
+        return 1;
+    }
+
+    private void askCurrentBatchQuantity(WhatsAppConversation conversation, WhatsAppCart cart, WhatsAppProductSuggestion suggestion, int position, int total) {
+        String body = "Producto " + position + " de " + total + ":\n"
+                + nullSafe(suggestion.getProductCode()) + " - " + shortLine(suggestion.getProductName(), 80) + "\n"
+                + "Precio: S/ " + formatMoney(suggestion.getUnitPrice()) + " | Stock: " + formatStock(suggestion.getStockQuantity()) + "\n\n"
+                + "Elige la cantidad. Si no lo deseas, elige 0 / No agregar.";
+        sendListQuietly(conversation.getId(), body, "Elegir cantidad", "Cantidad", quantityRows(suggestion));
+    }
+
+    private List<InteractiveListRow> quantityRows(WhatsAppProductSuggestion suggestion) {
+        BigDecimal stock = suggestion.getStockQuantity() == null ? BigDecimal.ZERO : suggestion.getStockQuantity();
+        List<InteractiveListRow> rows = new ArrayList<>();
+        rows.add(new InteractiveListRow("BQTY_0", "0 - No agregar", "Omitir este producto"));
+        int[] defaults = {1, 2, 3, 4, 5, 10};
+        for (int value : defaults) {
+            BigDecimal qty = BigDecimal.valueOf(value);
+            if (stock.compareTo(qty) >= 0) {
+                rows.add(new InteractiveListRow("BQTY_" + value, value + " unidad" + (value == 1 ? "" : "es"), "Agregar " + value));
+            }
+        }
+        rows.add(new InteractiveListRow("BATCH_QTY_OTHER", "Otra cantidad", "Escribir manualmente"));
+        return rows.size() > 10 ? rows.subList(0, 10) : rows;
     }
 
     private void handleIdle(WhatsAppConversation conversation, WhatsAppIncomingCommand cmd) {
@@ -236,8 +508,8 @@ public class InboundWhatsAppAutomationService {
 
     private void handleQuantity(WhatsAppConversation conversation, WhatsAppIncomingCommand cmd) {
         BigDecimal quantity = parseQuantity(cmd.businessText());
-        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
-            sendTextQuietly(conversation.getId(), "Cantidad inválida. Escribe solo el número. Ejemplo: 2");
+        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) < 0) {
+            sendTextQuietly(conversation.getId(), "Cantidad inválida. Escribe solo el número. Ejemplo: 2. Si no deseas este producto, responde 0.");
             return;
         }
 
@@ -252,8 +524,33 @@ public class InboundWhatsAppAutomationService {
         WhatsAppProductSuggestion suggestion = suggestionRepository.findById(cart.getCurrentProductSuggestionId())
                 .orElseThrow(() -> new IllegalStateException("Sugerencia de producto no encontrada."));
 
+        if (quantity.compareTo(BigDecimal.ZERO) == 0) {
+            cartRepository.setCurrentProductSuggestion(cart.getId(), null);
+            conversationRepository.updateConversationState(conversation.getId(), WhatsAppEnums.ConversationState.WAITING_ADD_MORE);
+
+            List<WhatsAppCartItem> items = cartRepository.findItems(cart.getId());
+            if (items.isEmpty()) {
+                sendButtonsQuietly(conversation.getId(),
+                        "Listo, no agregué " + shortLine(suggestion.getProductName(), 70) + ". Puedes buscar otro producto o cancelar.",
+                        List.of(
+                                new InteractiveButton("MENU_SEARCH", "Buscar producto"),
+                                new InteractiveButton("MENU_ADVISOR", "Asesor"),
+                                new InteractiveButton("CANCEL", "Cancelar")
+                        ));
+            } else {
+                sendButtonsQuietly(conversation.getId(),
+                        "Listo, omití " + shortLine(suggestion.getProductName(), 70) + ".\n\n¿Qué deseas hacer ahora?",
+                        List.of(
+                                new InteractiveButton("ADD_MORE_YES", "Agregar otro"),
+                                new InteractiveButton("ADD_MORE_NO", "Generar proforma"),
+                                new InteractiveButton("CANCEL", "Cancelar")
+                        ));
+            }
+            return;
+        }
+
         if (suggestion.getStockQuantity() != null && quantity.compareTo(suggestion.getStockQuantity()) > 0) {
-            sendTextQuietly(conversation.getId(), "Solo tenemos " + formatStock(suggestion.getStockQuantity()) + " unidades disponibles. Escribe una cantidad menor o igual.");
+            sendTextQuietly(conversation.getId(), "Solo tenemos " + formatStock(suggestion.getStockQuantity()) + " unidades disponibles. Escribe una cantidad menor o igual, o responde 0 para omitir este producto.");
             return;
         }
 
@@ -266,6 +563,7 @@ public class InboundWhatsAppAutomationService {
                 .unitPrice(suggestion.getUnitPrice())
                 .priceList(suggestion.getPriceList())
                 .build());
+        cartRepository.setCurrentProductSuggestion(cart.getId(), null);
 
         conversationRepository.updateConversationState(conversation.getId(), WhatsAppEnums.ConversationState.WAITING_ADD_MORE);
         sendButtonsQuietly(conversation.getId(),
@@ -308,56 +606,116 @@ public class InboundWhatsAppAutomationService {
         }
         cartRepository.updateStatus(cart.getId(), WhatsAppEnums.CartStatus.WAITING_CUSTOMER);
         conversationRepository.updateConversationState(conversation.getId(), WhatsAppEnums.ConversationState.WAITING_CUSTOMER_DOCUMENT);
-        sendButtonsQuietly(conversation.getId(),
-                buildCartSummary(cart.getId()) + "\n\nPara generar la proforma, elige el tipo de documento o envía directamente tu DNI/RUC.",
+
+        sendListQuietly(conversation.getId(),
+                buildCartSummary(cart.getId()) + "\n\n¿A nombre de quién deseas preparar la proforma? Puedes identificar al cliente o continuar con el nombre del chat.",
+                "Identificar cliente",
+                "Datos del cliente",
                 List.of(
-                        new InteractiveButton("DOC_DNI", "DNI"),
-                        new InteractiveButton("DOC_RUC", "RUC"),
-                        new InteractiveButton("CANCEL", "Cancelar")
+                        new InteractiveListRow("DOC_DNI", "DNI", "Ingresar DNI de 8 dígitos"),
+                        new InteractiveListRow("DOC_RUC", "RUC", "Ingresar RUC de 11 dígitos"),
+                        new InteractiveListRow("DOC_NAME", "Solo nombre", "Registrar proforma solo con nombre"),
+                        new InteractiveListRow("DOC_OMIT", "Omitir", "Usar el nombre del chat como referencia"),
+                        new InteractiveListRow("CANCEL", "Cancelar", "Cancelar esta proforma")
                 ));
     }
 
     private void handleCustomerDocument(WhatsAppConversation conversation, WhatsAppIncomingCommand cmd) {
         if (cmd.isDniOption()) {
-            sendTextQuietly(conversation.getId(), "Escribe el número de DNI. Ejemplo: 12345678");
+            conversationRepository.updateConversationState(conversation.getId(), WhatsAppEnums.ConversationState.WAITING_DNI_NUMBER);
+            sendTextQuietly(conversation.getId(), "Perfecto. Escribe el número de DNI. Ejemplo: 12345678");
             return;
         }
         if (cmd.isRucOption()) {
-            sendTextQuietly(conversation.getId(), "Escribe el número de RUC. Ejemplo: 20611603739");
+            conversationRepository.updateConversationState(conversation.getId(), WhatsAppEnums.ConversationState.WAITING_RUC_NUMBER);
+            sendTextQuietly(conversation.getId(), "Perfecto. Escribe el número de RUC. Ejemplo: 20611603739");
+            return;
+        }
+        if (cmd.isNameOnlyOption()) {
+            conversationRepository.updateConversationState(conversation.getId(), WhatsAppEnums.ConversationState.WAITING_CUSTOMER_NAME);
+            sendTextQuietly(conversation.getId(), "Escribe el nombre del cliente para la proforma. Ejemplo: José Ramírez");
+            return;
+        }
+        if (cmd.isOmitCustomerIdentity() || cmd.isSkipName()) {
+            WhatsAppCart cart = cartRepository.findOrCreateOpenCart(conversation.getId());
+            cartRepository.setCustomerName(cart.getId(), defaultChatCustomerName(conversation));
+            finalizeProformaInfo(conversation, cart, defaultChatCustomerName(conversation));
             return;
         }
 
         String documentNumber = cmd.businessText().replaceAll("\\D", "");
-        if (!(documentNumber.length() == 8 || documentNumber.length() == 11)) {
-            sendTextQuietly(conversation.getId(), "Documento inválido. Envíame DNI de 8 dígitos o RUC de 11 dígitos.");
+        if (documentNumber.length() == 8) {
+            registerDocumentAndFinish(conversation, "DNI", documentNumber);
+            return;
+        }
+        if (documentNumber.length() == 11) {
+            registerDocumentAndFinish(conversation, "RUC", documentNumber);
             return;
         }
 
-        String documentType = documentNumber.length() == 11 ? "RUC" : "DNI";
+        sendListQuietly(conversation.getId(),
+                "No pude identificar el dato. Elige una opción o envía directamente un DNI de 8 dígitos o RUC de 11 dígitos.",
+                "Identificar cliente",
+                "Datos del cliente",
+                List.of(
+                        new InteractiveListRow("DOC_DNI", "DNI", "Ingresar DNI de 8 dígitos"),
+                        new InteractiveListRow("DOC_RUC", "RUC", "Ingresar RUC de 11 dígitos"),
+                        new InteractiveListRow("DOC_NAME", "Solo nombre", "Registrar proforma solo con nombre"),
+                        new InteractiveListRow("DOC_OMIT", "Omitir", "Usar el nombre del chat como referencia"),
+                        new InteractiveListRow("CANCEL", "Cancelar", "Cancelar esta proforma")
+                ));
+    }
+
+    private void handleDniNumber(WhatsAppConversation conversation, WhatsAppIncomingCommand cmd) {
+        String documentNumber = cmd.businessText().replaceAll("\\D", "");
+        if (documentNumber.length() != 8) {
+            sendTextQuietly(conversation.getId(), "DNI inválido. Debe tener 8 dígitos. También puedes escribir 'cancelar'.");
+            return;
+        }
+        registerDocumentAndFinish(conversation, "DNI", documentNumber);
+    }
+
+    private void handleRucNumber(WhatsAppConversation conversation, WhatsAppIncomingCommand cmd) {
+        String documentNumber = cmd.businessText().replaceAll("\\D", "");
+        if (documentNumber.length() != 11) {
+            sendTextQuietly(conversation.getId(), "RUC inválido. Debe tener 11 dígitos. También puedes escribir 'cancelar'.");
+            return;
+        }
+        registerDocumentAndFinish(conversation, "RUC", documentNumber);
+    }
+
+    private void registerDocumentAndFinish(WhatsAppConversation conversation, String documentType, String documentNumber) {
         WhatsAppCart cart = cartRepository.findOrCreateOpenCart(conversation.getId());
         cartRepository.setCustomerDocument(cart.getId(), documentType, documentNumber);
-        conversationRepository.updateConversationState(conversation.getId(), WhatsAppEnums.ConversationState.WAITING_CUSTOMER_NAME);
-
-        sendButtonsQuietly(conversation.getId(),
-                "Documento registrado: " + documentType + " " + documentNumber + ".\nAhora envía el nombre del cliente para la proforma. Si deseas, puedes omitirlo.",
-                List.of(
-                        new InteractiveButton("SKIP_NAME", "Omitir"),
-                        new InteractiveButton("CANCEL", "Cancelar")
-                ));
+        cartRepository.setCustomerName(cart.getId(), defaultChatCustomerName(conversation));
+        finalizeProformaInfo(conversation, cart, defaultChatCustomerName(conversation));
     }
 
     private void handleCustomerName(WhatsAppConversation conversation, WhatsAppIncomingCommand cmd) {
         WhatsAppCart cart = cartRepository.findOrCreateOpenCart(conversation.getId());
-        String customerName = cmd.isSkipName() ? null : sanitizeCustomerName(cmd.businessText());
+        String customerName = cmd.isSkipName() || cmd.isOmitCustomerIdentity()
+                ? defaultChatCustomerName(conversation)
+                : sanitizeCustomerName(cmd.businessText());
+        if (customerName == null || customerName.isBlank()) {
+            customerName = defaultChatCustomerName(conversation);
+        }
         cartRepository.setCustomerName(cart.getId(), customerName);
+        finalizeProformaInfo(conversation, cart, customerName);
+    }
+
+    private void finalizeProformaInfo(WhatsAppConversation conversation, WhatsAppCart cart, String customerName) {
         cartRepository.updateStatus(cart.getId(), WhatsAppEnums.CartStatus.READY_TO_PROFORMA);
         conversationRepository.updateConversationState(conversation.getId(), WhatsAppEnums.ConversationState.PROFORMA_CREATED);
 
+        String document = (cart.getCustomerDocumentType() == null || cart.getCustomerDocumentNumber() == null)
+                ? "No indicado"
+                : cart.getCustomerDocumentType() + " " + cart.getCustomerDocumentNumber();
+
         sendTextQuietly(conversation.getId(),
                 "Listo ✅ Ya tengo la información para la proforma.\n" +
-                        "Origen: WhatsApp " + conversation.getWaId() + " (" + nullSafe(conversation.getProfileName()) + ")\n" +
-                        "Documento: " + nullSafe(cart.getCustomerDocumentType()) + " " + nullSafe(cart.getCustomerDocumentNumber()) + "\n" +
-                        "Cliente: " + (customerName == null ? "No indicado" : customerName) + "\n\n" +
+                        "Origen del chat: WhatsApp " + conversation.getWaId() + " (" + defaultChatCustomerName(conversation) + ")\n" +
+                        "Documento: " + document + "\n" +
+                        "Cliente: " + (customerName == null ? defaultChatCustomerName(conversation) : customerName) + "\n\n" +
                         buildCartSummary(cart.getId()) + "\n\nUn asesor validará la proforma final y te enviará el documento.");
     }
 
@@ -394,6 +752,69 @@ public class InboundWhatsAppAutomationService {
                         new InteractiveButton("MENU_PROFORMA", "Proforma"),
                         new InteractiveButton("MENU_ADVISOR", "Asesor")
                 ));
+    }
+
+    private String buildBatchPreviewMessage(WhatsAppBatchQuoteResult result, String source) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("Procesé tu lista de códigos");
+        if (source != null && !source.isBlank()) builder.append(" desde ").append(source);
+        builder.append(" ✅");
+
+        int totalCodes = result.getProcessedCodesCount() > 0 ? result.getProcessedCodesCount() : result.getExtractedCodesCount();
+        builder.append("\nCódigos leídos: ").append(totalCodes);
+        if (result.isLimitedByMax()) {
+            builder.append(" (máximo procesado: ").append(result.getMaxCodesAllowed()).append(")");
+        }
+        builder.append("\nDisponibles para cotizar: ").append(result.getAddedItems().size());
+        builder.append("\nNo disponibles / no encontrados: ").append(result.unavailableCount());
+
+        if (result.hasAddedItems()) {
+            builder.append("\n\nProductos disponibles para cotizar:");
+            int index = 1;
+            for (WhatsAppBatchQuoteResult.AddedItem item : result.getAddedItems()) {
+                if (index > 10) {
+                    builder.append("\n... y más productos disponibles.");
+                    break;
+                }
+                builder.append("\n").append(index++).append(") ")
+                        .append(nullSafe(item.getCode())).append(" - ")
+                        .append(shortLine(item.getName(), 45))
+                        .append(" | S/ ").append(formatMoney(item.getUnitPrice()))
+                        .append(" | Stock ").append(formatStock(item.getStock()));
+            }
+            builder.append("\n\nAhora te pediré la cantidad de cada producto.");
+            builder.append("\nSi no deseas un producto, elige 0 / No agregar.");
+        } else {
+            builder.append("\n\nNo mostraré ni cotizaré productos sin stock.");
+        }
+
+        if (result.unavailableCount() > 0) {
+            builder.append("\n\nOmití productos sin stock o no encontrados. Un asesor puede revisarlos si lo necesitas.");
+        }
+        return builder.toString();
+    }
+
+    private String buildBatchConfirmedMessage(WhatsAppBatchQuoteResult result) {
+        StringBuilder builder = new StringBuilder("Listo OK Agregue al pedido:");
+        int index = 1;
+        for (WhatsAppBatchQuoteResult.AddedItem item : result.getAddedItems()) {
+            if (index > 10) {
+                builder.append("\n... y mas productos agregados.");
+                break;
+            }
+            builder.append("\n").append(index++).append(") ")
+                    .append(shortLine(item.getName(), 48))
+                    .append(" x ").append(formatStock(item.getQuantity()))
+                    .append(" = S/ ").append(formatMoney(item.getLineTotal()));
+        }
+        builder.append("\nTotal agregado: S/ ").append(formatMoney(result.getTotal()));
+        return builder.toString();
+    }
+
+    private String mediaLabel(WhatsAppEnums.MessageType type) {
+        if (type == WhatsAppEnums.MessageType.IMAGE) return "imagen";
+        if (type == WhatsAppEnums.MessageType.DOCUMENT) return "documento";
+        return "archivo";
     }
 
     private String buildCartSummary(Long cartId) {
@@ -452,6 +873,13 @@ public class InboundWhatsAppAutomationService {
         } catch (Exception e) {
             log.error("No se pudo enviar lista WhatsApp. conversationId={}, error={}", conversationId, e.getMessage(), e);
         }
+    }
+
+    private String defaultChatCustomerName(WhatsAppConversation conversation) {
+        String profile = conversation == null ? null : conversation.getProfileName();
+        if (profile != null && !profile.isBlank()) return sanitizeCustomerName(profile);
+        String waId = conversation == null ? null : conversation.getWaId();
+        return waId == null || waId.isBlank() ? "Cliente WhatsApp" : "Cliente WhatsApp " + waId;
     }
 
     private String sanitizeCustomerName(String value) {

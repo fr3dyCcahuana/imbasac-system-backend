@@ -7,6 +7,7 @@ import java.util.Optional;
 
 public interface WhatsAppProductSuggestionRepository {
     void replaceSuggestions(Long conversationId, List<WhatsAppProductSearchResult> products, String rawSearchText);
+    void replaceBatchSuggestions(Long conversationId, List<WhatsAppBatchQuoteResult.AddedItem> items, String rawSearchText);
     Optional<WhatsAppProductSuggestion> findLatestByPosition(Long conversationId, int position);
     Optional<WhatsAppProductSuggestion> findById(Long id);
     List<WhatsAppProductSuggestion> findLatest(Long conversationId, int limit);

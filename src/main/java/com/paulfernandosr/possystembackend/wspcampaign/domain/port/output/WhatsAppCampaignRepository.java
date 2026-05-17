@@ -1,10 +1,6 @@
-package com.paulfernandosr.possystembackend.campaign.domain.port.output;
+package com.paulfernandosr.possystembackend.wspcampaign.domain.port.output;
 
-import com.paulfernandosr.possystembackend.campaign.domain.WhatsAppCampaign;
-import com.paulfernandosr.possystembackend.campaign.domain.WhatsAppCampaignRecipient;
-import com.paulfernandosr.possystembackend.campaign.domain.WhatsAppCampaignRecipientMode;
-import com.paulfernandosr.possystembackend.campaign.domain.WhatsAppCampaignStatus;
-import com.paulfernandosr.possystembackend.whatsapp.campaign.domain.*;
+import com.paulfernandosr.possystembackend.wspcampaign.domain.*;
 
 import java.util.Collection;
 import java.util.List;
@@ -31,4 +27,15 @@ public interface WhatsAppCampaignRepository {
     void markRecipientSent(Long recipientId, String waMessageId);
     void markRecipientFailed(Long recipientId, String errorMessage);
     void markRecipientSkipped(Long recipientId, String reason);
+
+    /**
+     * Rehabilita destinatarios fallidos por token/auth para reintentar la campaña
+     * después de actualizar el access token de Meta.
+     */
+    int resetAuthFailedRecipientsToPending(Long campaignId);
+
+    List<WhatsAppCampaignTemplate> listTemplates();
+    WhatsAppCampaignTemplate upsertTemplate(WhatsAppCampaignTemplate template);
+    Optional<WhatsAppCampaignTemplate> findTemplateByNameAndLanguage(String templateName, String languageCode);
+    Optional<WhatsAppCampaignRecipientSupport> findRecipientSupport(Long campaignId, Long recipientId);
 }

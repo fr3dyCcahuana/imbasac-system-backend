@@ -1,8 +1,7 @@
-package com.paulfernandosr.possystembackend.campaign.infrastructure.adapter.output;
+package com.paulfernandosr.possystembackend.wspcampaign.infrastructure.adapter.output;
 
-import com.paulfernandosr.possystembackend.campaign.domain.*;
-import com.paulfernandosr.possystembackend.whatsapp.campaign.domain.*;
-import com.paulfernandosr.possystembackend.campaign.domain.port.output.WhatsAppCampaignRepository;
+import com.paulfernandosr.possystembackend.wspcampaign.domain.*;
+import com.paulfernandosr.possystembackend.wspcampaign.domain.port.output.WhatsAppCampaignRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -52,6 +51,48 @@ public class PostgresWhatsAppCampaignRepository implements WhatsAppCampaignRepos
             .sentAt(hasColumn(rs, "sent_at") ? rs.getObject("sent_at", OffsetDateTime.class) : null)
             .createdAt(hasColumn(rs, "created_at") ? rs.getObject("created_at", OffsetDateTime.class) : null)
             .updatedAt(hasColumn(rs, "updated_at") ? rs.getObject("updated_at", OffsetDateTime.class) : null)
+            .build();
+
+
+    private final RowMapper<WhatsAppCampaignTemplate> templateMapper = (rs, rowNum) -> WhatsAppCampaignTemplate.builder()
+            .id(rs.getLong("id"))
+            .templateName(rs.getString("template_name"))
+            .languageCode(rs.getString("language_code"))
+            .category(rs.getString("category"))
+            .status(rs.getString("status"))
+            .bodyText(rs.getString("body_text"))
+            .createdAt(rs.getObject("created_at", OffsetDateTime.class))
+            .updatedAt(rs.getObject("updated_at", OffsetDateTime.class))
+            .build();
+
+    private final RowMapper<WhatsAppCampaignRecipientSupport> supportMapper = (rs, rowNum) -> WhatsAppCampaignRecipientSupport.builder()
+            .campaignId(rs.getLong("campaign_id"))
+            .campaignName(rs.getString("campaign_name"))
+            .campaignStatus(rs.getString("campaign_status"))
+            .templateName(rs.getString("template_name"))
+            .languageCode(rs.getString("language_code"))
+            .recipientId(rs.getLong("recipient_id"))
+            .recipientStatus(rs.getString("recipient_status"))
+            .waId(rs.getString("wa_id"))
+            .phoneNumber(rs.getString("phone_number"))
+            .profileName(rs.getString("profile_name"))
+            .waMessageId(rs.getString("wa_message_id"))
+            .recipientErrorMessage(rs.getString("recipient_error_message"))
+            .sentAt(rs.getObject("sent_at", OffsetDateTime.class))
+            .contactId(rs.getObject("contact_id", Long.class))
+            .marketingOptIn(rs.getObject("marketing_opt_in", Boolean.class))
+            .marketingOptOutAt(rs.getObject("marketing_opt_out_at", OffsetDateTime.class))
+            .conversationId(rs.getObject("conversation_id", Long.class))
+            .conversationStatus(rs.getString("conversation_status"))
+            .automationMode(rs.getString("automation_mode"))
+            .lastMessagePreview(rs.getString("last_message_preview"))
+            .lastMessageAt(rs.getObject("last_message_at", OffsetDateTime.class))
+            .messageId(rs.getObject("message_id", Long.class))
+            .messageStatus(rs.getString("message_status"))
+            .messageErrorCode(rs.getString("message_error_code"))
+            .messageErrorTitle(rs.getString("message_error_title"))
+            .messageErrorDetails(rs.getString("message_error_details"))
+            .messageAt(rs.getObject("message_at", OffsetDateTime.class))
             .build();
 
     private boolean hasColumn(java.sql.ResultSet rs, String column) {
@@ -172,6 +213,10 @@ public class PostgresWhatsAppCampaignRepository implements WhatsAppCampaignRepos
                                                               Collection<Long> contactIds,
                                                               Collection<String> waIds,
                                                               int limit) {
+        if (mode == WhatsAppCampaignRecipientMode.WA_IDS) {
+            return previewWaIdRecipients(waIds, limit);
+        }
+
         String base = """
                 SELECT NULL::bigint AS id,
                        NULL::bigint AS campaign_id,
@@ -199,10 +244,6 @@ public class PostgresWhatsAppCampaignRepository implements WhatsAppCampaignRepos
             sql.append(" AND c.id IN (:contactIds) ");
             params.put("contactIds", contactIds == null || contactIds.isEmpty() ? List.of(-1L) : contactIds);
         }
-        if (mode == WhatsAppCampaignRecipientMode.WA_IDS) {
-            sql.append(" AND c.wa_id IN (:waIds) ");
-            params.put("waIds", waIds == null || waIds.isEmpty() ? List.of("__none__") : waIds);
-        }
         sql.append(" ORDER BY c.updated_at DESC, c.id DESC LIMIT :limit");
         params.put("limit", limit);
 
@@ -211,6 +252,61 @@ public class PostgresWhatsAppCampaignRepository implements WhatsAppCampaignRepos
             spec = spec.param(entry.getKey(), entry.getValue());
         }
         return spec.query(recipientMapper).list();
+    }
+
+    private List<WhatsAppCampaignRecipient> previewWaIdRecipients(Collection<String> waIds, int limit) {
+        List<String> normalizedWaIds = waIds == null ? List.of() : waIds.stream()
+                .map(this::normalizeWaId)
+                .filter(value -> value != null && !value.isBlank())
+                .distinct()
+                .limit(Math.max(1, limit))
+                .toList();
+
+        if (normalizedWaIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<WhatsAppCampaignRecipient> existingContacts = jdbcClient.sql("""
+                SELECT NULL::bigint AS id,
+                       NULL::bigint AS campaign_id,
+                       c.id AS contact_id,
+                       c.wa_id,
+                       c.phone_number,
+                       c.profile_name,
+                       'PENDING' AS status,
+                       NULL::varchar AS wa_message_id,
+                       NULL::text AS error_message,
+                       NULL::timestamptz AS sent_at,
+                       NULL::timestamptz AS created_at,
+                       NULL::timestamptz AS updated_at
+                  FROM whatsapp_contacts c
+                 WHERE c.wa_id IN (:waIds)
+                """)
+                .param("waIds", normalizedWaIds)
+                .query(recipientMapper)
+                .list();
+
+        Map<String, WhatsAppCampaignRecipient> byWaId = new HashMap<>();
+        for (WhatsAppCampaignRecipient recipient : existingContacts) {
+            byWaId.put(normalizeWaId(recipient.getWaId()), recipient);
+        }
+
+        List<WhatsAppCampaignRecipient> result = new ArrayList<>();
+        for (String waId : normalizedWaIds) {
+            WhatsAppCampaignRecipient recipient = byWaId.get(waId);
+            if (recipient != null) {
+                result.add(recipient);
+                continue;
+            }
+            result.add(WhatsAppCampaignRecipient.builder()
+                    .contactId(null)
+                    .waId(waId)
+                    .phoneNumber(waId)
+                    .profileName("Número específico")
+                    .status(WhatsAppCampaignRecipientStatus.PENDING)
+                    .build());
+        }
+        return result;
     }
 
     @Override
@@ -305,6 +401,151 @@ public class PostgresWhatsAppCampaignRepository implements WhatsAppCampaignRepos
                 .param("reason", trim(reason, 1800))
                 .param("id", recipientId)
                 .update();
+    }
+
+    @Override
+    public int resetAuthFailedRecipientsToPending(Long campaignId) {
+        return jdbcClient.sql("""
+                UPDATE whatsapp_campaign_recipients
+                   SET status = 'PENDING',
+                       wa_message_id = NULL,
+                       error_message = NULL,
+                       sent_at = NULL,
+                       updated_at = now()
+                 WHERE campaign_id = :campaignId
+                   AND status = 'FAILED'
+                   AND (
+                        lower(coalesce(error_message, '')) LIKE '%token%'
+                     OR lower(coalesce(error_message, '')) LIKE '%401%'
+                     OR lower(coalesce(error_message, '')) LIKE '%unauthorized%'
+                     OR lower(coalesce(error_message, '')) LIKE '%authentication%'
+                     OR lower(coalesce(error_message, '')) LIKE '%autenticación%'
+                     OR lower(coalesce(error_message, '')) LIKE '%revocado%'
+                   )
+                """)
+                .param("campaignId", campaignId)
+                .update();
+    }
+
+
+    @Override
+    public List<WhatsAppCampaignTemplate> listTemplates() {
+        return jdbcClient.sql("""
+                SELECT id, template_name, language_code, category, status, body_text, created_at, updated_at
+                  FROM whatsapp_templates
+                 ORDER BY template_name ASC, language_code ASC
+                """)
+                .query(templateMapper)
+                .list();
+    }
+
+    @Override
+    public WhatsAppCampaignTemplate upsertTemplate(WhatsAppCampaignTemplate template) {
+        return jdbcClient.sql("""
+                INSERT INTO whatsapp_templates (
+                    template_name, language_code, category, status, body_text, created_at, updated_at
+                ) VALUES (
+                    :templateName, :languageCode, :category, :status, :bodyText, now(), now()
+                )
+                ON CONFLICT (lower(template_name), language_code)
+                DO UPDATE SET
+                    category = EXCLUDED.category,
+                    status = EXCLUDED.status,
+                    body_text = EXCLUDED.body_text,
+                    updated_at = now()
+                RETURNING id, template_name, language_code, category, status, body_text, created_at, updated_at
+                """)
+                .param("templateName", template.getTemplateName())
+                .param("languageCode", template.getLanguageCode())
+                .param("category", template.getCategory())
+                .param("status", template.getStatus())
+                .param("bodyText", template.getBodyText())
+                .query(templateMapper)
+                .single();
+    }
+
+    @Override
+    public Optional<WhatsAppCampaignTemplate> findTemplateByNameAndLanguage(String templateName, String languageCode) {
+        return jdbcClient.sql("""
+                SELECT id, template_name, language_code, category, status, body_text, created_at, updated_at
+                  FROM whatsapp_templates
+                 WHERE lower(template_name) = lower(:templateName)
+                   AND language_code = :languageCode
+                 LIMIT 1
+                """)
+                .param("templateName", templateName)
+                .param("languageCode", languageCode)
+                .query(templateMapper)
+                .optional();
+    }
+
+    @Override
+    public Optional<WhatsAppCampaignRecipientSupport> findRecipientSupport(Long campaignId, Long recipientId) {
+        return jdbcClient.sql("""
+                SELECT camp.id AS campaign_id,
+                       camp.name AS campaign_name,
+                       camp.status AS campaign_status,
+                       camp.template_name,
+                       camp.language_code,
+                       r.id AS recipient_id,
+                       r.status AS recipient_status,
+                       r.wa_id,
+                       r.phone_number,
+                       r.profile_name,
+                       r.wa_message_id,
+                       r.error_message AS recipient_error_message,
+                       r.sent_at,
+                       c.id AS contact_id,
+                       c.marketing_opt_in,
+                       c.marketing_opt_out_at,
+                       conv.id AS conversation_id,
+                       conv.status AS conversation_status,
+                       conv.automation_mode,
+                       conv.last_message_preview,
+                       conv.last_message_at,
+                       msg.id AS message_id,
+                       msg.status AS message_status,
+                       msg.error_code AS message_error_code,
+                       msg.error_title AS message_error_title,
+                       msg.error_details AS message_error_details,
+                       msg.message_at
+                  FROM whatsapp_campaign_recipients r
+                  JOIN whatsapp_campaigns camp ON camp.id = r.campaign_id
+             LEFT JOIN whatsapp_contacts c
+                    ON c.id = r.contact_id
+                    OR (r.contact_id IS NULL AND c.wa_id = r.wa_id)
+             LEFT JOIN LATERAL (
+                    SELECT x.*
+                      FROM whatsapp_conversations x
+                     WHERE x.contact_id = c.id
+                     ORDER BY x.last_message_at DESC NULLS LAST, x.id DESC
+                     LIMIT 1
+                  ) conv ON true
+             LEFT JOIN LATERAL (
+                    SELECT m.*
+                      FROM whatsapp_messages m
+                     WHERE (r.wa_message_id IS NOT NULL AND m.wa_message_id = r.wa_message_id)
+                        OR (conv.id IS NOT NULL AND m.conversation_id = conv.id AND m.template_name = camp.template_name)
+                     ORDER BY m.message_at DESC NULLS LAST, m.id DESC
+                     LIMIT 1
+                  ) msg ON true
+                 WHERE r.campaign_id = :campaignId
+                   AND r.id = :recipientId
+                """)
+                .param("campaignId", campaignId)
+                .param("recipientId", recipientId)
+                .query(supportMapper)
+                .optional();
+    }
+
+    private String normalizeWaId(String value) {
+        if (value == null) return null;
+        return value.replace("+", "")
+                .replace(" ", "")
+                .replace("-", "")
+                .replace("(", "")
+                .replace(")", "")
+                .trim();
     }
 
     private String trim(String value, int max) {

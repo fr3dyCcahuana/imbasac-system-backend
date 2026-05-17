@@ -1,4 +1,4 @@
-package com.paulfernandosr.possystembackend.campaign.domain;
+package com.paulfernandosr.possystembackend.wspcampaign.domain;
 
 public enum WhatsAppCampaignRecipientMode {
     ALL_CONTACTS,

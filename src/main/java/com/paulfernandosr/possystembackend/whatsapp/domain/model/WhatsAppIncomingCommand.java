@@ -45,6 +45,15 @@ public record WhatsAppIncomingCommand(
         }
 
         String body = text(message.path("text").path("body"));
+        if ((body == null || body.isBlank()) && "image".equalsIgnoreCase(messageType)) {
+            body = text(message.path("image").path("caption"));
+        }
+        if ((body == null || body.isBlank()) && "document".equalsIgnoreCase(messageType)) {
+            body = text(message.path("document").path("caption"));
+            if (body == null || body.isBlank()) {
+                body = text(message.path("document").path("filename"));
+            }
+        }
         return fromText(body);
     }
 
@@ -96,8 +105,24 @@ public record WhatsAppIncomingCommand(
         return payloadIs("DOC_RUC") || equalsAny("ruc");
     }
 
+    public boolean isNameOnlyOption() {
+        return payloadIs("DOC_NAME") || equalsAny("nombre", "solo nombre", "con nombre");
+    }
+
+    public boolean isOmitCustomerIdentity() {
+        return payloadIs("DOC_OMIT") || equalsAny("omitir", "sin datos", "sin documento", "no identificar", "visitante");
+    }
+
     public boolean isSkipName() {
-        return payloadIs("SKIP_NAME") || equalsAny("omitir", "sin nombre", "no", "n", "-", "ninguno");
+        return payloadIs("SKIP_NAME") || payloadIs("DOC_OMIT") || equalsAny("omitir", "sin nombre", "no", "n", "-", "ninguno");
+    }
+
+    public boolean isConfirmBatch() {
+        return payloadIs("BATCH_CONFIRM") || equalsAny("confirmar", "confirmo", "si confirmo", "sí confirmo", "confirmar lista", "agregar lista", "agregar al pedido");
+    }
+
+    public boolean isEditBatchQuantities() {
+        return payloadIs("BATCH_EDIT_QTY") || equalsAny("editar cantidades", "cambiar cantidades", "cantidades", "modificar cantidades");
     }
 
     public boolean isProductSelection() {
@@ -121,10 +146,33 @@ public record WhatsAppIncomingCommand(
         }
     }
 
+    public boolean isBatchQuantitySelection() {
+        if (payloadId == null) return false;
+        String upper = payloadId.toUpperCase();
+        return upper.startsWith("BQTY_") || upper.equals("BATCH_SKIP") || upper.equals("BATCH_QTY_OTHER");
+    }
+
+    public boolean isBatchQuantityOther() {
+        return payloadIs("BATCH_QTY_OTHER");
+    }
+
+    public java.math.BigDecimal batchQuantityValue() {
+        if (payloadId == null) return null;
+        String upper = payloadId.toUpperCase();
+        if (upper.equals("BATCH_SKIP") || upper.equals("BQTY_0")) {
+            return java.math.BigDecimal.ZERO;
+        }
+        if (upper.startsWith("BQTY_")) {
+            String raw = upper.substring("BQTY_".length());
+            try { return new java.math.BigDecimal(raw.replace('_', '.')); } catch (Exception ignored) { return null; }
+        }
+        return null;
+    }
+
     public boolean hasProductSearchText() {
         if (normalizedText == null || normalizedText.length() < 2) return false;
         if (isGreetingOrReset() || isYes() || isNo() || isCancel() || isThanks() || isAdvisor()) return false;
-        if (isSearchMenu() || isProformaMenu() || isDniOption() || isRucOption()) return false;
+        if (isSearchMenu() || isProformaMenu() || isDniOption() || isRucOption() || isNameOnlyOption() || isOmitCustomerIdentity() || isSkipName()) return false;
         if (normalizedText.matches("^[0-9]{1,3}$")) return false;
         return true;
     }

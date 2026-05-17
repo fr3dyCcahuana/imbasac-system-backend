@@ -101,6 +101,14 @@ public class ProcessWhatsAppWebhookService implements ProcessWhatsAppWebhookUseC
 
             if (type == WhatsAppEnums.MessageType.TEXT || type == WhatsAppEnums.MessageType.INTERACTIVE) {
                 automationService.handleIncomingCommand(conversation, command);
+            } else if (type == WhatsAppEnums.MessageType.IMAGE || type == WhatsAppEnums.MessageType.DOCUMENT) {
+                automationService.handleIncomingMedia(
+                        conversation,
+                        type,
+                        resolveMediaId(messageNode, type),
+                        resolveMediaMimeType(messageNode, type),
+                        text
+                );
             }
         }
     }

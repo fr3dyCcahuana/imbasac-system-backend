@@ -1,4 +1,4 @@
-package com.paulfernandosr.possystembackend.whatsapp.domain.port.output;
+package com.paulfernandosr.possystembackend.wspcampaign.domain.port.output;
 
 import com.paulfernandosr.possystembackend.whatsapp.domain.WhatsAppMessageSendResult;
 import com.paulfernandosr.possystembackend.whatsapp.infrastructure.adapter.output.MetaWhatsAppMessageGateway.InteractiveButton;

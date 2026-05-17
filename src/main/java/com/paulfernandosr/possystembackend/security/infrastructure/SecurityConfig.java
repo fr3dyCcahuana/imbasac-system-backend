@@ -3,6 +3,7 @@ package com.paulfernandosr.possystembackend.security.infrastructure;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -41,6 +42,8 @@ public class SecurityConfig {
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/images/**").permitAll()
                         .requestMatchers("/files/manual-pdfs/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/whatsapp/webhook").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/whatsapp/webhook").permitAll()
 //                        .requestMatchers("/permissions/**").hasAnyAuthority("MANAGE_PERMISSIONS")
 //                        .requestMatchers("/products/**").hasAnyAuthority("MANAGE_PRODUCTS")
                         .anyRequest().authenticated())

@@ -62,6 +62,36 @@ public class PostgresWhatsAppProductSuggestionRepository implements WhatsAppProd
     }
 
     @Override
+    public void replaceBatchSuggestions(Long conversationId, List<WhatsAppBatchQuoteResult.AddedItem> items, String rawSearchText) {
+        jdbcClient.sql("DELETE FROM whatsapp_product_suggestions WHERE conversation_id = :conversationId")
+                .param("conversationId", conversationId)
+                .update();
+        int position = 1;
+        for (WhatsAppBatchQuoteResult.AddedItem item : items) {
+            jdbcClient.sql("""
+                    INSERT INTO whatsapp_product_suggestions(
+                        conversation_id, product_id, position, product_code, product_name,
+                        unit_price, stock_quantity, price_list, raw_search_text, raw_snapshot
+                    ) VALUES (
+                        :conversationId, :productId, :position, :productCode, :productName,
+                        :unitPrice, :stockQuantity, :priceList, :rawSearchText, CAST(:rawSnapshot AS jsonb)
+                    )
+                    """)
+                    .param("conversationId", conversationId)
+                    .param("productId", item.getProductId())
+                    .param("position", position++)
+                    .param("productCode", item.getCode())
+                    .param("productName", item.getName())
+                    .param("unitPrice", item.getUnitPrice())
+                    .param("stockQuantity", item.getStock())
+                    .param("priceList", item.getPriceList())
+                    .param("rawSearchText", rawSearchText == null ? "" : rawSearchText)
+                    .param("rawSnapshot", batchSnapshot(item, rawSearchText))
+                    .update();
+        }
+    }
+
+    @Override
     public Optional<WhatsAppProductSuggestion> findLatestByPosition(Long conversationId, int position) {
         return jdbcClient.sql("""
                 SELECT * FROM whatsapp_product_suggestions
@@ -95,6 +125,23 @@ public class PostgresWhatsAppProductSuggestionRepository implements WhatsAppProd
                 .param("limit", limit)
                 .query(mapper)
                 .list();
+    }
+
+    private String batchSnapshot(WhatsAppBatchQuoteResult.AddedItem item, String rawSearchText) {
+        try {
+            return objectMapper.writeValueAsString(java.util.Map.of(
+                    "searchText", rawSearchText == null ? "" : rawSearchText,
+                    "sku", item.getCode() == null ? "" : item.getCode(),
+                    "name", item.getName() == null ? "" : item.getName(),
+                    "stock", item.getStock() == null ? "" : item.getStock().toPlainString(),
+                    "price", item.getUnitPrice() == null ? "" : item.getUnitPrice().toPlainString(),
+                    "priceList", item.getPriceList() == null ? "" : item.getPriceList(),
+                    "requestedQuantity", item.getQuantity() == null ? "1" : item.getQuantity().toPlainString(),
+                    "source", "batch"
+            ));
+        } catch (Exception ignored) {
+            return "{}";
+        }
     }
 
     private String snapshot(WhatsAppProductSearchResult product, String rawSearchText) {

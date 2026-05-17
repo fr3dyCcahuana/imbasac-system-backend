@@ -1,4 +1,4 @@
-package com.paulfernandosr.possystembackend.campaign.infrastructure.adapter.input.dto;
+package com.paulfernandosr.possystembackend.wspcampaign.infrastructure.adapter.input.dto;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;

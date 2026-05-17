@@ -55,7 +55,6 @@ integration:
     network-log-enabled: true
     debug-dir: logs/mtc-debug
 
-
   guide-remission:
     base-url: "http://127.0.0.1/API_SUNAT_GUIAS"
     connect-timeout-seconds: 10
@@ -82,6 +81,50 @@ integration:
       departamento: "LIMA"
       modo: 0
 
+whatsapp:
+  # Versión de Graph API que estás usando en Meta Developers.
+  api-version: v25.0
+
+  # ID del número de WhatsApp, NO es el número telefónico.
+  # Sale en Meta: Configuración de la API → Identificador de número de teléfono.
+  phone-number-id: 1176916348827692
+
+  # Token Bearer de Meta.
+  # Para pruebas puedes usar el temporal.
+  # En producción debe ser token permanente desde System User.
+  access-token: "EAAiZAsuwfhKkBRfZADRWxhZCfWXkbb2rCpqP0S5rqlgWkkn8A6xZAsWmFf9Gnhnh2jsv3huZCgDw5vuj6ZBxuYyRHxbFZBcd2VGwUdHA4eB1HUmC9YZAGjXy5ZAqfvUwAg27dmNYZAZBWz2ZCd7xIHGa8YNoCODt2wo24s6KYAitanweTeZCoZC2c0YxpHpQ7yCi4kK9ZAk8xpkIZAGemaSgZC20tIwCvkjrqEpfZCIHYVt9kJiYYLhRZA4L06dJLf8Vs8KUhGsHJMGxhZB5YRYtGWZBNETLPO8PYVlaj"
+
+  # Token inventado por ti para validar el webhook.
+  # Este mismo valor debes colocarlo en Meta cuando configures Webhook.
+  verify-token: imbasac-whatsapp-webhook-token
+
+  # true = responde automático cuando entra un mensaje.
+  # false = solo guarda mensajes, no responde.
+  auto-reply-enabled: ${WHATSAPP_AUTO_REPLY_ENABLED:true}
+
+  # Tamaño por defecto para listar conversaciones/mensajes en el frontend.
+  default-page-size: 20
+  sales:
+    default-price-list: ${WHATSAPP_DEFAULT_PRICE_LIST:B}
+    show-stock: ${WHATSAPP_SHOW_STOCK:true}
+    max-products-response: ${WHATSAPP_MAX_PRODUCTS_RESPONSE:10}
+    only-show-products-with-stock: ${WHATSAPP_ONLY_SHOW_PRODUCTS_WITH_STOCK:true}
+    minimum-stock-to-show: ${WHATSAPP_MINIMUM_STOCK_TO_SHOW:1}
+    allow-proforma-generation: ${WHATSAPP_ALLOW_PROFORMA_GENERATION:true}
+    batch-list-enabled: ${WHATSAPP_BATCH_LIST_ENABLED:true}
+    max-batch-codes-per-message: ${WHATSAPP_MAX_BATCH_CODES_PER_MESSAGE:80}
+    default-batch-quantity: ${WHATSAPP_DEFAULT_BATCH_QUANTITY:10}
+  vision:
+    enabled: ${WHATSAPP_VISION_ENABLED:false}
+    open-ai-api-key: ${OPENAI_API_KEY:}
+    open-ai-model: ${OPENAI_VISION_MODEL:gpt-4o-mini}
+    max-media-bytes: ${WHATSAPP_VISION_MAX_MEDIA_BYTES:5242880}
+  campaign:
+    enabled: true
+    require-policy-confirmation: true
+    only-opted-in-by-default: true
+    max-recipients-per-campaign: 100
+    delay-millis-between-messages: 1000
 sale:
   sunat:
     mode: "0"

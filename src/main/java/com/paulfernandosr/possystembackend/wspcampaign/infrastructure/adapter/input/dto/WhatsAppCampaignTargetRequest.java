@@ -1,6 +1,6 @@
-package com.paulfernandosr.possystembackend.campaign.infrastructure.adapter.input.dto;
+package com.paulfernandosr.possystembackend.wspcampaign.infrastructure.adapter.input.dto;
 
-import com.paulfernandosr.possystembackend.campaign.domain.WhatsAppCampaignRecipientMode;
+import com.paulfernandosr.possystembackend.wspcampaign.domain.WhatsAppCampaignRecipientMode;
 import lombok.Getter;
 import lombok.Setter;
 
