@@ -1,6 +1,9 @@
 package com.paulfernandosr.possystembackend.whatsapp.application;
 
 import com.paulfernandosr.possystembackend.whatsapp.domain.*;
+import com.paulfernandosr.possystembackend.whatsapp.application.aiagent.AiAgentAction;
+import com.paulfernandosr.possystembackend.whatsapp.application.aiagent.AiAgentAdapterService;
+import com.paulfernandosr.possystembackend.whatsapp.application.aiagent.AiAgentPlanResponse;
 import com.paulfernandosr.possystembackend.whatsapp.domain.model.WhatsAppIncomingCommand;
 import com.paulfernandosr.possystembackend.whatsapp.domain.port.output.*;
 import com.paulfernandosr.possystembackend.whatsapp.infrastructure.adapter.output.MetaWhatsAppMessageGateway.InteractiveButton;
@@ -32,6 +35,7 @@ public class InboundWhatsAppAutomationService {
     private final WhatsAppBatchCodeExtractorService batchCodeExtractorService;
     private final WhatsAppBatchQuoteService batchQuoteService;
     private final WhatsAppMediaCodeExtractionService mediaCodeExtractionService;
+    private final AiAgentAdapterService aiAgentAdapterService;
 
     public void handleIncomingText(WhatsAppConversation conversation, String text) {
         handleIncomingCommand(conversation, WhatsAppIncomingCommand.fromText(text));
@@ -364,6 +368,7 @@ public class InboundWhatsAppAutomationService {
         }
 
         if (cmd.hasProductSearchText()) {
+            if (tryHandleWithAiAgent(conversation, cmd)) return;
             searchAndOfferProducts(conversation, cmd.businessText());
             return;
         }
@@ -381,6 +386,7 @@ public class InboundWhatsAppAutomationService {
             return;
         }
         if (cmd.hasProductSearchText()) {
+            if (tryHandleWithAiAgent(conversation, cmd)) return;
             searchAndOfferProducts(conversation, cmd.businessText());
             return;
         }
@@ -491,6 +497,7 @@ public class InboundWhatsAppAutomationService {
             return;
         }
         if (cmd.hasProductSearchText()) {
+            if (tryHandleWithAiAgent(conversation, cmd)) return;
             searchAndOfferProducts(conversation, cmd.businessText());
             return;
         }
