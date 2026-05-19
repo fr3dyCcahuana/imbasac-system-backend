@@ -31,9 +31,9 @@ logging:
 security:
   token:
     secret: bSZWQDl3ZDVtUW0memhHNEc3ME82ZlYmYms5enVFSmU=
-    expiration: 30000000
+    expiration: 900
   session:
-    ttl: 30000000
+    ttl: 14400
 
 integration:
   mtc-license:

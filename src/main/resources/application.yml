@@ -26,10 +26,9 @@ server:
 security:
   token:
     secret: bSZWQDl3ZDVtUW0memhHNEc3ME82ZlYmYms5enVFSmU=
-    expiration: 30000000
+    expiration: 900
   session:
-    ttl: 30000000
-
+    ttl: 14400
 
 #headless: true → no intenta abrir UI
 #debug-enabled: false → no guarda evidencias ni logs debug
@@ -94,7 +93,7 @@ whatsapp:
   # Token Bearer de Meta.
   # Para pruebas puedes usar el temporal.
   # En producción debe ser token permanente desde System User.
-  access-token: "EAAiZAsuwfhKkBRcuV2b8bkkOJB2sZCKMNCPfaVCJ5eyXCH48qlctNv3zARbf02bCVvZBXhzvKpO9tcWIx4sdRqQhHbMm9nr1mqOtJxZAwStWDidrsfwQ5Tk9YKzz4mY9vZBdYezonQdN7pfzA63a7YLcOVxHG3MHakusSNBv8SW37nAVhTdLCVy4XG4LLcoRHMbqEaNFS7aa3hRhneUlddZBMySFRCqxmKlzSwvBtJ2ZCiMGG9OrhhB126RwZBTeCasFPpBdlsKnwv30fBAeSM6h8U3l"
+  access-token: "EAAiZAsuwfhKkBRRL2o7ykjs1v79zxtMa11WZBOHrDGTIITMvcbOYhZBGYpeGzeEdUmTtoDdU7awfxS41CBqZBGbxyCx5QZChumqboDKfjsVB54aZCUSNZCCMZAQtZA7y2BcPnDuAynou0ZCrKCMHZAUd9TkWeXKdcdxERppy4Vj7cp6oFhijyythwUIDbR2FqW5ZCVFh7qrKympiw3fz3ONRHbuvlaBExw50b3mlsL9t5jkaKwCvtN32nfOJzj2LZAseDYIRfgIypLAhnDQl80lC0SFrg"
 
   # Token inventado por ti para validar el webhook.
   # Este mismo valor debes colocarlo en Meta cuando configures Webhook.

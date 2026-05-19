@@ -25,9 +25,9 @@ server:
 security:
   token:
     secret: bSZWQDl3ZDVtUW0memhHNEc3ME82ZlYmYms5enVFSmU=
-    expiration: 1200
+    expiration: 900
   session:
-    ttl: 1800
+    ttl: 14400
 
 
 #headless: true → no intenta abrir UI

@@ -1422,7 +1422,7 @@ public class InboundWhatsAppAutomationService {
             String normalized = token == null ? "" : token.trim();
             if (normalized.length() < 4) continue;
 
-            boolean hasDigit = normalized.matches(".*\d.*");
+            boolean hasDigit = normalized.matches(".*\\d.*");
             boolean hasLetter = normalized.matches(".*[A-Za-z].*");
             boolean codeLike = hasDigit || (hasLetter && normalized.equals(normalized.toUpperCase(Locale.ROOT)));
             if (!codeLike) continue;
