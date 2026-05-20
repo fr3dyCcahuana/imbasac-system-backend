@@ -209,7 +209,15 @@ public class PostgresProductRepository implements ProductRepository {
           ) img_agg
                  ON img_agg.product_id = p.id
           WHERE
-            (p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ?)
+            (
+              p.sku ILIKE ?
+              OR p.barcode ILIKE ?
+              OR p.name ILIKE ?
+              OR COALESCE(p.brand, '') ILIKE ?
+              OR COALESCE(p.model, '') ILIKE ?
+              OR COALESCE(p.compatibility, '') ILIKE ?
+              OR COALESCE(p.factory_code, '') ILIKE ?
+            )
             AND (?::text IS NULL OR p.brand ILIKE ?::text)
             AND (?::text IS NULL OR p.model ILIKE ?::text)
             AND (?::text IS NULL OR p.category = ?::text)
@@ -238,7 +246,7 @@ public class PostgresProductRepository implements ProductRepository {
 
         long totalElements = jdbcClient.sql(countSql)
                 .params(
-                        likeParam, likeParam, likeParam,
+                        likeParam, likeParam, likeParam, likeParam, likeParam, likeParam, likeParam,
                         brandLike, brandLike,
                         modelLike, modelLike,
                         categoryEq, categoryEq,
@@ -289,7 +297,7 @@ public class PostgresProductRepository implements ProductRepository {
 
         List<Product> products = jdbcClient.sql(selectSql)
                 .params(
-                        likeParam, likeParam, likeParam,
+                        likeParam, likeParam, likeParam, likeParam, likeParam, likeParam, likeParam,
                         brandLike, brandLike,
                         modelLike, modelLike,
                         categoryEq, categoryEq,

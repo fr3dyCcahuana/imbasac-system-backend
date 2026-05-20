@@ -31,9 +31,9 @@ logging:
 security:
   token:
     secret: bSZWQDl3ZDVtUW0memhHNEc3ME82ZlYmYms5enVFSmU=
-    expiration: 30000000
+    expiration: 1200
   session:
-    ttl: 30000000
+    ttl: 21600
 
 integration:
   mtc-license:
@@ -57,7 +57,7 @@ integration:
     base-url: http://127.0.0.1:8093/API_SUNAT_GUIAS
     connect-timeout-seconds: 10
     read-timeout-seconds: 90
-    ticket-query-delay-millis: 3000
+    ticket-query-delay-millis: 20000
     token-ttl-skew-seconds: 60
     cached-token-ttl-seconds-fallback: 3300
 
