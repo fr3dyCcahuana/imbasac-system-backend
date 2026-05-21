@@ -27,6 +27,32 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
     private final JdbcClient jdbcClient;
 
     @Override
+    public GuideRemissionDocument saveDraft(GuideRemissionCompany company, GuideRemissionFullFlowRequest request) {
+        GuideRemissionSubmission submission = toSubmission(request, null);
+        saveSubmission(company, submission, null);
+        return findDocument(company.getRuc(), submission.getGuia().getSerie(), submission.getGuia().getNumero())
+                .orElseThrow();
+    }
+
+    @Override
+    public GuideRemissionDocument updateDraft(GuideRemissionCompany company, String serie, String numero, GuideRemissionFullFlowRequest request) {
+        GuideRemissionDocument existing = findDocument(company.getRuc(), serie, numero)
+                .orElseThrow(() -> new InvalidGuideRemissionException("No se encontró la guía de remisión " + serie + "-" + numero + "."));
+
+        if (!isEditableStatus(existing.getStatus())) {
+            throw new InvalidGuideRemissionException(
+                    "La guía " + serie + "-" + numero + " no puede editarse porque su estado actual es " + existing.getStatus() + "."
+            );
+        }
+
+        request.getGuia().setSerie(serie);
+        request.getGuia().setNumero(numero);
+        GuideRemissionSubmission submission = toSubmission(request, null);
+        saveSubmission(company, submission, null);
+        return findDocument(company.getRuc(), serie, numero).orElseThrow();
+    }
+
+    @Override
     public void saveSubmission(GuideRemissionCompany company, GuideRemissionSubmission request, GuideRemissionSubmissionResponse response) {
         Long existingId = findId(company.getRuc(), request.getGuia().getSerie(), request.getGuia().getNumero()).orElse(null);
 
@@ -41,6 +67,22 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
 
         insertRelatedDocuments(existingId, request.getRelatedDocuments());
         insertItems(existingId, request.getItems());
+    }
+
+    @Override
+    public void markEmissionError(String companyRuc, String serie, String numero, GuideRemissionStatus status, String message) {
+        jdbcClient.sql("""
+                UPDATE guide_remissions
+                   SET status = ?,
+                       error_code = ?,
+                       cdr_message = ?,
+                       updated_at = NOW()
+                 WHERE company_ruc = ?
+                   AND serie = ?
+                   AND numero = ?
+                """)
+                .params(status.name(), status.name(), truncate(message, 2000), companyRuc, serie, numero)
+                .update();
     }
 
     @Override
@@ -477,7 +519,7 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                         guia.getNumeroBultos(),
                         guia.getNotas(),
                         response != null ? response.getNumTicket() : null,
-                        GuideRemissionStatus.SUBMITTED.name(),
+                        response != null ? GuideRemissionStatus.SUBMITTED.name() : GuideRemissionStatus.DRAFT.name(),
                         parseOffsetDateTime(response != null ? response.getFecRecepcion() : null)
                 )
                 .update(keyHolder, "id");
@@ -564,7 +606,7 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                         guia.getNumeroBultos(),
                         guia.getNotas(),
                         response != null ? response.getNumTicket() : null,
-                        GuideRemissionStatus.SUBMITTED.name(),
+                        response != null ? GuideRemissionStatus.SUBMITTED.name() : GuideRemissionStatus.DRAFT.name(),
                         parseOffsetDateTime(response != null ? response.getFecRecepcion() : null),
                         id
                 )
@@ -703,6 +745,29 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                 .params(companyRuc, serie, numero)
                 .query(Long.class)
                 .optional();
+    }
+
+    private GuideRemissionSubmission toSubmission(GuideRemissionFullFlowRequest request, String token) {
+        return GuideRemissionSubmission.builder()
+                .guia(request.getGuia())
+                .items(request.getItems())
+                .token(token)
+                .relatedDocumentTypeCode(request.getRelatedDocumentTypeCode())
+                .relatedDocumentSerie(request.getRelatedDocumentSerie())
+                .relatedDocumentNumero(request.getRelatedDocumentNumero())
+                .relatedDocuments(request.getRelatedDocuments())
+                .build();
+    }
+
+    private boolean isEditableStatus(String status) {
+        if (!hasText(status)) {
+            return true;
+        }
+        String normalized = status.trim().toUpperCase();
+        return normalized.equals(GuideRemissionStatus.DRAFT.name())
+                || normalized.equals(GuideRemissionStatus.ERROR.name())
+                || normalized.equals(GuideRemissionStatus.ERROR_COMUNICACION.name())
+                || normalized.equals(GuideRemissionStatus.REJECTED.name());
     }
 
     private List<GuideRemissionRelatedDocument> loadRelatedDocuments(GuideRemissionDocument document) {
@@ -1375,6 +1440,13 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
         if (first != null && !first.isBlank()) return first;
         if (second != null && !second.isBlank()) return second;
         return null;
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 
     private boolean hasText(String value) {

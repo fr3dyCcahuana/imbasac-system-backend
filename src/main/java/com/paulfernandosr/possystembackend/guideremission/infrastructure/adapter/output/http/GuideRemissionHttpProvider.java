@@ -163,9 +163,7 @@ public class GuideRemissionHttpProvider implements GuideRemissionProvider {
                     .build();
         } catch (Exception ex) {
             throw new GuideRemissionIntegrationException(
-                    "No se pudo interpretar la respuesta de solicitud de token. status=" + raw.statusCode().value()
-                            + ", contentType=" + raw.contentType()
-                            + ", body=" + sanitizeForLog(responseBody), ex);
+                    buildParseErrorMessage("solicitud de token", raw, responseBody), ex);
         }
     }
 
@@ -189,9 +187,7 @@ public class GuideRemissionHttpProvider implements GuideRemissionProvider {
                     .build();
         } catch (Exception ex) {
             throw new GuideRemissionIntegrationException(
-                    "No se pudo interpretar la respuesta de envío de guía. status=" + raw.statusCode().value()
-                            + ", contentType=" + raw.contentType()
-                            + ", body=" + sanitizeForLog(responseBody), ex);
+                    buildParseErrorMessage("envio de guia", raw, responseBody), ex);
         }
     }
 
@@ -223,9 +219,7 @@ public class GuideRemissionHttpProvider implements GuideRemissionProvider {
                     .build();
         } catch (Exception ex) {
             throw new GuideRemissionIntegrationException(
-                    "No se pudo interpretar la respuesta de consulta de ticket. status=" + raw.statusCode().value()
-                            + ", contentType=" + raw.contentType()
-                            + ", body=" + sanitizeForLog(responseBody), ex);
+                    buildParseErrorMessage("consulta de ticket", raw, responseBody), ex);
         }
     }
 
@@ -281,7 +275,58 @@ public class GuideRemissionHttpProvider implements GuideRemissionProvider {
 
     private String buildErrorMessage(String baseMessage, RestClientResponseException ex) {
         String responseBody = ex.getResponseBodyAsString();
-        return baseMessage + ". Status=" + ex.getStatusCode() + ", body=" + sanitizeForLog(responseBody);
+        return baseMessage + ". " + friendlyExternalBodyMessage(
+                ex.getStatusCode().value(),
+                ex.getResponseHeaders().getContentType(),
+                responseBody
+        );
+    }
+
+    private String buildParseErrorMessage(String operation, RawExternalResponse raw, String responseBody) {
+        return "No se pudo interpretar la respuesta de " + operation + ". "
+                + friendlyExternalBodyMessage(raw.statusCode().value(), raw.contentType(), responseBody);
+    }
+
+    private String friendlyExternalBodyMessage(int status, MediaType contentType, String body) {
+        String plainBody = stripHtml(body);
+        String normalized = plainBody.toLowerCase();
+
+        if (normalized.contains("server_key.pem")
+                || normalized.contains("server.pem")
+                || normalized.contains("failure signing data")
+                || normalized.contains("openssl_sign")) {
+            return "El servicio API_SUNAT_GUIAS no pudo firmar el XML porque faltan o no son validos los certificados digitales del modo configurado. "
+                    + "Verifica libraries/certificado_digital/prueba/server_key.pem y server.pem para TEST, o produccion/server_key.pem y server.pem para PRODUCCION.";
+        }
+
+        if (normalized.contains("warning") || normalized.contains("fatal error")) {
+            return "El servicio API_SUNAT_GUIAS devolvio un error PHP en lugar de JSON. Status="
+                    + status + ", contentType=" + contentType + ", detalle=" + truncate(stripHtml(body), 500);
+        }
+
+        return "Status=" + status + ", contentType=" + contentType + ", body=" + sanitizeForLog(body);
+    }
+
+    private String stripHtml(String body) {
+        if (body == null) {
+            return "";
+        }
+        return body
+                .replaceAll("(?is)<br\\s*/?>", " ")
+                .replaceAll("(?is)<[^>]+>", " ")
+                .replace("&gt;", ">")
+                .replace("&lt;", "<")
+                .replace("&quot;", "\"")
+                .replace("&amp;", "&")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength) + "...";
     }
 
     private String sanitizeForLog(String body) {

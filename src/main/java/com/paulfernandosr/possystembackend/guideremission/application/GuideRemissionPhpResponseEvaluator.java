@@ -61,6 +61,11 @@ public class GuideRemissionPhpResponseEvaluator {
     }
 
     private String buildPhpErrorMessage(String prefix, Integer cod, String msg, String exc) {
+        String detail = (defaultString(msg) + " " + defaultString(exc)).toLowerCase();
+        if (detail.contains("certificado") || detail.contains("server_key.pem") || detail.contains("server.pem")) {
+            return "El servicio API_SUNAT_GUIAS no pudo firmar el XML porque faltan o no son validos los certificados digitales del modo configurado. "
+                    + "Verifica libraries/certificado_digital/prueba/server_key.pem y server.pem para TEST, o produccion/server_key.pem y server.pem para PRODUCCION.";
+        }
         return prefix + ". cod=" + cod + ", msg=" + defaultString(msg) + ", exc=" + defaultString(exc);
     }
 

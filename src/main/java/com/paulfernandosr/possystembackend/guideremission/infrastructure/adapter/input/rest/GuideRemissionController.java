@@ -1,13 +1,14 @@
 package com.paulfernandosr.possystembackend.guideremission.infrastructure.adapter.input.rest;
 
 import com.paulfernandosr.possystembackend.guideremission.domain.*;
+import com.paulfernandosr.possystembackend.guideremission.domain.port.input.CreateGuideRemissionUseCase;
+import com.paulfernandosr.possystembackend.guideremission.domain.port.input.EmitGuideRemissionUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.GenerateGuideRemissionPdfUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.GetGuideRemissionDetailUseCase;
-import com.paulfernandosr.possystembackend.guideremission.domain.port.input.ProcessGuideRemissionFullFlowUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.QueryGuideRemissionTicketUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.RequestGuideRemissionTokenUseCase;
-import com.paulfernandosr.possystembackend.guideremission.domain.port.input.SubmitGuideRemissionUseCase;
 import com.paulfernandosr.possystembackend.guideremission.domain.port.input.SearchGuideRemissionsUseCase;
+import com.paulfernandosr.possystembackend.guideremission.domain.port.input.UpdateGuideRemissionUseCase;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -20,33 +21,47 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class GuideRemissionController {
     private final RequestGuideRemissionTokenUseCase requestGuideRemissionTokenUseCase;
-    private final SubmitGuideRemissionUseCase submitGuideRemissionUseCase;
     private final QueryGuideRemissionTicketUseCase queryGuideRemissionTicketUseCase;
-    private final ProcessGuideRemissionFullFlowUseCase processGuideRemissionFullFlowUseCase;
     private final GenerateGuideRemissionPdfUseCase generateGuideRemissionPdfUseCase;
     private final GetGuideRemissionDetailUseCase getGuideRemissionDetailUseCase;
     private final SearchGuideRemissionsUseCase searchGuideRemissionsUseCase;
+    private final CreateGuideRemissionUseCase createGuideRemissionUseCase;
+    private final UpdateGuideRemissionUseCase updateGuideRemissionUseCase;
+    private final EmitGuideRemissionUseCase emitGuideRemissionUseCase;
 
     @PostMapping("/token")
     public ResponseEntity<GuideRemissionTokenResponse> requestToken() {
         return ResponseEntity.ok(requestGuideRemissionTokenUseCase.requestToken());
     }
 
+    @PostMapping
+    public ResponseEntity<GuideRemissionDetailResponse> create(@Valid @RequestBody GuideRemissionFullFlowRequest request) {
+        return ResponseEntity.ok(createGuideRemissionUseCase.create(request));
+    }
+
     @PostMapping("/submit")
-    public ResponseEntity<GuideRemissionSubmissionResponse> submit(@Valid @RequestBody GuideRemissionSubmission request) {
-        return ResponseEntity.ok(submitGuideRemissionUseCase.submit(request));
+    public ResponseEntity<GuideRemissionDetailResponse> submit(@Valid @RequestBody GuideRemissionFullFlowRequest request) {
+        return ResponseEntity.ok(createGuideRemissionUseCase.create(request));
+    }
+
+    @PutMapping("/{serie}/{numero}")
+    public ResponseEntity<GuideRemissionDetailResponse> update(
+            @PathVariable String serie,
+            @PathVariable String numero,
+            @Valid @RequestBody GuideRemissionFullFlowRequest request
+    ) {
+        return ResponseEntity.ok(updateGuideRemissionUseCase.update(serie, numero, request));
+    }
+
+    @PostMapping("/{serie}/{numero}/emit")
+    public ResponseEntity<GuideRemissionEmissionResponse> emit(@PathVariable String serie, @PathVariable String numero) {
+        return ResponseEntity.ok(emitGuideRemissionUseCase.emit(serie, numero));
     }
 
     @PostMapping("/ticket-status")
     public ResponseEntity<GuideRemissionTicketStatusResponse> queryTicket(@Valid @RequestBody GuideRemissionTicketQuery request) {
         return ResponseEntity.ok(queryGuideRemissionTicketUseCase.queryTicket(request));
     }
-
-    @PostMapping("/full-flow")
-    public ResponseEntity<GuideRemissionFullFlowResponse> processFullFlow(@Valid @RequestBody GuideRemissionFullFlowRequest request) {
-        return ResponseEntity.ok(processGuideRemissionFullFlowUseCase.process(request));
-    }
-
 
     @GetMapping
     public ResponseEntity<GuideRemissionPageResponse> search(
