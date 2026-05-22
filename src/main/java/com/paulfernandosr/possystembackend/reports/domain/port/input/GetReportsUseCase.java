@@ -7,6 +7,7 @@ import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.ProfitPeriodResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SalesAggResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceResponse;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceDetailResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SunatComparisonResponse;
 
 import java.time.LocalDate;
@@ -26,4 +27,6 @@ public interface GetReportsUseCase {
     List<SunatComparisonResponse> getSunatComparison(LocalDate from, LocalDate to);
 
     SellerPerformanceResponse getSellerPerformance(LocalDate from, LocalDate to, ReportGroupBy groupBy);
+
+    SellerPerformanceDetailResponse getSellerPerformanceDetail(LocalDate from, LocalDate to, Long sellerId);
 }

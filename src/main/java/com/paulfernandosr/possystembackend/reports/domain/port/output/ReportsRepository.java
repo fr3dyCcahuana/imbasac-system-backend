@@ -6,9 +6,11 @@ import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.ProfitPeriodResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SalesAggResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SalesProfitChannelPointResponse;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceDetailResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceRowResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SunatComparisonResponse;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -29,4 +31,9 @@ public interface ReportsRepository {
     List<SunatComparisonResponse> findSunatComparison(LocalDate from, LocalDate to);
 
     List<SellerPerformanceRowResponse> findSellerPerformance(LocalDate from, LocalDate to, ReportGroupBy groupBy);
+
+    SellerPerformanceDetailResponse findSellerPerformanceDetail(LocalDate from,
+                                                                LocalDate to,
+                                                                Long sellerId,
+                                                                BigDecimal incentiveThreshold);
 }

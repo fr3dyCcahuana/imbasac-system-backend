@@ -10,6 +10,7 @@ import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SalesAggResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SalesProfitChannelPointResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SalesProfitChannelResponse;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceDetailResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SunatComparisonResponse;
 import lombok.RequiredArgsConstructor;
@@ -109,6 +110,15 @@ public class GetReportsService implements GetReportsUseCase {
                 .incentiveThreshold(SELLER_INCENTIVE_THRESHOLD)
                 .rows(reportsRepository.findSellerPerformance(from, to, groupBy))
                 .build();
+    }
+
+    @Override
+    public SellerPerformanceDetailResponse getSellerPerformanceDetail(LocalDate from, LocalDate to, Long sellerId) {
+        validateRange(from, to);
+        if (sellerId == null || sellerId <= 0) {
+            throw new IllegalArgumentException("sellerId es obligatorio.");
+        }
+        return reportsRepository.findSellerPerformanceDetail(from, to, sellerId, SELLER_INCENTIVE_THRESHOLD);
     }
 
     private void validateRange(LocalDate from, LocalDate to) {

@@ -8,6 +8,7 @@ import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.ProfitPeriodResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SalesAggResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceResponse;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceDetailResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SunatComparisonResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -118,6 +119,15 @@ public class ReportsRestController {
             @RequestParam(defaultValue = "MONTHLY") String groupBy
     ) {
         return ResponseEntity.ok(getReportsUseCase.getSellerPerformance(from, to, parseGroupBy(groupBy)));
+    }
+
+    @GetMapping("/dashboard/seller-performance/details")
+    public ResponseEntity<SellerPerformanceDetailResponse> getSellerPerformanceDetails(
+            @RequestParam("from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam("to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam("sellerId") Long sellerId
+    ) {
+        return ResponseEntity.ok(getReportsUseCase.getSellerPerformanceDetail(from, to, sellerId));
     }
 
     private ReportGroupBy parseGroupBy(String value) {

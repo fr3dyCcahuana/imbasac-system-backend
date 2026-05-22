@@ -7,12 +7,16 @@ import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.ProfitPeriodResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SalesAggResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SalesProfitChannelPointResponse;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceCategoryDetailResponse;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceDetailResponse;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceProductDetailResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceRowResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SunatComparisonResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -464,8 +468,204 @@ public class PostgresReportsRepository implements ReportsRepository {
                 .list();
     }
 
+    @Override
+    public SellerPerformanceDetailResponse findSellerPerformanceDetail(LocalDate from,
+                                                                       LocalDate to,
+                                                                       Long sellerId,
+                                                                       BigDecimal incentiveThreshold) {
+        String baseCte = sellerCommissionDetailCte();
+        String totalsSql = """
+                WITH commissioned_lines AS (
+                  %s
+                )
+                SELECT
+                  COALESCE(MAX(seller_username), 'SIN_USUARIO') AS seller_username,
+                  COALESCE(MAX(seller_name), 'SIN USUARIO') AS seller_name,
+                  COALESCE(SUM(quantity), 0) AS quantity,
+                  COUNT(DISTINCT source || '-' || doc_id) AS count_documents,
+                  COALESCE(SUM(eligible_sales), 0) AS eligible_sales,
+                  COALESCE(SUM(commission_base), 0) AS commission_base,
+                  COALESCE(SUM(estimated_commission), 0) AS estimated_commission,
+                  CASE
+                    WHEN COALESCE(SUM(eligible_sales), 0) = 0 THEN 0
+                    ELSE COALESCE(SUM(eligible_sales), 0) / ? * 100
+                  END AS score
+                FROM commissioned_lines
+                """.formatted(baseCte);
+
+        SellerPerformanceDetailResponse totals = jdbcClient.sql(totalsSql)
+                .params(from, to, from, to, from, to,
+                        incentiveThreshold, incentiveThreshold, incentiveThreshold, incentiveThreshold,
+                        sellerId, incentiveThreshold)
+                .query((rs, rowNum) -> SellerPerformanceDetailResponse.builder()
+                        .from(from)
+                        .to(to)
+                        .sellerId(sellerId)
+                        .sellerUsername(rs.getString("seller_username"))
+                        .sellerName(rs.getString("seller_name"))
+                        .incentiveThreshold(incentiveThreshold)
+                        .quantity(rs.getBigDecimal("quantity"))
+                        .countDocuments(rs.getLong("count_documents"))
+                        .eligibleSales(rs.getBigDecimal("eligible_sales"))
+                        .commissionBase(rs.getBigDecimal("commission_base"))
+                        .estimatedCommission(rs.getBigDecimal("estimated_commission"))
+                        .score(rs.getBigDecimal("score"))
+                        .build())
+                .single();
+
+        String categorySql = """
+                WITH commissioned_lines AS (
+                  %s
+                )
+                SELECT
+                  incentive_group,
+                  commission_rate,
+                  COALESCE(SUM(quantity), 0) AS quantity,
+                  COUNT(DISTINCT source || '-' || doc_id) AS count_documents,
+                  COALESCE(SUM(eligible_sales), 0) AS eligible_sales,
+                  COALESCE(SUM(commission_base), 0) AS commission_base,
+                  COALESCE(SUM(estimated_commission), 0) AS estimated_commission
+                FROM commissioned_lines
+                GROUP BY incentive_group, commission_rate
+                ORDER BY eligible_sales DESC, incentive_group ASC
+                """.formatted(baseCte);
+
+        List<SellerPerformanceCategoryDetailResponse> categories = jdbcClient.sql(categorySql)
+                .params(from, to, from, to, from, to,
+                        incentiveThreshold, incentiveThreshold, incentiveThreshold, incentiveThreshold,
+                        sellerId)
+                .query((rs, rowNum) -> SellerPerformanceCategoryDetailResponse.builder()
+                        .incentiveGroup(rs.getString("incentive_group"))
+                        .commissionRate(rs.getBigDecimal("commission_rate"))
+                        .quantity(rs.getBigDecimal("quantity"))
+                        .countDocuments(rs.getLong("count_documents"))
+                        .eligibleSales(rs.getBigDecimal("eligible_sales"))
+                        .commissionBase(rs.getBigDecimal("commission_base"))
+                        .estimatedCommission(rs.getBigDecimal("estimated_commission"))
+                        .build())
+                .list();
+
+        String productsSql = """
+                WITH commissioned_lines AS (
+                  %s
+                )
+                SELECT
+                  source,
+                  CASE source
+                    WHEN 'COUNTER_SALE' THEN 'Venta por ventanilla'
+                    WHEN 'CONTRACT' THEN 'Contratos'
+                    WHEN 'PROFORMA' THEN 'Proformas'
+                    ELSE source
+                  END AS source_label,
+                  product_id,
+                  product_name,
+                  brand,
+                  category,
+                  incentive_group,
+                  commission_rate,
+                  COALESCE(SUM(quantity), 0) AS quantity,
+                  COUNT(DISTINCT source || '-' || doc_id) AS count_documents,
+                  COALESCE(SUM(eligible_sales), 0) AS eligible_sales,
+                  COALESCE(SUM(commission_base), 0) AS commission_base,
+                  COALESCE(SUM(estimated_commission), 0) AS estimated_commission
+                FROM commissioned_lines
+                GROUP BY source, product_id, product_name, brand, category, incentive_group, commission_rate
+                ORDER BY eligible_sales DESC, product_name ASC, source ASC
+                """.formatted(baseCte);
+
+        List<SellerPerformanceProductDetailResponse> products = jdbcClient.sql(productsSql)
+                .params(from, to, from, to, from, to,
+                        incentiveThreshold, incentiveThreshold, incentiveThreshold, incentiveThreshold,
+                        sellerId)
+                .query((rs, rowNum) -> SellerPerformanceProductDetailResponse.builder()
+                        .source(rs.getString("source"))
+                        .sourceLabel(rs.getString("source_label"))
+                        .productId(rs.getObject("product_id") != null ? rs.getLong("product_id") : null)
+                        .productName(rs.getString("product_name"))
+                        .brand(rs.getString("brand"))
+                        .category(rs.getString("category"))
+                        .incentiveGroup(rs.getString("incentive_group"))
+                        .commissionRate(rs.getBigDecimal("commission_rate"))
+                        .quantity(rs.getBigDecimal("quantity"))
+                        .countDocuments(rs.getLong("count_documents"))
+                        .eligibleSales(rs.getBigDecimal("eligible_sales"))
+                        .commissionBase(rs.getBigDecimal("commission_base"))
+                        .estimatedCommission(rs.getBigDecimal("estimated_commission"))
+                        .build())
+                .list();
+
+        totals.setCategories(categories);
+        totals.setProducts(products);
+        return totals;
+    }
+
     private String periodExpression(ReportGroupBy groupBy) {
         return periodExpression("s.issue_date", groupBy);
+    }
+
+    private String sellerCommissionDetailCte() {
+        return """
+                WITH product_rows AS (
+                  %s
+                ),
+                eligible_product_rows AS (
+                  SELECT
+                    *,
+                    CASE
+                      WHEN search_text LIKE '%%BAJAJ%%' THEN 'BAJAJ'
+                      WHEN search_text LIKE '%%KTM%%' THEN 'KTM'
+                      WHEN search_text LIKE '%%BON%%' OR search_text LIKE '%%VON%%' THEN 'BON'
+                      WHEN search_text LIKE '%%IMBA%%' OR search_text LIKE '%%IMBASAC%%' OR search_text LIKE '%%INVA%%' THEN 'IMBA'
+                      ELSE NULL
+                    END AS incentive_group,
+                    CASE
+                      WHEN search_text LIKE '%%BAJAJ%%' THEN 0.010000
+                      WHEN search_text LIKE '%%KTM%%' THEN 0.000500
+                      WHEN search_text LIKE '%%BON%%' OR search_text LIKE '%%VON%%' THEN 0.000200
+                      WHEN search_text LIKE '%%IMBA%%' OR search_text LIKE '%%IMBASAC%%' OR search_text LIKE '%%INVA%%' THEN 0.000200
+                      ELSE 0
+                    END AS commission_rate
+                  FROM (
+                    SELECT
+                      pr.*,
+                      UPPER(CONCAT_WS(' ', COALESCE(pr.brand, ''), COALESCE(pr.category, ''), COALESCE(pr.product_name, ''))) AS search_text
+                    FROM product_rows pr
+                  ) classified
+                  WHERE search_text LIKE '%%BAJAJ%%'
+                     OR search_text LIKE '%%KTM%%'
+                     OR search_text LIKE '%%BON%%'
+                     OR search_text LIKE '%%VON%%'
+                     OR search_text LIKE '%%IMBA%%'
+                     OR search_text LIKE '%%IMBASAC%%'
+                     OR search_text LIKE '%%INVA%%'
+                ),
+                monthly_ranked AS (
+                  SELECT
+                    *,
+                    DATE_TRUNC('month', period_date)::date AS month_start,
+                    COALESCE(SUM(eligible_sales) OVER (
+                      PARTITION BY seller_id, DATE_TRUNC('month', period_date)::date
+                      ORDER BY period_date, source, doc_id, line_id
+                      ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                    ), 0) AS previous_month_sales,
+                    SUM(eligible_sales) OVER (
+                      PARTITION BY seller_id, DATE_TRUNC('month', period_date)::date
+                      ORDER BY period_date, source, doc_id, line_id
+                      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                    ) AS current_month_sales
+                  FROM eligible_product_rows
+                )
+                SELECT
+                  *,
+                  GREATEST(current_month_sales - ?, 0)
+                    - GREATEST(previous_month_sales - ?, 0) AS commission_base,
+                  (
+                    GREATEST(current_month_sales - ?, 0)
+                    - GREATEST(previous_month_sales - ?, 0)
+                  ) * commission_rate AS estimated_commission
+                FROM monthly_ranked
+                WHERE seller_id = ?
+                """.formatted(commercialSellerProductRowsCte());
     }
 
     private String periodExpression(String column, ReportGroupBy groupBy) {
@@ -647,6 +847,7 @@ public class PostgresReportsRepository implements ReportsRepository {
                   COALESCE(NULLIF(TRIM(p.name), ''), csi.description) AS product_name,
                   COALESCE(NULLIF(TRIM(p.brand), ''), '') AS brand,
                   COALESCE(NULLIF(TRIM(p.category), ''), '') AS category,
+                  COALESCE(csi.quantity, 0) AS quantity,
                   COALESCE(csi.revenue_total, 0) AS eligible_sales
                 FROM counter_sale cs
                 JOIN (
@@ -686,6 +887,7 @@ public class PostgresReportsRepository implements ReportsRepository {
                   COALESCE(NULLIF(TRIM(p.name), ''), ci.description) AS product_name,
                   COALESCE(NULLIF(TRIM(p.brand), ''), NULLIF(TRIM(ci.brand), ''), '') AS brand,
                   COALESCE(NULLIF(TRIM(p.category), ''), '') AS category,
+                  1::numeric AS quantity,
                   COALESCE(c.total_amount, c.cash_price, ci.unit_price, 0) AS eligible_sales
                 FROM contract c
                 JOIN sale s ON s.id = c.sale_id
@@ -711,6 +913,7 @@ public class PostgresReportsRepository implements ReportsRepository {
                   COALESCE(NULLIF(TRIM(pr.name), ''), pi.description) AS product_name,
                   COALESCE(NULLIF(TRIM(pr.brand), ''), '') AS brand,
                   COALESCE(NULLIF(TRIM(pr.category), ''), '') AS category,
+                  COALESCE(pi.quantity, 0) AS quantity,
                   COALESCE(pi.line_subtotal, 0) AS eligible_sales
                 FROM proforma p
                 JOIN sale s ON s.id = p.converted_sale_id
