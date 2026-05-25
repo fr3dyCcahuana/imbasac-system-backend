@@ -30,6 +30,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CreateProformaV2Service implements CreateProformaV2UseCase {
 
+    private static final BigDecimal PRICE_C_MIN_TOTAL = new BigDecimal("2000.00");
+
     private final DocumentSeriesRepositoryV2 documentSeriesRepository;
     private final ProformaRepository proformaRepository;
     private final ProformaItemRepository proformaItemRepository;
@@ -208,6 +210,8 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
             igvAmount = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
             total = subtotalBase.setScale(4, RoundingMode.HALF_UP);
         }
+
+        validatePriceCMinimumTotal(request.getPriceList(), total);
 
         PaymentType paymentType = request.getPaymentType() != null ? request.getPaymentType() : PaymentType.CONTADO;
         Integer creditDays = paymentType == PaymentType.CREDITO ? request.getCreditDays() : null;
@@ -401,5 +405,18 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
     private BigDecimal money2(BigDecimal v) {
         if (v == null) return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         return v.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private void validatePriceCMinimumTotal(Character priceList, BigDecimal total) {
+        if (priceList == null || Character.toUpperCase(priceList) != 'C') {
+            return;
+        }
+
+        BigDecimal normalizedTotal = total == null ? BigDecimal.ZERO : total;
+        if (normalizedTotal.compareTo(PRICE_C_MIN_TOTAL) < 0) {
+            throw new InvalidProformaV2Exception(
+                    "Precio C requiere un mínimo de S/ 2000.00 para registrar la proforma."
+            );
+        }
     }
 }

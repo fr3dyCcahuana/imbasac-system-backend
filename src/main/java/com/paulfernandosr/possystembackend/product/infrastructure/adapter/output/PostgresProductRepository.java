@@ -217,6 +217,7 @@ public class PostgresProductRepository implements ProductRepository {
               OR COALESCE(p.model, '') ILIKE ?
               OR COALESCE(p.compatibility, '') ILIKE ?
               OR COALESCE(p.factory_code, '') ILIKE ?
+              OR COALESCE(p.warehouse_location, '') ILIKE ?
             )
             AND (?::text IS NULL OR p.brand ILIKE ?::text)
             AND (?::text IS NULL OR p.model ILIKE ?::text)
@@ -246,7 +247,7 @@ public class PostgresProductRepository implements ProductRepository {
 
         long totalElements = jdbcClient.sql(countSql)
                 .params(
-                        likeParam, likeParam, likeParam, likeParam, likeParam, likeParam, likeParam,
+                        likeParam, likeParam, likeParam, likeParam, likeParam, likeParam, likeParam, likeParam,
                         brandLike, brandLike,
                         modelLike, modelLike,
                         categoryEq, categoryEq,
@@ -297,7 +298,7 @@ public class PostgresProductRepository implements ProductRepository {
 
         List<Product> products = jdbcClient.sql(selectSql)
                 .params(
-                        likeParam, likeParam, likeParam, likeParam, likeParam, likeParam, likeParam,
+                        likeParam, likeParam, likeParam, likeParam, likeParam, likeParam, likeParam, likeParam,
                         brandLike, brandLike,
                         modelLike, modelLike,
                         categoryEq, categoryEq,

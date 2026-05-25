@@ -111,6 +111,7 @@ public class PostgresReportsRepository implements ReportsRepository {
                 )
                 SELECT
                   pr.product_id,
+                  pr.product_sku,
                   pr.product_name,
                   COALESCE(SUM(pr.quantity), 0) AS total_qty,
                   COALESCE(SUM(pr.total_sales), 0) AS total_sales,
@@ -119,7 +120,7 @@ public class PostgresReportsRepository implements ReportsRepository {
                   COUNT(DISTINCT pr.source || '-' || pr.doc_id) AS count_sales
                 FROM product_rows pr
                 LEFT JOIN product_stock_available psa ON psa.product_id = pr.product_id
-                GROUP BY pr.product_id, pr.product_name
+                GROUP BY pr.product_id, pr.product_sku, pr.product_name
                 ORDER BY %s DESC, product_name ASC
                 LIMIT ?
                 """.formatted(commercialProductRowsCte(), orderBy);
@@ -128,6 +129,7 @@ public class PostgresReportsRepository implements ReportsRepository {
                 .params(from, to, from, to, from, to, limit)
                 .query((rs, rowNum) -> ProductTopResponse.builder()
                         .productId(rs.getLong("product_id"))
+                        .productSku(rs.getString("product_sku"))
                         .productName(rs.getString("product_name"))
                         .totalQty(rs.getBigDecimal("total_qty"))
                         .totalSales(rs.getBigDecimal("total_sales"))
@@ -937,6 +939,7 @@ public class PostgresReportsRepository implements ReportsRepository {
                   cs.issue_date,
                   COALESCE(NULLIF(TRIM(cs.customer_name), ''), 'CLIENTE NO REGISTRADO') AS customer_name,
                   csi.product_id,
+                  COALESCE(NULLIF(TRIM(p.sku), ''), '') AS product_sku,
                   COALESCE(NULLIF(TRIM(p.name), ''), csi.description) AS product_name,
                   COALESCE(csi.quantity, 0) AS quantity,
                   COALESCE(csi.revenue_total, 0) AS total_sales,
@@ -974,6 +977,7 @@ public class PostgresReportsRepository implements ReportsRepository {
                   c.issue_date,
                   COALESCE(NULLIF(TRIM(c.customer_name), ''), 'CLIENTE NO REGISTRADO') AS customer_name,
                   ci.product_id,
+                  COALESCE(NULLIF(TRIM(p.sku), ''), '') AS product_sku,
                   COALESCE(NULLIF(TRIM(p.name), ''), ci.description) AS product_name,
                   1::numeric AS quantity,
                   COALESCE(c.total_amount, c.cash_price, ci.unit_price, 0) AS total_sales,
@@ -1006,6 +1010,7 @@ public class PostgresReportsRepository implements ReportsRepository {
                   p.issue_date,
                   COALESCE(NULLIF(TRIM(p.customer_name), ''), 'CLIENTE NO REGISTRADO') AS customer_name,
                   pi.product_id,
+                  COALESCE(NULLIF(TRIM(pr.sku), ''), '') AS product_sku,
                   COALESCE(NULLIF(TRIM(pr.name), ''), pi.description) AS product_name,
                   COALESCE(pi.quantity, 0) AS quantity,
                   COALESCE(pi.line_subtotal, 0) AS total_sales,

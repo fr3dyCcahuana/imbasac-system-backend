@@ -12,6 +12,9 @@ import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SunatComparisonResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -84,6 +87,21 @@ public class ReportsRestController {
             @RequestParam(defaultValue = "10") int limit
     ) {
         return ResponseEntity.ok(getReportsUseCase.getProductsTop(from, to, sortBy, limit));
+    }
+
+    @GetMapping("/products/top/excel")
+    public ResponseEntity<byte[]> getProductsTopExcel(
+            @RequestParam("from") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam("to") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "10") int limit
+    ) {
+        byte[] file = getReportsUseCase.getProductsTopExcel(from, to, limit);
+        String filename = "productos_ganadores_" + from + "_" + to + ".xlsx";
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment().filename(filename).build().toString())
+                .body(file);
     }
 
     @GetMapping("/products/top/details")

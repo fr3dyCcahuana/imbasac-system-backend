@@ -20,6 +20,8 @@ public interface GetReportsUseCase {
 
     List<ProductTopResponse> getProductsTop(LocalDate from, LocalDate to, String sortBy, int limit);
 
+    byte[] getProductsTopExcel(LocalDate from, LocalDate to, int limit);
+
     List<ProductSaleDetailResponse> getProductSaleDetails(LocalDate from, LocalDate to, Long productId);
 
     DashboardSalesProfitResponse getDashboardSalesProfit(LocalDate from, LocalDate to, ReportGroupBy groupBy);

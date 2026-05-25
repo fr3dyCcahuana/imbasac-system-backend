@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class ProductTopResponse {
     private Long productId;
+    private String productSku;
     private String productName;
     private BigDecimal totalQty;
     private BigDecimal totalSales;

@@ -14,8 +14,21 @@ import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SunatComparisonResponse;
 import lombok.RequiredArgsConstructor;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.VerticalAlignment;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -28,6 +41,7 @@ import java.util.Set;
 public class GetReportsService implements GetReportsUseCase {
 
     private static final Set<String> PRODUCT_SORTS = Set.of("QTY", "REVENUE", "PROFIT");
+    private static final int PRODUCT_TOP_MAX_LIMIT = 500;
     private static final BigDecimal SELLER_INCENTIVE_THRESHOLD = new BigDecimal("50000.00");
     private static final List<ChannelDefinition> CHANNELS = List.of(
             new ChannelDefinition("COUNTER_SALE", "Venta por ventanilla"),
@@ -56,8 +70,71 @@ public class GetReportsService implements GetReportsUseCase {
         if (!PRODUCT_SORTS.contains(normalizedSort)) {
             throw new IllegalArgumentException("sortBy debe ser QTY, REVENUE o PROFIT.");
         }
-        int safeLimit = Math.max(1, Math.min(limit, 100));
+        int safeLimit = normalizeProductTopLimit(limit);
         return reportsRepository.findProductsTop(from, to, normalizedSort, safeLimit);
+    }
+
+    @Override
+    public byte[] getProductsTopExcel(LocalDate from, LocalDate to, int limit) {
+        validateRange(from, to);
+        int safeLimit = normalizeProductTopLimit(limit);
+
+        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            CellStyle titleStyle = createTitleStyle(workbook);
+            CellStyle headerStyle = createHeaderStyle(workbook);
+            CellStyle textStyle = workbook.createCellStyle();
+            CellStyle integerStyle = createNumberStyle(workbook, "#,##0");
+            CellStyle decimalStyle = createNumberStyle(workbook, "#,##0.00");
+            CellStyle currencyStyle = createNumberStyle(workbook, "\"S/\" #,##0.00");
+            RowStyles defaultStyles = new RowStyles(textStyle, integerStyle, decimalStyle, currencyStyle);
+            RowStyles warningStyles = createStockRowStyles(workbook, defaultStyles, IndexedColors.LIGHT_YELLOW);
+            RowStyles criticalStyles = createStockRowStyles(workbook, defaultStyles, IndexedColors.ROSE);
+
+            appendProductsSheet(
+                    workbook,
+                    "Cantidad",
+                    "Ranking por cantidad",
+                    from,
+                    to,
+                    reportsRepository.findProductsTop(from, to, "QTY", safeLimit),
+                    titleStyle,
+                    headerStyle,
+                    defaultStyles,
+                    warningStyles,
+                    criticalStyles
+            );
+            appendProductsSheet(
+                    workbook,
+                    "Ventas",
+                    "Ranking por ventas",
+                    from,
+                    to,
+                    reportsRepository.findProductsTop(from, to, "REVENUE", safeLimit),
+                    titleStyle,
+                    headerStyle,
+                    defaultStyles,
+                    warningStyles,
+                    criticalStyles
+            );
+            appendProductsSheet(
+                    workbook,
+                    "Ganancia",
+                    "Ranking por ganancia",
+                    from,
+                    to,
+                    reportsRepository.findProductsTop(from, to, "PROFIT", safeLimit),
+                    titleStyle,
+                    headerStyle,
+                    defaultStyles,
+                    warningStyles,
+                    criticalStyles
+            );
+
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (IOException ex) {
+            throw new IllegalStateException("No se pudo generar el reporte Excel de productos ganadores.", ex);
+        }
     }
 
     @Override
@@ -130,6 +207,151 @@ public class GetReportsService implements GetReportsUseCase {
         }
     }
 
+    private int normalizeProductTopLimit(int limit) {
+        return Math.max(1, Math.min(limit, PRODUCT_TOP_MAX_LIMIT));
+    }
+
+    private void appendProductsSheet(Workbook workbook,
+                                     String sheetName,
+                                     String title,
+                                     LocalDate from,
+                                     LocalDate to,
+                                     List<ProductTopResponse> rows,
+                                     CellStyle titleStyle,
+                                     CellStyle headerStyle,
+                                     RowStyles defaultStyles,
+                                     RowStyles warningStyles,
+                                     RowStyles criticalStyles) {
+        Sheet sheet = workbook.createSheet(sheetName);
+
+        Row titleRow = sheet.createRow(0);
+        Cell titleCell = titleRow.createCell(0);
+        titleCell.setCellValue(title);
+        titleCell.setCellStyle(titleStyle);
+
+        Row rangeRow = sheet.createRow(1);
+        rangeRow.createCell(0).setCellValue("Periodo");
+        rangeRow.createCell(1).setCellValue(from + " al " + to);
+
+        Row header = sheet.createRow(3);
+        String[] headers = {
+                "Ranking",
+                "SKU",
+                "Producto",
+                "Unidades",
+                "Stock",
+                "Ventas",
+                "Ganancia",
+                "Ventas asociadas"
+        };
+
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = header.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(headerStyle);
+        }
+
+        for (int i = 0; i < rows.size(); i++) {
+            ProductTopResponse product = rows.get(i);
+            Row row = sheet.createRow(i + 4);
+            RowStyles rowStyles = resolveStockRowStyles(product.getStockAvailable(), defaultStyles, warningStyles, criticalStyles);
+
+            writeNumber(row, 0, i + 1, rowStyles.integerStyle());
+            writeText(row, 1, product.getProductSku(), rowStyles.textStyle());
+            writeText(row, 2, product.getProductName(), rowStyles.textStyle());
+            writeBigDecimal(row, 3, product.getTotalQty(), rowStyles.decimalStyle());
+            writeBigDecimal(row, 4, product.getStockAvailable(), rowStyles.decimalStyle());
+            writeBigDecimal(row, 5, product.getTotalSales(), rowStyles.currencyStyle());
+            writeBigDecimal(row, 6, product.getTotalProfit(), rowStyles.currencyStyle());
+            writeNumber(row, 7, product.getCountSales(), rowStyles.integerStyle());
+        }
+
+        sheet.createFreezePane(0, 4);
+        sheet.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(3, Math.max(4, rows.size() + 3), 0, headers.length - 1));
+
+        int[] widths = {10, 12, 44, 14, 14, 16, 16, 18};
+        for (int i = 0; i < widths.length; i++) {
+            sheet.setColumnWidth(i, widths[i] * 256);
+        }
+    }
+
+    private CellStyle createTitleStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        Font font = workbook.createFont();
+        font.setBold(true);
+        font.setFontHeightInPoints((short) 14);
+        style.setFont(font);
+        return style;
+    }
+
+    private CellStyle createHeaderStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        Font font = workbook.createFont();
+        font.setBold(true);
+        font.setColor(IndexedColors.WHITE.getIndex());
+        style.setFont(font);
+        style.setFillForegroundColor(IndexedColors.DARK_BLUE.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        return style;
+    }
+
+    private CellStyle createNumberStyle(Workbook workbook, String format) {
+        CellStyle style = workbook.createCellStyle();
+        style.setDataFormat(workbook.createDataFormat().getFormat(format));
+        return style;
+    }
+
+    private RowStyles createStockRowStyles(Workbook workbook, RowStyles baseStyles, IndexedColors fillColor) {
+        return new RowStyles(
+                createFilledStyle(workbook, baseStyles.textStyle(), fillColor),
+                createFilledStyle(workbook, baseStyles.integerStyle(), fillColor),
+                createFilledStyle(workbook, baseStyles.decimalStyle(), fillColor),
+                createFilledStyle(workbook, baseStyles.currencyStyle(), fillColor)
+        );
+    }
+
+    private CellStyle createFilledStyle(Workbook workbook, CellStyle baseStyle, IndexedColors fillColor) {
+        CellStyle style = workbook.createCellStyle();
+        style.cloneStyleFrom(baseStyle);
+        style.setFillForegroundColor(fillColor.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        return style;
+    }
+
+    private RowStyles resolveStockRowStyles(BigDecimal stockAvailable,
+                                            RowStyles defaultStyles,
+                                            RowStyles warningStyles,
+                                            RowStyles criticalStyles) {
+        BigDecimal stock = nz(stockAvailable);
+        if (stock.compareTo(new BigDecimal("10")) < 0) {
+            return criticalStyles;
+        }
+        if (stock.compareTo(new BigDecimal("20")) < 0) {
+            return warningStyles;
+        }
+        return defaultStyles;
+    }
+
+    private void writeBigDecimal(Row row, int column, BigDecimal value, CellStyle style) {
+        Cell cell = row.createCell(column);
+        cell.setCellValue(nz(value).doubleValue());
+        cell.setCellStyle(style);
+    }
+
+    private void writeNumber(Row row, int column, Number value, CellStyle style) {
+        Cell cell = row.createCell(column);
+        cell.setCellValue(value == null ? 0 : value.doubleValue());
+        cell.setCellStyle(style);
+    }
+
+    private void writeText(Row row, int column, String value, CellStyle style) {
+        Cell cell = row.createCell(column);
+        cell.setCellValue(value == null ? "" : value);
+        cell.setCellStyle(style);
+    }
+
     private SalesProfitChannelPointResponse sum(List<SalesProfitChannelPointResponse> points) {
         BigDecimal totalSales = BigDecimal.ZERO;
         BigDecimal totalCost = BigDecimal.ZERO;
@@ -157,5 +379,11 @@ public class GetReportsService implements GetReportsUseCase {
     }
 
     private record ChannelDefinition(String source, String label) {
+    }
+
+    private record RowStyles(CellStyle textStyle,
+                             CellStyle integerStyle,
+                             CellStyle decimalStyle,
+                             CellStyle currencyStyle) {
     }
 }
