@@ -325,23 +325,6 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
             customerAccountRepository.ensureExists(request.getCustomerId());
             customerAccountRepository.recalculate(request.getCustomerId());
 
-            var account = customerAccountRepository.findByCustomerId(request.getCustomerId());
-            if (account == null) {
-                throw new InvalidSaleV2Exception("No se pudo obtener customer_account para customerId=" + request.getCustomerId());
-            }
-            if (!account.isCreditEnabled()) {
-                throw new InvalidSaleV2Exception("Cliente bloqueado para crédito (credit_enabled=false).");
-            }
-            if (nz(account.getOverdueDebt()).compareTo(BigDecimal.ZERO) > 0) {
-                throw new InvalidSaleV2Exception("Cliente con deuda vencida. No se permite crédito.");
-            }
-            if (nz(account.getCreditLimit()).compareTo(BigDecimal.ZERO) > 0) {
-                BigDecimal projected = nz(account.getCurrentDebt()).add(totals.total);
-                if (projected.compareTo(account.getCreditLimit()) > 0) {
-                    throw new InvalidSaleV2Exception("Límite de crédito excedido. Límite=" + account.getCreditLimit() + ", deudaActual=" + account.getCurrentDebt() + ", venta=" + totals.total);
-                }
-            }
-
         } else {
             creditDays = null;
             dueDate = null;

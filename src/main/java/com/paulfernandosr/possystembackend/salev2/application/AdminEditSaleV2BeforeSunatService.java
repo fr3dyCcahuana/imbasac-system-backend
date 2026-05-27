@@ -175,28 +175,6 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
 
             customerAccountRepository.ensureExists(customerId);
             customerAccountRepository.recalculate(customerId);
-
-            CustomerAccountSnapshot account = customerAccountRepository.findByCustomerId(customerId);
-            if (account == null) {
-                throw new InvalidSaleV2Exception("No se pudo obtener customer_account para customerId=" + customerId);
-            }
-            if (!account.isCreditEnabled()) {
-                throw new InvalidSaleV2Exception("Cliente bloqueado para crédito (credit_enabled=false).");
-            }
-            if (accountsReceivableRepository.existsOpenOverdueDebtByCustomerExcludingSale(customerId, saleId)) {
-                throw new InvalidSaleV2Exception("Cliente con deuda vencida (excluyendo la venta en edición). No se permite crédito.");
-            }
-            if (nz(account.getCreditLimit()).compareTo(BigDecimal.ZERO) > 0) {
-                BigDecimal projected = nz(account.getCurrentDebt());
-                if (Objects.equals(current.getCustomerId(), customerId) && currentAr != null) {
-                    projected = projected.subtract(nz(currentAr.getBalanceAmount()));
-                }
-                projected = projected.add(totals.total);
-                if (projected.compareTo(account.getCreditLimit()) > 0) {
-                    throw new InvalidSaleV2Exception("Límite de crédito excedido. Límite="
-                            + account.getCreditLimit() + ", deudaProyectada=" + projected);
-                }
-            }
         } else {
             creditDays = null;
             dueDate = null;

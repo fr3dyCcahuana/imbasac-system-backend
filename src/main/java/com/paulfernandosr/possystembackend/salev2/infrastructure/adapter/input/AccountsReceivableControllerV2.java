@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input;
 
 import com.paulfernandosr.possystembackend.common.infrastructure.response.SuccessResponse;
+import com.paulfernandosr.possystembackend.salev2.application.CustomerCreditWarningService;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetAccountsReceivablePageV2UseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetAccountsReceivableV2UseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.RegisterAccountsReceivablePaymentUseCase;
@@ -19,6 +20,7 @@ public class AccountsReceivableControllerV2 {
     private final RegisterAccountsReceivablePaymentUseCase registerAccountsReceivablePaymentUseCase;
     private final GetAccountsReceivablePageV2UseCase getAccountsReceivablePageV2UseCase;
     private final GetAccountsReceivableV2UseCase getAccountsReceivableV2UseCase;
+    private final CustomerCreditWarningService customerCreditWarningService;
 
     @PostMapping("/{arId}/payments")
     public ResponseEntity<SuccessResponse<AccountsReceivablePaymentResponse>> registerPayment(
@@ -56,5 +58,20 @@ public class AccountsReceivableControllerV2 {
     @GetMapping("/v2/{arId}")
     public ResponseEntity<SuccessResponse<AccountsReceivableDetailResponse>> getById(@PathVariable Long arId) {
         return ResponseEntity.ok(SuccessResponse.ok(getAccountsReceivableV2UseCase.getById(arId)));
+    }
+
+    /**
+     * Advertencia previa para ventas/proformas/contratos.
+     * No bloquea el registro: solo lista créditos pendientes del cliente.
+     */
+    @GetMapping("/customer-credit-warning")
+    public ResponseEntity<SuccessResponse<CustomerCreditWarningResponse>> getCustomerCreditWarning(
+            @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) String customerDocType,
+            @RequestParam(required = false) String customerDocNumber
+    ) {
+        return ResponseEntity.ok(SuccessResponse.ok(
+                customerCreditWarningService.findPendingCredits(customerId, customerDocType, customerDocNumber)
+        ));
     }
 }
