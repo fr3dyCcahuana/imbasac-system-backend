@@ -233,16 +233,31 @@ public class PostgresReportsRepository implements ReportsRepository {
                     'COUNTER_SALE' AS source,
                     cs.id AS doc_id,
                     COALESCE(cs.total, 0) AS commercial_total,
-                    COALESCE(sunat.sunat_total, 0) AS sunat_total
+                    CASE
+                      WHEN COALESCE(sunat.sunat_total, 0) > 0
+                        THEN COALESCE(cs.total, 0) * COALESCE(sunat.sunat_taxed_total, 0) / sunat.sunat_total
+                      ELSE 0
+                    END AS commercial_taxed_total,
+                    CASE
+                      WHEN COALESCE(sunat.sunat_total, 0) > 0
+                        THEN COALESCE(cs.total, 0) * COALESCE(sunat.sunat_non_taxed_total, 0) / sunat.sunat_total
+                      ELSE COALESCE(cs.total, 0)
+                    END AS commercial_non_taxed_total,
+                    COALESCE(sunat.sunat_total, 0) AS sunat_total,
+                    COALESCE(sunat.sunat_taxed_total, 0) AS sunat_taxed_total,
+                    COALESCE(sunat.sunat_non_taxed_total, 0) AS sunat_non_taxed_total
                   FROM counter_sale cs
                   JOIN (
                     SELECT
                       counter_sale_id,
-                      COALESCE(SUM(emitted_revenue_total), 0) AS sunat_total
+                      COALESCE(SUM(emitted_revenue_total), 0) AS sunat_total,
+                      COALESCE(SUM(CASE WHEN tax_status = 'GRAVADA' THEN emitted_revenue_total ELSE 0 END), 0) AS sunat_taxed_total,
+                      COALESCE(SUM(CASE WHEN tax_status = 'GRAVADA' THEN 0 ELSE emitted_revenue_total END), 0) AS sunat_non_taxed_total
                     FROM (
                       SELECT
                         li.counter_sale_id,
-                        li.emitted_revenue_total
+                        li.emitted_revenue_total,
+                        s.tax_status
                       FROM sale_counter_sale_sunat_link_item li
                       JOIN sale_counter_sale_sunat_link l
                         ON l.sale_id = li.sale_id
@@ -256,7 +271,8 @@ public class PostgresReportsRepository implements ReportsRepository {
 
                       SELECT
                         cl.counter_sale_id,
-                        cl.emitted_revenue_total
+                        cl.emitted_revenue_total,
+                        s.tax_status
                       FROM counter_sale_sunat_combo_line cl
                       JOIN counter_sale_sunat_combo c ON c.id = cl.combo_id
                       JOIN sale s ON s.id = c.generated_sale_id
@@ -275,7 +291,11 @@ public class PostgresReportsRepository implements ReportsRepository {
                     'CONTRACT' AS source,
                     c.id AS doc_id,
                     COALESCE(c.total_amount, c.cash_price, 0) AS commercial_total,
-                    COALESCE(s.total, 0) AS sunat_total
+                    CASE WHEN s.tax_status = 'GRAVADA' THEN COALESCE(c.total_amount, c.cash_price, 0) ELSE 0 END AS commercial_taxed_total,
+                    CASE WHEN s.tax_status = 'GRAVADA' THEN 0 ELSE COALESCE(c.total_amount, c.cash_price, 0) END AS commercial_non_taxed_total,
+                    COALESCE(s.total, 0) AS sunat_total,
+                    CASE WHEN s.tax_status = 'GRAVADA' THEN COALESCE(s.total, 0) ELSE 0 END AS sunat_taxed_total,
+                    CASE WHEN s.tax_status = 'GRAVADA' THEN 0 ELSE COALESCE(s.total, 0) END AS sunat_non_taxed_total
                   FROM contract c
                   JOIN sale s ON s.id = c.sale_id
                   WHERE c.status = 'FACTURADO'
@@ -289,7 +309,11 @@ public class PostgresReportsRepository implements ReportsRepository {
                     'PROFORMA' AS source,
                     p.id AS doc_id,
                     COALESCE(p.total, 0) AS commercial_total,
-                    COALESCE(s.total, 0) AS sunat_total
+                    CASE WHEN s.tax_status = 'GRAVADA' THEN COALESCE(p.total, 0) ELSE 0 END AS commercial_taxed_total,
+                    CASE WHEN s.tax_status = 'GRAVADA' THEN 0 ELSE COALESCE(p.total, 0) END AS commercial_non_taxed_total,
+                    COALESCE(s.total, 0) AS sunat_total,
+                    CASE WHEN s.tax_status = 'GRAVADA' THEN COALESCE(s.total, 0) ELSE 0 END AS sunat_taxed_total,
+                    CASE WHEN s.tax_status = 'GRAVADA' THEN 0 ELSE COALESCE(s.total, 0) END AS sunat_non_taxed_total
                   FROM proforma p
                   JOIN sale s ON s.id = p.converted_sale_id
                   WHERE p.status = 'CONVERTIDA'
@@ -308,7 +332,16 @@ public class PostgresReportsRepository implements ReportsRepository {
                   COALESCE(SUM(commercial_total), 0) AS commercial_total,
                   COALESCE(SUM(sunat_total), 0) AS sunat_total,
                   COALESCE(SUM(commercial_total - sunat_total), 0) AS difference,
-                  GREATEST(COALESCE(SUM(commercial_total - sunat_total), 0), 0) * 18 / 118 AS estimated_tax_saving,
+                  COALESCE(SUM(commercial_taxed_total), 0) AS commercial_taxed_total,
+                  COALESCE(SUM(commercial_non_taxed_total), 0) AS commercial_non_taxed_total,
+                  COALESCE(SUM(sunat_taxed_total), 0) AS sunat_taxed_total,
+                  COALESCE(SUM(sunat_non_taxed_total), 0) AS sunat_non_taxed_total,
+                  COALESCE(SUM(commercial_taxed_total - sunat_taxed_total), 0) AS taxed_difference,
+                  COALESCE(SUM(commercial_non_taxed_total - sunat_non_taxed_total), 0) AS non_taxed_difference,
+                  GREATEST(COALESCE(SUM(commercial_taxed_total - sunat_taxed_total), 0), 0) * 18 / 118 AS estimated_tax_saving,
+                  GREATEST(COALESCE(SUM(commercial_non_taxed_total - sunat_non_taxed_total), 0), 0) * 8 / 100 AS estimated_non_taxed_tax_saving,
+                  GREATEST(COALESCE(SUM(commercial_taxed_total - sunat_taxed_total), 0), 0) * 18 / 118
+                    + GREATEST(COALESCE(SUM(commercial_non_taxed_total - sunat_non_taxed_total), 0), 0) * 8 / 100 AS estimated_total_tax_saving,
                   COUNT(*) AS count_sales
                 FROM comparison_rows
                 GROUP BY source
@@ -329,6 +362,14 @@ public class PostgresReportsRepository implements ReportsRepository {
                         .sunatTotal(rs.getBigDecimal("sunat_total"))
                         .difference(rs.getBigDecimal("difference"))
                         .estimatedTaxSaving(rs.getBigDecimal("estimated_tax_saving"))
+                        .commercialTaxedTotal(rs.getBigDecimal("commercial_taxed_total"))
+                        .commercialNonTaxedTotal(rs.getBigDecimal("commercial_non_taxed_total"))
+                        .sunatTaxedTotal(rs.getBigDecimal("sunat_taxed_total"))
+                        .sunatNonTaxedTotal(rs.getBigDecimal("sunat_non_taxed_total"))
+                        .taxedDifference(rs.getBigDecimal("taxed_difference"))
+                        .nonTaxedDifference(rs.getBigDecimal("non_taxed_difference"))
+                        .estimatedNonTaxedTaxSaving(rs.getBigDecimal("estimated_non_taxed_tax_saving"))
+                        .estimatedTotalTaxSaving(rs.getBigDecimal("estimated_total_tax_saving"))
                         .countSales(rs.getLong("count_sales"))
                         .build())
                 .list();

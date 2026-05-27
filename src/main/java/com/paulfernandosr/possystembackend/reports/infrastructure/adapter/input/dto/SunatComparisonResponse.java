@@ -14,5 +14,13 @@ public class SunatComparisonResponse {
     private BigDecimal sunatTotal;
     private BigDecimal difference;
     private BigDecimal estimatedTaxSaving;
+    private BigDecimal commercialTaxedTotal;
+    private BigDecimal commercialNonTaxedTotal;
+    private BigDecimal sunatTaxedTotal;
+    private BigDecimal sunatNonTaxedTotal;
+    private BigDecimal taxedDifference;
+    private BigDecimal nonTaxedDifference;
+    private BigDecimal estimatedNonTaxedTaxSaving;
+    private BigDecimal estimatedTotalTaxSaving;
     private Long countSales;
 }
