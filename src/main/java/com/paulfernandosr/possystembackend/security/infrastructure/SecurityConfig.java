@@ -42,6 +42,7 @@ public class SecurityConfig {
                         .requestMatchers("/landing/**").permitAll()
                         .requestMatchers("/images/**").permitAll()
                         .requestMatchers("/files/manual-pdfs/**").permitAll()
+                        .requestMatchers("/whatsapp-center/media/**").permitAll()
 //                        .requestMatchers("/permissions/**").hasAnyAuthority("MANAGE_PERMISSIONS")
 //                        .requestMatchers("/products/**").hasAnyAuthority("MANAGE_PRODUCTS")
                         .anyRequest().authenticated())

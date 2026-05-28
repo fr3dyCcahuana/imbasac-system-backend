@@ -77,7 +77,7 @@ public class CustomerCreditWarningService {
                     END AS status
                   FROM proforma p
                  WHERE p.payment_type = 'CREDITO'
-                   AND p.status = 'PENDIENTE'
+                   AND p.status = 'CONVERTIDA'
                    AND COALESCE(p.total, 0) > 0
                    AND (
                         (? IS NOT NULL AND p.customer_id = ?)

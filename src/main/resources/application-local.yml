@@ -107,6 +107,8 @@ common:
 #    products-images-base-url: http://localhost:8091
 
 app:
+  whatsapp-agent:
+    base-url: http://127.0.0.1:8092
   files:
     products-images-dir: src/main/resources/static/images/products
     products-images-base-url: http://localhost:8091/images/products
