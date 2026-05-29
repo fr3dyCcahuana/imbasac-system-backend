@@ -168,6 +168,23 @@ public final class WhatsAppCenterDtos {
     }
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+    public static class StartConversationRequest {
+        private String waId;
+        private String phoneNumber;
+        private String countryCode;
+        private String profileName;
+        private String body;
+        private String text;
+        private String message;
+        private Long advisorId;
+        private String advisorName;
+        private String templateName;
+        private String languageCode;
+        private List<String> bodyParameters;
+        private String imageUrl;
+    }
+
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
     public static class MessageStatusEventResponse {
         private Long id;
         private String waMessageId;

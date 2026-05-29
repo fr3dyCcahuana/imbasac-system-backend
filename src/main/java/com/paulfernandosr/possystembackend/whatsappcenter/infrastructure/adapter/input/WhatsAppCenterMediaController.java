@@ -28,7 +28,9 @@ public class WhatsAppCenterMediaController {
         }
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(contentType);
-        headers.setCacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePrivate());
+        // Los binarios se persisten localmente en el AI agent, por lo que son
+        // estables para una vida util larga. Cache de 24h del lado cliente.
+        headers.setCacheControl(CacheControl.maxAge(24, TimeUnit.HOURS).cachePrivate());
         String disposition = response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION);
         if (disposition != null && !disposition.isBlank()) {
             headers.set(HttpHeaders.CONTENT_DISPOSITION, disposition);

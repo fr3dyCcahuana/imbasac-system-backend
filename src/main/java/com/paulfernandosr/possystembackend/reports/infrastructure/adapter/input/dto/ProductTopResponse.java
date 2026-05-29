@@ -17,6 +17,9 @@ public class ProductTopResponse {
     private Long productId;
     private String productSku;
     private String productName;
+    private String brand;
+    private String category;
+    private String model;
     private BigDecimal totalQty;
     private BigDecimal totalSales;
     private BigDecimal totalProfit;

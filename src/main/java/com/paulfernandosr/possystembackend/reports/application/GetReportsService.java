@@ -238,6 +238,9 @@ public class GetReportsService implements GetReportsUseCase {
                 "Ranking",
                 "SKU",
                 "Producto",
+                "Marca",
+                "Categoria",
+                "Modelo",
                 "Unidades",
                 "Stock",
                 "Ventas",
@@ -259,17 +262,20 @@ public class GetReportsService implements GetReportsUseCase {
             writeNumber(row, 0, i + 1, rowStyles.integerStyle());
             writeText(row, 1, product.getProductSku(), rowStyles.textStyle());
             writeText(row, 2, product.getProductName(), rowStyles.textStyle());
-            writeBigDecimal(row, 3, product.getTotalQty(), rowStyles.decimalStyle());
-            writeBigDecimal(row, 4, product.getStockAvailable(), rowStyles.decimalStyle());
-            writeBigDecimal(row, 5, product.getTotalSales(), rowStyles.currencyStyle());
-            writeBigDecimal(row, 6, product.getTotalProfit(), rowStyles.currencyStyle());
-            writeNumber(row, 7, product.getCountSales(), rowStyles.integerStyle());
+            writeText(row, 3, product.getBrand(), rowStyles.textStyle());
+            writeText(row, 4, product.getCategory(), rowStyles.textStyle());
+            writeText(row, 5, product.getModel(), rowStyles.textStyle());
+            writeBigDecimal(row, 6, product.getTotalQty(), rowStyles.decimalStyle());
+            writeBigDecimal(row, 7, product.getStockAvailable(), rowStyles.decimalStyle());
+            writeBigDecimal(row, 8, product.getTotalSales(), rowStyles.currencyStyle());
+            writeBigDecimal(row, 9, product.getTotalProfit(), rowStyles.currencyStyle());
+            writeNumber(row, 10, product.getCountSales(), rowStyles.integerStyle());
         }
 
         sheet.createFreezePane(0, 4);
         sheet.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(3, Math.max(4, rows.size() + 3), 0, headers.length - 1));
 
-        int[] widths = {10, 12, 44, 14, 14, 16, 16, 18};
+        int[] widths = {10, 12, 44, 18, 18, 18, 14, 14, 16, 16, 18};
         for (int i = 0; i < widths.length; i++) {
             sheet.setColumnWidth(i, widths[i] * 256);
         }

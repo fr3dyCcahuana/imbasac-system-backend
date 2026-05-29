@@ -5,7 +5,9 @@ import com.paulfernandosr.possystembackend.whatsappcenter.infrastructure.adapter
 import com.paulfernandosr.possystembackend.whatsappcenter.infrastructure.adapter.output.WhatsAppAgentClient;
 import com.paulfernandosr.possystembackend.whatsappcenter.infrastructure.adapter.output.PostgresWhatsAppCenterQueryRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
@@ -20,6 +22,19 @@ public class WhatsAppCenterConversationService {
 
     public ConversationDetailResponse conversation(Long conversationId) {
         return repository.conversation(conversationId);
+    }
+
+    public ConversationSummaryResponse startConversation(StartConversationRequest request) {
+        JsonNode response = agentClient.startConversation(request);
+        Long conversationId = extractConversationId(response);
+        if (conversationId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "El agente no devolvio el id de la conversacion");
+        }
+        ConversationSummaryResponse conversation = repository.conversationSummary(conversationId);
+        if (conversation == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "La conversacion fue creada, pero no se pudo leer desde el ERP");
+        }
+        return conversation;
     }
 
     public PageResponse<MessageResponse> messages(Long conversationId, int page, int size) {
@@ -52,5 +67,21 @@ public class WhatsAppCenterConversationService {
 
     public JsonNode sendMedia(Long conversationId, MultipartFile file, String caption) {
         return agentClient.sendMedia(conversationId, file, caption);
+    }
+
+    private Long extractConversationId(JsonNode response) {
+        if (response == null) {
+            return null;
+        }
+        JsonNode direct = response.get("conversationId");
+        if (direct != null && direct.canConvertToLong()) {
+            return direct.asLong();
+        }
+        JsonNode nested = response.path("conversation").path("conversationId");
+        if (nested.canConvertToLong()) {
+            return nested.asLong();
+        }
+        JsonNode legacy = response.path("conversation").path("id");
+        return legacy.canConvertToLong() ? legacy.asLong() : null;
     }
 }

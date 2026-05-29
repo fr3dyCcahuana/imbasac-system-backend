@@ -192,6 +192,23 @@ public class PostgresWhatsAppCenterQueryRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
+    public ConversationSummaryResponse conversationSummary(Long conversationId) {
+        String sql = """
+            SELECT conversation_id, contact_id, wa_id, phone_number, profile_name, current_status,
+                   last_event_type, last_event_at, last_message_preview, last_message_at,
+                   proforma_id, proforma_series, proforma_number, proforma_total,
+                   seller_id, seller_name, conversation_created_at
+            FROM whatsapp.conversation_current_v
+            WHERE conversation_id = :conversationId
+        """;
+        List<ConversationSummaryResponse> rows = jdbc.query(
+                sql,
+                new MapSqlParameterSource("conversationId", conversationId),
+                conversationMapper()
+        );
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
     public PageResponse<MessageResponse> messages(Long conversationId, int page, int size) {
         MapSqlParameterSource params = pageParams(page, size).addValue("conversationId", conversationId);
         String fromSql = " FROM whatsapp.messages m LEFT JOIN whatsapp.message_current_status_v s ON s.wa_message_id = m.wa_message_id WHERE m.conversation_id = :conversationId ";

@@ -113,6 +113,9 @@ public class PostgresReportsRepository implements ReportsRepository {
                   pr.product_id,
                   pr.product_sku,
                   pr.product_name,
+                  COALESCE(MAX(NULLIF(TRIM(pr.brand), '')), '') AS brand,
+                  COALESCE(MAX(NULLIF(TRIM(pr.category), '')), '') AS category,
+                  COALESCE(MAX(NULLIF(TRIM(pr.model), '')), '') AS model,
                   COALESCE(SUM(pr.quantity), 0) AS total_qty,
                   COALESCE(SUM(pr.total_sales), 0) AS total_sales,
                   COALESCE(SUM(pr.total_profit), 0) AS total_profit,
@@ -131,6 +134,9 @@ public class PostgresReportsRepository implements ReportsRepository {
                         .productId(rs.getLong("product_id"))
                         .productSku(rs.getString("product_sku"))
                         .productName(rs.getString("product_name"))
+                        .brand(rs.getString("brand"))
+                        .category(rs.getString("category"))
+                        .model(rs.getString("model"))
                         .totalQty(rs.getBigDecimal("total_qty"))
                         .totalSales(rs.getBigDecimal("total_sales"))
                         .totalProfit(rs.getBigDecimal("total_profit"))
@@ -982,6 +988,9 @@ public class PostgresReportsRepository implements ReportsRepository {
                   csi.product_id,
                   COALESCE(NULLIF(TRIM(p.sku), ''), '') AS product_sku,
                   COALESCE(NULLIF(TRIM(p.name), ''), csi.description) AS product_name,
+                  COALESCE(NULLIF(TRIM(p.brand), ''), '') AS brand,
+                  COALESCE(NULLIF(TRIM(p.category), ''), '') AS category,
+                  COALESCE(NULLIF(TRIM(p.model), ''), '') AS model,
                   COALESCE(csi.quantity, 0) AS quantity,
                   COALESCE(csi.revenue_total, 0) AS total_sales,
                   COALESCE(csi.revenue_total, 0) - COALESCE(csi.total_cost_snapshot, 0) AS total_profit
@@ -1020,6 +1029,9 @@ public class PostgresReportsRepository implements ReportsRepository {
                   ci.product_id,
                   COALESCE(NULLIF(TRIM(p.sku), ''), '') AS product_sku,
                   COALESCE(NULLIF(TRIM(p.name), ''), ci.description) AS product_name,
+                  COALESCE(NULLIF(TRIM(p.brand), ''), NULLIF(TRIM(ci.brand), ''), '') AS brand,
+                  COALESCE(NULLIF(TRIM(p.category), ''), '') AS category,
+                  COALESCE(NULLIF(TRIM(p.model), ''), NULLIF(TRIM(ci.model), ''), '') AS model,
                   1::numeric AS quantity,
                   COALESCE(c.total_amount, c.cash_price, ci.unit_price, 0) AS total_sales,
                   COALESCE(c.total_amount, c.cash_price, ci.unit_price, 0) - COALESCE(costs.total_cost, 0) AS total_profit
@@ -1053,6 +1065,9 @@ public class PostgresReportsRepository implements ReportsRepository {
                   pi.product_id,
                   COALESCE(NULLIF(TRIM(pr.sku), ''), '') AS product_sku,
                   COALESCE(NULLIF(TRIM(pr.name), ''), pi.description) AS product_name,
+                  COALESCE(NULLIF(TRIM(pr.brand), ''), '') AS brand,
+                  COALESCE(NULLIF(TRIM(pr.category), ''), '') AS category,
+                  COALESCE(NULLIF(TRIM(pr.model), ''), '') AS model,
                   COALESCE(pi.quantity, 0) AS quantity,
                   COALESCE(pi.line_subtotal, 0) AS total_sales,
                   COALESCE(pi.line_subtotal, 0) - COALESCE(costs.total_cost, 0) AS total_profit

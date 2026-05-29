@@ -5,8 +5,10 @@ import com.paulfernandosr.possystembackend.common.infrastructure.response.Succes
 import com.paulfernandosr.possystembackend.whatsappcenter.application.WhatsAppCenterConversationService;
 import com.paulfernandosr.possystembackend.whatsappcenter.infrastructure.adapter.input.dto.WhatsAppCenterDtos.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -35,6 +37,13 @@ public class WhatsAppCenterConversationController {
     @GetMapping("/{conversationId}")
     public ResponseEntity<SuccessResponse<ConversationDetailResponse>> conversation(@PathVariable Long conversationId) {
         return ResponseEntity.ok(SuccessResponse.ok(service.conversation(conversationId)));
+    }
+
+    @PostMapping("/start")
+    public ResponseEntity<SuccessResponse<ConversationSummaryResponse>> startConversation(
+            @RequestBody StartConversationRequest request
+    ) {
+        return ResponseEntity.status(201).body(SuccessResponse.created(service.startConversation(request)));
     }
 
     @GetMapping("/{conversationId}/messages")
@@ -93,9 +102,24 @@ public class WhatsAppCenterConversationController {
     @PostMapping("/{conversationId}/messages/text")
     public ResponseEntity<SuccessResponse<JsonNode>> sendText(
             @PathVariable Long conversationId,
-            @RequestBody SendManualMessageRequest request
+            @RequestBody JsonNode request
     ) {
-        return ResponseEntity.status(201).body(SuccessResponse.created(service.sendText(conversationId, request)));
+        String body = textValue(request, "body");
+        if (body == null) {
+            body = textValue(request, "text");
+        }
+        if (body == null) {
+            body = textValue(request, "message");
+        }
+        if (body == null && request != null && request.isTextual()) {
+            body = request.asText();
+        }
+        body = body == null ? "" : body.trim();
+        if (body.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El mensaje no puede estar vacio");
+        }
+        SendManualMessageRequest payload = SendManualMessageRequest.builder().body(body).build();
+        return ResponseEntity.status(201).body(SuccessResponse.created(service.sendText(conversationId, payload)));
     }
 
     @PostMapping(value = "/{conversationId}/messages/media", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -105,5 +129,12 @@ public class WhatsAppCenterConversationController {
             @RequestParam(required = false) String caption
     ) {
         return ResponseEntity.status(201).body(SuccessResponse.created(service.sendMedia(conversationId, file, caption)));
+    }
+
+    private String textValue(JsonNode node, String fieldName) {
+        if (node == null || !node.has(fieldName) || node.get(fieldName).isNull()) {
+            return null;
+        }
+        return node.get(fieldName).asText();
     }
 }

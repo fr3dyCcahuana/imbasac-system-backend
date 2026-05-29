@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -48,6 +49,20 @@ public class GlobalExceptionHandler {
         log.error("GlobalExceptionHandler:handleInvalidSessionException", exception);
 
         return new ResponseEntity<>(ErrorResponse.unauthorized(exception), HttpStatus.UNAUTHORIZED);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(ResponseStatusException exception) {
+        log.error("GlobalExceptionHandler:handleResponseStatusException", exception);
+
+        String reason = exception.getReason();
+        String message = reason == null || reason.isBlank() ? exception.getMessage() : reason;
+        ErrorResponse body = ErrorResponse.builder()
+                .status(exception.getStatusCode().value())
+                .error(message)
+                .timestamp(LocalDateTime.now())
+                .build();
+        return ResponseEntity.status(exception.getStatusCode()).body(body);
     }
 
     @ExceptionHandler(RuntimeException.class)
