@@ -42,6 +42,7 @@ public class GetReportsService implements GetReportsUseCase {
 
     private static final Set<String> PRODUCT_SORTS = Set.of("QTY", "REVENUE", "PROFIT");
     private static final int PRODUCT_TOP_MAX_LIMIT = 500;
+    private static final int PRODUCT_TOP_EXCEL_MAX_LIMIT = 5000;
     private static final BigDecimal SELLER_INCENTIVE_THRESHOLD = new BigDecimal("50000.00");
     private static final List<ChannelDefinition> CHANNELS = List.of(
             new ChannelDefinition("COUNTER_SALE", "Venta por ventanilla"),
@@ -77,7 +78,7 @@ public class GetReportsService implements GetReportsUseCase {
     @Override
     public byte[] getProductsTopExcel(LocalDate from, LocalDate to, int limit) {
         validateRange(from, to);
-        int safeLimit = normalizeProductTopLimit(limit);
+        int safeLimit = normalizeProductTopExcelLimit(limit);
 
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             CellStyle titleStyle = createTitleStyle(workbook);
@@ -209,6 +210,10 @@ public class GetReportsService implements GetReportsUseCase {
 
     private int normalizeProductTopLimit(int limit) {
         return Math.max(1, Math.min(limit, PRODUCT_TOP_MAX_LIMIT));
+    }
+
+    private int normalizeProductTopExcelLimit(int limit) {
+        return Math.max(1, Math.min(limit, PRODUCT_TOP_EXCEL_MAX_LIMIT));
     }
 
     private void appendProductsSheet(Workbook workbook,

@@ -168,6 +168,13 @@ public final class WhatsAppCenterDtos {
     }
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+    public static class VideoCallInviteRequest {
+        private Long advisorId;
+        private String advisorName;
+        private String message;
+    }
+
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
     public static class StartConversationRequest {
         private String waId;
         private String phoneNumber;

@@ -131,6 +131,14 @@ public class WhatsAppCenterConversationController {
         return ResponseEntity.status(201).body(SuccessResponse.created(service.sendMedia(conversationId, file, caption)));
     }
 
+    @PostMapping("/{conversationId}/video-call/invite")
+    public ResponseEntity<SuccessResponse<JsonNode>> inviteVideoCall(
+            @PathVariable Long conversationId,
+            @RequestBody(required = false) VideoCallInviteRequest request
+    ) {
+        return ResponseEntity.status(201).body(SuccessResponse.created(service.inviteVideoCall(conversationId, request)));
+    }
+
     private String textValue(JsonNode node, String fieldName) {
         if (node == null || !node.has(fieldName) || node.get(fieldName).isNull()) {
             return null;

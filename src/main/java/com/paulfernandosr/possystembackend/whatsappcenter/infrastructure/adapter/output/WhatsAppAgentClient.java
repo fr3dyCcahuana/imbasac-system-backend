@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.paulfernandosr.possystembackend.whatsappcenter.infrastructure.adapter.input.dto.WhatsAppCenterDtos.ManualModeRequest;
 import com.paulfernandosr.possystembackend.whatsappcenter.infrastructure.adapter.input.dto.WhatsAppCenterDtos.SendManualMessageRequest;
 import com.paulfernandosr.possystembackend.whatsappcenter.infrastructure.adapter.input.dto.WhatsAppCenterDtos.StartConversationRequest;
+import com.paulfernandosr.possystembackend.whatsappcenter.infrastructure.adapter.input.dto.WhatsAppCenterDtos.VideoCallInviteRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -15,8 +16,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientResponseException;
-import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayOutputStream;
@@ -65,21 +64,46 @@ public class WhatsAppAgentClient {
 
     public JsonNode setManualMode(Long conversationId, ManualModeRequest request) {
         try {
-            // Garantizamos un body no nulo: aunque el frontend envie solo
-            // {enabled:true}, FastAPI requiere recibir un objeto JSON real.
-            ManualModeRequest payload = request != null ? request : new ManualModeRequest();
-            JsonNode response = restClient.post()
-                    .uri("/whatsapp/conversations/{conversationId}/manual-mode", conversationId)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .body(payload)
-                    .retrieve()
-                    .body(JsonNode.class);
-            return payload(response);
-        } catch (RestClientResponseException ex) {
-            throw translate(ex);
-        } catch (ResourceAccessException ex) {
-            throw unavailable(ex);
+            ManualModeRequest payloadObject = request != null ? request : new ManualModeRequest();
+            Map<String, Object> payloadMap = new LinkedHashMap<>();
+            payloadMap.put("enabled", payloadObject.getEnabled() == null || payloadObject.getEnabled());
+            if (payloadObject.getAdvisorId() != null) {
+                payloadMap.put("advisorId", payloadObject.getAdvisorId());
+            }
+            if (payloadObject.getAdvisorName() != null && !payloadObject.getAdvisorName().isBlank()) {
+                payloadMap.put("advisorName", payloadObject.getAdvisorName());
+            }
+            if (payloadObject.getNotes() != null && !payloadObject.getNotes().isBlank()) {
+                payloadMap.put("notes", payloadObject.getNotes());
+            }
+
+            String payload = objectMapper.writeValueAsString(payloadMap);
+            String path = "/whatsapp/conversations/" + conversationId + "/manual-mode";
+            log.info("WhatsApp agent manual mode curl:\n{}", curl("POST", baseUrl + path, payload));
+            HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(baseUrl + path))
+                    .version(HttpClient.Version.HTTP_1_1)
+                    .timeout(Duration.ofSeconds(30))
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                    .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
+                    .build();
+            HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            log.info("WhatsApp agent manual mode response status={} body={}", response.statusCode(), response.body());
+            if (response.statusCode() >= 400) {
+                throw new ResponseStatusException(HttpStatus.valueOf(response.statusCode()), response.body());
+            }
+            return payload(objectMapper.readTree(response.body()));
+        } catch (JsonProcessingException ex) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "No se pudo preparar el cambio de modo manual para WhatsApp", ex);
+        } catch (IOException ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "No se pudo conectar con el agente de WhatsApp en " + baseUrl + ". Verifica que imbasac-ai-agent-backend este levantado en el puerto 8092.",
+                    ex
+            );
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Se interrumpio el cambio de modo manual en WhatsApp", ex);
         }
     }
 
@@ -194,6 +218,39 @@ public class WhatsAppAgentClient {
         }
     }
 
+    public JsonNode inviteVideoCall(Long conversationId, VideoCallInviteRequest request) {
+        try {
+            VideoCallInviteRequest payloadObject = request != null ? request : new VideoCallInviteRequest();
+            String payload = objectMapper.writeValueAsString(payloadObject);
+            String path = "/whatsapp/conversations/" + conversationId + "/video-call/invite";
+            log.info("WhatsApp agent video call invite curl:\n{}", curl("POST", baseUrl + path, payload));
+            HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(baseUrl + path))
+                    .version(HttpClient.Version.HTTP_1_1)
+                    .timeout(Duration.ofSeconds(30))
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                    .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
+                    .build();
+            HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            log.info("WhatsApp agent video call invite response status={} body={}", response.statusCode(), response.body());
+            if (response.statusCode() >= 400) {
+                throw new ResponseStatusException(HttpStatus.valueOf(response.statusCode()), response.body());
+            }
+            return payload(objectMapper.readTree(response.body()));
+        } catch (JsonProcessingException ex) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "No se pudo preparar la invitacion de videollamada para WhatsApp", ex);
+        } catch (IOException ex) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "No se pudo conectar con el agente de WhatsApp en " + baseUrl + ". Verifica que imbasac-ai-agent-backend este levantado en el puerto 8092.",
+                    ex
+            );
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Se interrumpio la invitacion de videollamada en WhatsApp", ex);
+        }
+    }
+
     public ResponseEntity<byte[]> media(String mediaId) {
         return restClient.get()
                 .uri("/whatsapp/media/{mediaId}", mediaId)
@@ -206,18 +263,6 @@ public class WhatsAppAgentClient {
             return null;
         }
         return response.has("payload") ? response.get("payload") : response;
-    }
-
-    private ResponseStatusException translate(RestClientResponseException ex) {
-        return new ResponseStatusException(ex.getStatusCode(), ex.getResponseBodyAsString(), ex);
-    }
-
-    private ResponseStatusException unavailable(ResourceAccessException ex) {
-        return new ResponseStatusException(
-                HttpStatus.SERVICE_UNAVAILABLE,
-                "No se pudo conectar con el agente de WhatsApp en " + baseUrl + ". Verifica que imbasac-ai-agent-backend este levantado en el puerto 8092.",
-                ex
-        );
     }
 
     private String curl(String method, String url, String jsonPayload) {

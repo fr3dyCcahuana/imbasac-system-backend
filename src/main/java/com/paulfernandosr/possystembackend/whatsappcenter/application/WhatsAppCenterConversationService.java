@@ -69,6 +69,10 @@ public class WhatsAppCenterConversationService {
         return agentClient.sendMedia(conversationId, file, caption);
     }
 
+    public JsonNode inviteVideoCall(Long conversationId, VideoCallInviteRequest request) {
+        return agentClient.inviteVideoCall(conversationId, request);
+    }
+
     private Long extractConversationId(JsonNode response) {
         if (response == null) {
             return null;
