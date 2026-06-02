@@ -8,6 +8,13 @@ public record LandingOrderRequest(
         String customerDocumentNumber,
         String phone,
         String email,
+        String departmentCode,
+        String departmentName,
+        String provinceCode,
+        String provinceName,
+        String districtCode,
+        String districtName,
+        String address,
         String notes,
         List<LandingOrderItemRequest> items
 ) {

@@ -8,6 +8,7 @@ import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SalesProfitChannelPointResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceDetailResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceRowResponse;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerCommissionConfigResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SunatComparisonResponse;
 
 import java.math.BigDecimal;
@@ -35,5 +36,9 @@ public interface ReportsRepository {
     SellerPerformanceDetailResponse findSellerPerformanceDetail(LocalDate from,
                                                                 LocalDate to,
                                                                 Long sellerId,
-                                                                BigDecimal incentiveThreshold);
+                                                                SellerCommissionConfigResponse config);
+
+    SellerCommissionConfigResponse findSellerCommissionConfig(Long sellerId);
+
+    SellerCommissionConfigResponse saveSellerCommissionConfig(SellerCommissionConfigResponse config);
 }

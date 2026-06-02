@@ -45,6 +45,24 @@ public class ManualPdfService {
         return repository.insertFamily(safeCode, safeName, safeSort);
     }
 
+    public ManualPdfFamily updateFamily(Long familyId, String code, String name, Integer sortOrder) {
+        if (familyId == null) {
+            throw new ManualPdfBadRequestException("familyId es obligatorio.");
+        }
+        repository.findFamilyById(familyId)
+                .orElseThrow(() -> new ManualPdfNotFoundException("No se encontró la familia seleccionada."));
+
+        String safeName = ManualPdfTextUtils.requireTrimmed(name, "name");
+        String safeCode = ManualPdfTextUtils.normalizeFamilyCode(code, safeName);
+        int safeSort = sortOrder == null ? 0 : sortOrder;
+
+        repository.findAnotherFamilyByCode(familyId, safeCode).ifPresent(existing -> {
+            throw new ManualPdfConflictException("Ya existe otra familia con el mismo código.");
+        });
+
+        return repository.updateFamily(familyId, safeCode, safeName, safeSort);
+    }
+
     public ManualPdfModel createModel(Long familyId, String code, String name, Integer sortOrder) {
         if (familyId == null) {
             throw new IllegalArgumentException("familyId es obligatorio.");
@@ -54,6 +72,7 @@ public class ManualPdfService {
 
         String safeName = ManualPdfTextUtils.requireTrimmed(name, "name");
         String safeCode = ManualPdfTextUtils.normalizeModelCode(code, safeName);
+        String normalizedName = ManualPdfTextUtils.normalizeName(safeName);
         int safeSort = sortOrder == null ? 0 : sortOrder;
 
         repository.findModelByFamilyAndCode(familyId, safeCode).ifPresent(existing -> {
@@ -64,7 +83,42 @@ public class ManualPdfService {
                 familyId,
                 safeCode,
                 safeName,
-                ManualPdfTextUtils.normalizeName(safeName),
+                normalizedName,
+                safeSort
+        );
+    }
+
+    public ManualPdfModel updateModel(Long modelId, Long familyId, String code, String name, Integer sortOrder) {
+        if (modelId == null) {
+            throw new ManualPdfBadRequestException("modelId es obligatorio.");
+        }
+        if (familyId == null) {
+            throw new ManualPdfBadRequestException("familyId es obligatorio.");
+        }
+        repository.findModelById(modelId)
+                .orElseThrow(() -> new ManualPdfNotFoundException("No se encontró el modelo seleccionado."));
+        repository.findFamilyById(familyId)
+                .orElseThrow(() -> new ManualPdfNotFoundException("No se encontró la familia seleccionada."));
+
+        String safeName = ManualPdfTextUtils.requireTrimmed(name, "name");
+        String safeCode = ManualPdfTextUtils.normalizeModelCode(code, safeName);
+        String normalizedName = ManualPdfTextUtils.normalizeName(safeName);
+        int safeSort = sortOrder == null ? 0 : sortOrder;
+
+        repository.findAnotherModelByFamilyAndCode(modelId, familyId, safeCode).ifPresent(existing -> {
+            throw new ManualPdfConflictException("Ya existe otro modelo con el mismo código en la familia seleccionada.");
+        });
+
+        repository.findAnotherModelByFamilyAndNormalizedName(modelId, familyId, normalizedName).ifPresent(existing -> {
+            throw new ManualPdfConflictException("Ya existe otro modelo con el mismo nombre en la familia seleccionada.");
+        });
+
+        return repository.updateModel(
+                modelId,
+                familyId,
+                safeCode,
+                safeName,
+                normalizedName,
                 safeSort
         );
     }

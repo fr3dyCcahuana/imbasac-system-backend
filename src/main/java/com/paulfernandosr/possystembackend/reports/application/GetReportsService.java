@@ -12,6 +12,8 @@ import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SalesProfitChannelResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceDetailResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceResponse;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerCommissionConfigRequest;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerCommissionConfigResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SunatComparisonResponse;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.Cell;
@@ -44,6 +46,10 @@ public class GetReportsService implements GetReportsUseCase {
     private static final int PRODUCT_TOP_MAX_LIMIT = 500;
     private static final int PRODUCT_TOP_EXCEL_MAX_LIMIT = 5000;
     private static final BigDecimal SELLER_INCENTIVE_THRESHOLD = new BigDecimal("50000.00");
+    private static final BigDecimal DEFAULT_BAJAJ_RATE = new BigDecimal("0.005000");
+    private static final BigDecimal DEFAULT_KTM_RATE = new BigDecimal("0.003000");
+    private static final BigDecimal DEFAULT_IMBA_RATE = new BigDecimal("0.000200");
+    private static final BigDecimal DEFAULT_BON_RATE = new BigDecimal("0.000200");
     private static final List<ChannelDefinition> CHANNELS = List.of(
             new ChannelDefinition("COUNTER_SALE", "Venta por ventanilla"),
             new ChannelDefinition("CONTRACT", "Contratos"),
@@ -196,7 +202,46 @@ public class GetReportsService implements GetReportsUseCase {
         if (sellerId == null || sellerId <= 0) {
             throw new IllegalArgumentException("sellerId es obligatorio.");
         }
-        return reportsRepository.findSellerPerformanceDetail(from, to, sellerId, SELLER_INCENTIVE_THRESHOLD);
+        SellerCommissionConfigResponse config = reportsRepository.findSellerCommissionConfig(sellerId);
+        SellerPerformanceDetailResponse detail = reportsRepository.findSellerPerformanceDetail(from, to, sellerId, config);
+        detail.setCommissionConfig(config);
+        return detail;
+    }
+
+    @Override
+    public SellerCommissionConfigResponse saveSellerCommissionConfig(Long sellerId, SellerCommissionConfigRequest request) {
+        if (sellerId == null || sellerId <= 0) {
+            throw new IllegalArgumentException("sellerId es obligatorio.");
+        }
+        if (request == null) {
+            throw new IllegalArgumentException("La configuracion es obligatoria.");
+        }
+
+        return reportsRepository.saveSellerCommissionConfig(SellerCommissionConfigResponse.builder()
+                .sellerId(sellerId)
+                .monthlyGoal(positive(request.monthlyGoal(), SELLER_INCENTIVE_THRESHOLD, "monthlyGoal"))
+                .bajajRate(nonNegative(request.bajajRate(), DEFAULT_BAJAJ_RATE, "bajajRate"))
+                .ktmRate(nonNegative(request.ktmRate(), DEFAULT_KTM_RATE, "ktmRate"))
+                .imbaRate(nonNegative(request.imbaRate(), DEFAULT_IMBA_RATE, "imbaRate"))
+                .bonRate(nonNegative(request.bonRate(), DEFAULT_BON_RATE, "bonRate"))
+                .customized(true)
+                .build());
+    }
+
+    private BigDecimal nonNegative(BigDecimal value, BigDecimal fallback, String field) {
+        BigDecimal result = value == null ? fallback : value;
+        if (result.signum() < 0) {
+            throw new IllegalArgumentException(field + " no puede ser negativo.");
+        }
+        return result;
+    }
+
+    private BigDecimal positive(BigDecimal value, BigDecimal fallback, String field) {
+        BigDecimal result = value == null ? fallback : value;
+        if (result.signum() <= 0) {
+            throw new IllegalArgumentException(field + " debe ser mayor que cero.");
+        }
+        return result;
     }
 
     private void validateRange(LocalDate from, LocalDate to) {

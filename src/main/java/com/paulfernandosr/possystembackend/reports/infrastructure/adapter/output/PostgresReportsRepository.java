@@ -8,6 +8,7 @@ import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SalesAggResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SalesProfitChannelPointResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceCategoryDetailResponse;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerCommissionConfigResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceDetailResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceProductDetailResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceRowResponse;
@@ -28,6 +29,71 @@ import java.util.stream.Collectors;
 public class PostgresReportsRepository implements ReportsRepository {
 
     private final JdbcClient jdbcClient;
+
+    @Override
+    public SellerCommissionConfigResponse findSellerCommissionConfig(Long sellerId) {
+        String sql = """
+                SELECT
+                  u.id AS seller_id,
+                  COALESCE(c.monthly_goal, 50000.00) AS monthly_goal,
+                  COALESCE(c.bajaj_rate, 0.005000) AS bajaj_rate,
+                  COALESCE(c.ktm_rate, 0.003000) AS ktm_rate,
+                  COALESCE(c.imba_rate, 0.000200) AS imba_rate,
+                  COALESCE(c.bon_rate, 0.000200) AS bon_rate,
+                  (c.seller_id IS NOT NULL) AS customized
+                FROM users u
+                LEFT JOIN seller_commission_config c ON c.seller_id = u.id
+                WHERE u.id = :sellerId
+                """;
+        return jdbcClient.sql(sql)
+                .param("sellerId", sellerId)
+                .query((rs, rowNum) -> SellerCommissionConfigResponse.builder()
+                        .sellerId(rs.getLong("seller_id"))
+                        .monthlyGoal(rs.getBigDecimal("monthly_goal"))
+                        .bajajRate(rs.getBigDecimal("bajaj_rate"))
+                        .ktmRate(rs.getBigDecimal("ktm_rate"))
+                        .imbaRate(rs.getBigDecimal("imba_rate"))
+                        .bonRate(rs.getBigDecimal("bon_rate"))
+                        .customized(rs.getBoolean("customized"))
+                        .build())
+                .optional()
+                .orElseThrow(() -> new IllegalArgumentException("No se encontro el usuario vendedor."));
+    }
+
+    @Override
+    public SellerCommissionConfigResponse saveSellerCommissionConfig(SellerCommissionConfigResponse config) {
+        String sql = """
+                INSERT INTO seller_commission_config
+                  (seller_id, monthly_goal, bajaj_rate, ktm_rate, imba_rate, bon_rate)
+                VALUES
+                  (:sellerId, :monthlyGoal, :bajajRate, :ktmRate, :imbaRate, :bonRate)
+                ON CONFLICT (seller_id) DO UPDATE SET
+                  monthly_goal = EXCLUDED.monthly_goal,
+                  bajaj_rate = EXCLUDED.bajaj_rate,
+                  ktm_rate = EXCLUDED.ktm_rate,
+                  imba_rate = EXCLUDED.imba_rate,
+                  bon_rate = EXCLUDED.bon_rate,
+                  updated_at = now()
+                RETURNING seller_id, monthly_goal, bajaj_rate, ktm_rate, imba_rate, bon_rate
+                """;
+        return jdbcClient.sql(sql)
+                .param("sellerId", config.getSellerId())
+                .param("monthlyGoal", config.getMonthlyGoal())
+                .param("bajajRate", config.getBajajRate())
+                .param("ktmRate", config.getKtmRate())
+                .param("imbaRate", config.getImbaRate())
+                .param("bonRate", config.getBonRate())
+                .query((rs, rowNum) -> SellerCommissionConfigResponse.builder()
+                        .sellerId(rs.getLong("seller_id"))
+                        .monthlyGoal(rs.getBigDecimal("monthly_goal"))
+                        .bajajRate(rs.getBigDecimal("bajaj_rate"))
+                        .ktmRate(rs.getBigDecimal("ktm_rate"))
+                        .imbaRate(rs.getBigDecimal("imba_rate"))
+                        .bonRate(rs.getBigDecimal("bon_rate"))
+                        .customized(true)
+                        .build())
+                .single();
+    }
 
     @Override
     public List<ProfitPeriodResponse> findProfit(LocalDate from, LocalDate to, ReportGroupBy groupBy) {
@@ -407,7 +473,7 @@ public class PostgresReportsRepository implements ReportsRepository {
                 ),
                 eligible_product_rows AS (
                   SELECT
-                    *,
+                    classified.*,
                     CASE
                       WHEN search_text LIKE '%%BAJAJ%%' THEN 'BAJAJ'
                       WHEN search_text LIKE '%%KTM%%' THEN 'KTM'
@@ -416,18 +482,20 @@ public class PostgresReportsRepository implements ReportsRepository {
                       ELSE NULL
                     END AS incentive_group,
                     CASE
-                      WHEN search_text LIKE '%%BAJAJ%%' THEN 0.010000
-                      WHEN search_text LIKE '%%KTM%%' THEN 0.000500
-                      WHEN search_text LIKE '%%BON%%' OR search_text LIKE '%%VON%%' THEN 0.000200
-                      WHEN search_text LIKE '%%IMBA%%' OR search_text LIKE '%%IMBASAC%%' OR search_text LIKE '%%INVA%%' THEN 0.000200
+                      WHEN search_text LIKE '%%BAJAJ%%' THEN COALESCE(config.bajaj_rate, 0.005000)
+                      WHEN search_text LIKE '%%KTM%%' THEN COALESCE(config.ktm_rate, 0.003000)
+                      WHEN search_text LIKE '%%BON%%' OR search_text LIKE '%%VON%%' THEN COALESCE(config.bon_rate, 0.000200)
+                      WHEN search_text LIKE '%%IMBA%%' OR search_text LIKE '%%IMBASAC%%' OR search_text LIKE '%%INVA%%' THEN COALESCE(config.imba_rate, 0.000200)
                       ELSE 0
-                    END AS commission_rate
+                    END AS commission_rate,
+                    COALESCE(config.monthly_goal, 50000.00) AS monthly_goal
                   FROM (
                     SELECT
                       pr.*,
                       UPPER(CONCAT_WS(' ', COALESCE(pr.brand, ''), COALESCE(pr.category, ''), COALESCE(pr.product_name, ''))) AS search_text
                     FROM product_rows pr
                   ) classified
+                  LEFT JOIN seller_commission_config config ON config.seller_id = classified.seller_id
                   WHERE search_text LIKE '%%BAJAJ%%'
                      OR search_text LIKE '%%KTM%%'
                      OR search_text LIKE '%%BON%%'
@@ -457,14 +525,15 @@ public class PostgresReportsRepository implements ReportsRepository {
                     %s AS period_start,
                     source,
                     seller_id,
+                    MAX(monthly_goal) AS monthly_goal,
                     COALESCE(SUM(eligible_sales), 0) AS eligible_sales,
                     COALESCE(SUM(
-                      GREATEST(current_month_sales - 50000, 0)
-                      - GREATEST(previous_month_sales - 50000, 0)
+                      GREATEST(current_month_sales - monthly_goal, 0)
+                      - GREATEST(previous_month_sales - monthly_goal, 0)
                     ), 0) AS commission_base,
                     COALESCE(SUM((
-                      GREATEST(current_month_sales - 50000, 0)
-                      - GREATEST(previous_month_sales - 50000, 0)
+                      GREATEST(current_month_sales - monthly_goal, 0)
+                      - GREATEST(previous_month_sales - monthly_goal, 0)
                     ) * commission_rate), 0) AS estimated_commission
                   FROM monthly_ranked
                   GROUP BY period_start, source, seller_id
@@ -488,7 +557,7 @@ public class PostgresReportsRepository implements ReportsRepository {
                   COALESCE(c.estimated_commission, 0) AS estimated_commission,
                   CASE
                     WHEN COALESCE(c.eligible_sales, 0) = 0 THEN 0
-                    ELSE COALESCE(c.eligible_sales, 0) / 50000 * 100
+                    ELSE COALESCE(c.eligible_sales, 0) / COALESCE(c.monthly_goal, 50000.00) * 100
                   END AS score
                 FROM seller_sales ss
                 LEFT JOIN commissioned c
@@ -521,8 +590,9 @@ public class PostgresReportsRepository implements ReportsRepository {
     public SellerPerformanceDetailResponse findSellerPerformanceDetail(LocalDate from,
                                                                        LocalDate to,
                                                                        Long sellerId,
-                                                                       BigDecimal incentiveThreshold) {
-        String baseCte = sellerCommissionDetailCte();
+                                                                       SellerCommissionConfigResponse config) {
+        BigDecimal incentiveThreshold = config.getMonthlyGoal();
+        String baseCte = sellerCommissionDetailCte(config);
         String totalsSql = """
                 WITH commissioned_lines AS (
                   %s
@@ -652,7 +722,7 @@ public class PostgresReportsRepository implements ReportsRepository {
         return periodExpression("s.issue_date", groupBy);
     }
 
-    private String sellerCommissionDetailCte() {
+    private String sellerCommissionDetailCte(SellerCommissionConfigResponse config) {
         return """
                 WITH product_rows AS (
                   %s
@@ -668,10 +738,10 @@ public class PostgresReportsRepository implements ReportsRepository {
                       ELSE NULL
                     END AS incentive_group,
                     CASE
-                      WHEN search_text LIKE '%%BAJAJ%%' THEN 0.010000
-                      WHEN search_text LIKE '%%KTM%%' THEN 0.000500
-                      WHEN search_text LIKE '%%BON%%' OR search_text LIKE '%%VON%%' THEN 0.000200
-                      WHEN search_text LIKE '%%IMBA%%' OR search_text LIKE '%%IMBASAC%%' OR search_text LIKE '%%INVA%%' THEN 0.000200
+                      WHEN search_text LIKE '%%BAJAJ%%' THEN %s
+                      WHEN search_text LIKE '%%KTM%%' THEN %s
+                      WHEN search_text LIKE '%%BON%%' OR search_text LIKE '%%VON%%' THEN %s
+                      WHEN search_text LIKE '%%IMBA%%' OR search_text LIKE '%%IMBASAC%%' OR search_text LIKE '%%INVA%%' THEN %s
                       ELSE 0
                     END AS commission_rate
                   FROM (
@@ -714,7 +784,13 @@ public class PostgresReportsRepository implements ReportsRepository {
                   ) * commission_rate AS estimated_commission
                 FROM monthly_ranked
                 WHERE seller_id = ?
-                """.formatted(commercialSellerProductRowsCte());
+                """.formatted(
+                commercialSellerProductRowsCte(),
+                config.getBajajRate().toPlainString(),
+                config.getKtmRate().toPlainString(),
+                config.getBonRate().toPlainString(),
+                config.getImbaRate().toPlainString()
+        );
     }
 
     private String periodExpression(String column, ReportGroupBy groupBy) {

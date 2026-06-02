@@ -28,6 +28,7 @@ public class SellerPerformanceDetailResponse {
     private BigDecimal score;
     private BigDecimal quantity;
     private Long countDocuments;
+    private SellerCommissionConfigResponse commissionConfig;
     private List<SellerPerformanceCategoryDetailResponse> categories;
     private List<SellerPerformanceProductDetailResponse> products;
 }

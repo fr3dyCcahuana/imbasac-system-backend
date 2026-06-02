@@ -104,6 +104,39 @@ public class ManualPdfRepository {
                 .single();
     }
 
+    public Optional<ManualPdfFamily> findAnotherFamilyByCode(Long familyId, String code) {
+        String sql = """
+                select id, code, name, sort_order
+                from manual_pdf_family
+                where code = :code
+                  and id <> :familyId
+                """;
+        return jdbcClient.sql(sql)
+                .param("familyId", familyId)
+                .param("code", code)
+                .query(familyRowMapper)
+                .optional();
+    }
+
+    public ManualPdfFamily updateFamily(Long familyId, String code, String name, Integer sortOrder) {
+        String sql = """
+                update manual_pdf_family
+                set code = :code,
+                    name = :name,
+                    sort_order = :sortOrder,
+                    updated_at = now()
+                where id = :familyId
+                returning id, code, name, sort_order
+                """;
+        return jdbcClient.sql(sql)
+                .param("familyId", familyId)
+                .param("code", code)
+                .param("name", name)
+                .param("sortOrder", sortOrder)
+                .query(familyRowMapper)
+                .single();
+    }
+
     public Optional<ManualPdfModel> findModelByFamilyAndCode(Long familyId, String code) {
         String sql = """
                 select id, family_id, code, name, sort_order
@@ -135,6 +168,72 @@ public class ManualPdfRepository {
                 returning id, family_id, code, name, sort_order
                 """;
         return jdbcClient.sql(sql)
+                .param("familyId", familyId)
+                .param("code", code)
+                .param("name", name)
+                .param("normalizedName", normalizedName)
+                .param("sortOrder", sortOrder)
+                .query(modelRowMapper)
+                .single();
+    }
+
+    public Optional<ManualPdfModel> findAnotherModelByFamilyAndCode(Long modelId, Long familyId, String code) {
+        String sql = """
+                select id, family_id, code, name, sort_order
+                from manual_pdf_model
+                where family_id = :familyId
+                  and code = :code
+                  and id <> :modelId
+                """;
+        return jdbcClient.sql(sql)
+                .param("modelId", modelId)
+                .param("familyId", familyId)
+                .param("code", code)
+                .query(modelRowMapper)
+                .optional();
+    }
+
+    public Optional<ManualPdfModel> findAnotherModelByFamilyAndNormalizedName(
+            Long modelId,
+            Long familyId,
+            String normalizedName
+    ) {
+        String sql = """
+                select id, family_id, code, name, sort_order
+                from manual_pdf_model
+                where family_id = :familyId
+                  and normalized_name = :normalizedName
+                  and id <> :modelId
+                """;
+        return jdbcClient.sql(sql)
+                .param("modelId", modelId)
+                .param("familyId", familyId)
+                .param("normalizedName", normalizedName)
+                .query(modelRowMapper)
+                .optional();
+    }
+
+    public ManualPdfModel updateModel(
+            Long modelId,
+            Long familyId,
+            String code,
+            String name,
+            String normalizedName,
+            Integer sortOrder
+    ) {
+        String sql = """
+                update manual_pdf_model
+                set family_id = :familyId,
+                    code = :code,
+                    name = :name,
+                    normalized_name = :normalizedName,
+                    sort_order = :sortOrder,
+                    updated_at = now()
+                where id = :modelId
+                returning id, family_id, code, name, sort_order
+                """;
+        return jdbcClient.sql(sql)
+                .param("modelId", modelId)
                 .param("familyId", familyId)
                 .param("code", code)
                 .param("name", name)

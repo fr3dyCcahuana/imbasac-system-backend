@@ -24,6 +24,7 @@ public record PromotionCampaign(
         String status,
         Integer priority,
         String channel,
+        boolean featured,
         List<PromotionItem> items
 ) {
 }

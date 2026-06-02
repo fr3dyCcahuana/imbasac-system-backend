@@ -28,7 +28,7 @@ public class PromotionCampaignService {
         String sql = """
                 SELECT id, code, name, slug, kind, type, title, subtitle, description, badge,
                        hero_image_url, banner_image_url, discount_type, discount_value,
-                       starts_at, ends_at, status, priority, channel
+                       starts_at, ends_at, status, priority, channel, featured
                 FROM promotion_campaign
                 WHERE (?::text IS NULL OR status = ?)
                   AND (?::text IS NULL OR kind = ?)
@@ -69,9 +69,9 @@ public class PromotionCampaignService {
                 INSERT INTO promotion_campaign (
                     code, name, slug, kind, type, title, subtitle, description, badge,
                     hero_image_url, banner_image_url, discount_type, discount_value,
-                    starts_at, ends_at, status, priority, channel
+                    starts_at, ends_at, status, priority, channel, featured
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
                 """)
                 .params(
@@ -92,7 +92,8 @@ public class PromotionCampaignService {
                         ts(request.endsAt()),
                         value(request.status(), "DRAFT"),
                         request.priority() == null ? 0 : request.priority(),
-                        value(request.channel(), "LANDING")
+                        value(request.channel(), "LANDING"),
+                        request.featured()
                 )
                 .query(Long.class)
                 .single();
@@ -123,6 +124,7 @@ public class PromotionCampaignService {
                        status = ?,
                        priority = ?,
                        channel = ?,
+                       featured = ?,
                        updated_at = NOW()
                  WHERE id = ?
                 """)
@@ -145,6 +147,7 @@ public class PromotionCampaignService {
                         value(request.status(), "DRAFT"),
                         request.priority() == null ? 0 : request.priority(),
                         value(request.channel(), "LANDING"),
+                        request.featured(),
                         id
                 )
                 .update();
@@ -197,7 +200,7 @@ public class PromotionCampaignService {
         PromotionCampaign base = jdbcClient.sql("""
                 SELECT id, code, name, slug, kind, type, title, subtitle, description, badge,
                        hero_image_url, banner_image_url, discount_type, discount_value,
-                       starts_at, ends_at, status, priority, channel
+                       starts_at, ends_at, status, priority, channel, featured
                 FROM promotion_campaign
                 WHERE id = ?
                 """)
@@ -222,6 +225,7 @@ public class PromotionCampaignService {
                         rs.getString("status"),
                         rs.getInt("priority"),
                         rs.getString("channel"),
+                        rs.getBoolean("featured"),
                         List.<PromotionItem>of()
                 ))
                 .single();
@@ -231,7 +235,7 @@ public class PromotionCampaignService {
                 base.id(), base.code(), base.name(), base.slug(), base.kind(), base.type(), base.title(),
                 base.subtitle(), base.description(), base.badge(), base.heroImageUrl(),
                 base.bannerImageUrl(), base.discountType(), base.discountValue(), base.startsAt(),
-                base.endsAt(), base.status(), base.priority(), base.channel(), items
+                base.endsAt(), base.status(), base.priority(), base.channel(), base.featured(), items
         );
     }
 

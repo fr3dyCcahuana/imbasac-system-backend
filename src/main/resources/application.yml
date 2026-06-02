@@ -112,7 +112,9 @@ app:
     base-url: http://127.0.0.1:8092
   files:
     products-images-dir: src/main/resources/static/images/products
-    products-images-base-url: http://localhost:8091/images/products
+    products-images-public-path: /images/products
+    promotions-images-dir: src/main/resources/static/images/promotions
+    promotions-images-public-path: /images/promotions
 
     manual-pdfs-dir: ./storage/manual-pdfs
     manual-pdfs-public-path: /files/manual-pdfs

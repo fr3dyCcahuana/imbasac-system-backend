@@ -41,12 +41,30 @@ public class ManualPdfController {
         return ResponseEntity.status(201).body(SuccessResponse.created(mapper.family(family)));
     }
 
+    @PutMapping("/manual-pdf-families/{id}")
+    public ResponseEntity<SuccessResponse<ManualPdfFamilyResponse>> updateFamily(
+            @PathVariable Long id,
+            @RequestBody CreateManualPdfFamilyRequest request
+    ) {
+        ManualPdfFamily family = service.updateFamily(id, request.code(), request.name(), request.sortOrder());
+        return ResponseEntity.ok(SuccessResponse.ok(mapper.family(family)));
+    }
+
     @PostMapping("/manual-pdf-models")
     public ResponseEntity<SuccessResponse<ManualPdfModelResponse>> createModel(
             @RequestBody CreateManualPdfModelRequest request
     ) {
         ManualPdfModel model = service.createModel(request.familyId(), request.code(), request.name(), request.sortOrder());
         return ResponseEntity.status(201).body(SuccessResponse.created(mapper.model(model)));
+    }
+
+    @PutMapping("/manual-pdf-models/{id}")
+    public ResponseEntity<SuccessResponse<ManualPdfModelResponse>> updateModel(
+            @PathVariable Long id,
+            @RequestBody CreateManualPdfModelRequest request
+    ) {
+        ManualPdfModel model = service.updateModel(id, request.familyId(), request.code(), request.name(), request.sortOrder());
+        return ResponseEntity.ok(SuccessResponse.ok(mapper.model(model)));
     }
 
 

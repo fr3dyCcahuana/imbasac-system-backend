@@ -23,6 +23,7 @@ public record PromotionCampaignRequest(
         String status,
         Integer priority,
         String channel,
+        boolean featured,
         List<PromotionItemRequest> items
 ) {
 }

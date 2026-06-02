@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS promotion_campaign (
     status VARCHAR(20) NOT NULL DEFAULT 'DRAFT',
     priority INTEGER NOT NULL DEFAULT 0,
     channel VARCHAR(20) NOT NULL DEFAULT 'LANDING',
+    featured BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
     CONSTRAINT ck_promotion_campaign_kind CHECK (kind IN ('PROMOTION', 'OFFER')),
@@ -81,6 +82,16 @@ ALTER TABLE promotion_campaign
 ALTER TABLE promotion_campaign
     ADD CONSTRAINT ck_promotion_campaign_type
     CHECK (type IN ('COMBO', 'MOTORCYCLE_BUNDLE', 'ACCESSORY_BUNDLE', 'PRODUCT_DISCOUNT', 'CATEGORY_DISCOUNT', 'WHOLESALE_DISCOUNT', 'SPARE_PARTS', 'ACCESSORY', 'MIXED'));
+
+CREATE TABLE IF NOT EXISTS promotion_campaign_image (
+    id BIGSERIAL PRIMARY KEY,
+    campaign_id BIGINT NOT NULL REFERENCES promotion_campaign(id) ON DELETE CASCADE,
+    image_url TEXT NOT NULL,
+    position SMALLINT NOT NULL DEFAULT 1,
+    is_main BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_promotion_campaign_image UNIQUE (campaign_id, position)
+);
 
 CREATE TABLE IF NOT EXISTS landing_order (
     id BIGSERIAL PRIMARY KEY,
@@ -146,8 +157,15 @@ CREATE TABLE IF NOT EXISTS landing_promotion_request (
 CREATE INDEX IF NOT EXISTS ix_promotion_campaign_status_dates
     ON promotion_campaign(status, starts_at, ends_at, priority DESC);
 
+CREATE INDEX IF NOT EXISTS ix_promotion_campaign_featured
+    ON promotion_campaign(featured, status)
+    WHERE featured = TRUE;
+
 CREATE INDEX IF NOT EXISTS ix_promotion_campaign_item_promotion
     ON promotion_campaign_item(promotion_id, sort_order);
+
+CREATE INDEX IF NOT EXISTS ix_promotion_campaign_image_campaign
+    ON promotion_campaign_image(campaign_id, position);
 
 CREATE INDEX IF NOT EXISTS ix_landing_order_status_created
     ON landing_order(status, created_at DESC);

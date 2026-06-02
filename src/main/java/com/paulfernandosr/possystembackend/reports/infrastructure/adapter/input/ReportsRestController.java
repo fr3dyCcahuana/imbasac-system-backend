@@ -9,6 +9,8 @@ import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SalesAggResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceDetailResponse;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerCommissionConfigRequest;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerCommissionConfigResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SunatComparisonResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -17,8 +19,11 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
@@ -146,6 +151,14 @@ public class ReportsRestController {
             @RequestParam("sellerId") Long sellerId
     ) {
         return ResponseEntity.ok(getReportsUseCase.getSellerPerformanceDetail(from, to, sellerId));
+    }
+
+    @PutMapping("/dashboard/seller-performance/{sellerId}/commission-config")
+    public ResponseEntity<SellerCommissionConfigResponse> saveSellerCommissionConfig(
+            @PathVariable Long sellerId,
+            @RequestBody SellerCommissionConfigRequest request
+    ) {
+        return ResponseEntity.ok(getReportsUseCase.saveSellerCommissionConfig(sellerId, request));
     }
 
     private ReportGroupBy parseGroupBy(String value) {

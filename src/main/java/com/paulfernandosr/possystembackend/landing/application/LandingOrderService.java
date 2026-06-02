@@ -46,10 +46,12 @@ public class LandingOrderService {
         Long orderId = jdbcClient.sql("""
                 INSERT INTO landing_order (
                     series, number, customer_name, customer_document_type,
-                    customer_document_number, phone, email, subtotal,
-                    discount_total, total, notes
+                    customer_document_number, phone, email,
+                    department_code, department_name, province_code, province_name,
+                    district_code, district_name, address,
+                    subtotal, discount_total, total, notes
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id
                 """)
                 .params(
@@ -60,6 +62,13 @@ public class LandingOrderService {
                         clean(request.customerDocumentNumber()),
                         clean(request.phone()),
                         clean(request.email()),
+                        clean(request.departmentCode()),
+                        clean(request.departmentName()),
+                        clean(request.provinceCode()),
+                        clean(request.provinceName()),
+                        clean(request.districtCode()),
+                        clean(request.districtName()),
+                        clean(request.address()),
                         subtotal,
                         discount,
                         total,
