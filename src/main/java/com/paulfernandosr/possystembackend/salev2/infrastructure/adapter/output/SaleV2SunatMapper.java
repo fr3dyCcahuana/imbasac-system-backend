@@ -232,7 +232,6 @@ public final class SaleV2SunatMapper {
             requireMotorcycle(item.getPassengers(), "Número de pasajeros", item);
             requireMotorcycle(item.getGrossWeight(), "Peso bruto", item);
             requireMotorcycle(item.getNetWeight(), "Peso neto", item);
-            requireMotorcycle(item.getPayload(), "Carga útil", item);
             requireMotorcycle(item.getHeight(), "Alto", item);
             requireMotorcycle(item.getLength(), "Largo", item);
             requireMotorcycle(item.getWidth(), "Ancho", item);

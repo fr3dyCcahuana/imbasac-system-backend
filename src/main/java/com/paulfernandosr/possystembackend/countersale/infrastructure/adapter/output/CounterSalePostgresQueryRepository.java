@@ -479,7 +479,7 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                         .modelo(rs.getString("v_modelo"))
                         .capacidadMotor(cap)
                         .combustible(rs.getString("v_combustible"))
-                        .numCilindros((Integer) rs.getObject("v_num_cilindros"))
+                        .numCilindros(rs.getBigDecimal("v_num_cilindros"))
                         .pesoNeto(rs.getBigDecimal("v_peso_neto"))
                         .pesoBruto(rs.getBigDecimal("v_peso_bruto"))
                         .build();

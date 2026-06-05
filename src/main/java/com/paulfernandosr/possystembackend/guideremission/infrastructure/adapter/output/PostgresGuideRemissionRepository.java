@@ -178,6 +178,7 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                        issue_date,
                        issue_time,
                        transfer_date,
+                       carrier_delivery_date,
                        transfer_reason_code,
                        transfer_mode_code,
                        related_document_type_code,
@@ -225,6 +226,7 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                         .issueDate(rs.getObject("issue_date", LocalDate.class))
                         .issueTime(rs.getObject("issue_time", LocalTime.class))
                         .transferDate(rs.getObject("transfer_date", LocalDate.class))
+                        .carrierDeliveryDate(rs.getObject("carrier_delivery_date", LocalDate.class))
                         .transferReasonCode(rs.getString("transfer_reason_code"))
                         .transferModeCode(rs.getString("transfer_mode_code"))
                         .relatedDocumentTypeCode(rs.getString("related_document_type_code"))
@@ -349,6 +351,7 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                        gr.issue_date,
                        gr.issue_time,
                        gr.transfer_date,
+                       gr.carrier_delivery_date,
                        gr.status,
                        gr.transfer_mode_code,
                        gr.recipient_document_number,
@@ -404,6 +407,7 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                             .issueDate(rs.getObject("issue_date", LocalDate.class))
                             .issueTime(rs.getObject("issue_time", LocalTime.class))
                             .transferDate(rs.getObject("transfer_date", LocalDate.class))
+                            .carrierDeliveryDate(rs.getObject("carrier_delivery_date", LocalDate.class))
                             .status(rs.getString("status"))
                             .transferModeCode(transferModeCode)
                             .transferModeLabel(transportModeLabel(transferModeCode))
@@ -450,6 +454,7 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                     issue_date,
                     issue_time,
                     transfer_date,
+                    carrier_delivery_date,
                     transfer_reason_code,
                     transfer_mode_code,
                     related_document_type_code,
@@ -480,7 +485,7 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                     submitted_at,
                     created_at,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                 """;
 
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -493,6 +498,7 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                         parseLocalDate(guia.getFechaEmision()),
                         parseLocalTime(guia.getHoraEmision()),
                         parseLocalDate(guia.getFechaTraslado()),
+                        parseLocalDate(guia.getFechaEntregaTransportista()),
                         guia.getGuiaMotivoTraslado(),
                         guia.getGuiaModalidadTraslado(),
                         primaryDocument != null ? normalizeRelatedDocumentType(primaryDocument.getDocumentTypeCode()) : null,
@@ -542,6 +548,7 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                        issue_date = ?,
                        issue_time = ?,
                        transfer_date = ?,
+                       carrier_delivery_date = ?,
                        transfer_reason_code = ?,
                        transfer_mode_code = ?,
                        related_document_type_code = ?,
@@ -580,6 +587,7 @@ public class PostgresGuideRemissionRepository implements GuideRemissionRepositor
                         parseLocalDate(guia.getFechaEmision()),
                         parseLocalTime(guia.getHoraEmision()),
                         parseLocalDate(guia.getFechaTraslado()),
+                        parseLocalDate(guia.getFechaEntregaTransportista()),
                         guia.getGuiaMotivoTraslado(),
                         guia.getGuiaModalidadTraslado(),
                         primaryDocument != null ? normalizeRelatedDocumentType(primaryDocument.getDocumentTypeCode()) : null,

@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input;
 
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.ContractSunatDraftEmissionResponse;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.CreditNoteResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2SunatEmissionResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2SunatInfoResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -90,6 +91,16 @@ public class SunatFilePublicUrlService {
         response.setCdrPath(toPublicCdrUrl(response.getCdrPath()));
 
         // No exponemos PDF por ahora.
+        response.setPdfPath(null);
+    }
+
+    public void enrich(CreditNoteResponse response) {
+        if (response == null) {
+            return;
+        }
+
+        response.setXmlPath(toPublicXmlUrl(response.getXmlPath()));
+        response.setCdrPath(toPublicCdrUrl(response.getCdrPath()));
         response.setPdfPath(null);
     }
 }

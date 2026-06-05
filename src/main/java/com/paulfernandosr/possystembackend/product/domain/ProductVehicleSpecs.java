@@ -33,7 +33,7 @@ public class ProductVehicleSpecs {
 
     private String engineCapacity; // capacidad motor
     private String fuel;               // combustible
-    private Integer cylinders;         // número de cilindros
+    private BigDecimal cylinders;      // número de cilindros
 
     private BigDecimal netWeight;      // peso neto
     private BigDecimal payload;        // carga útil

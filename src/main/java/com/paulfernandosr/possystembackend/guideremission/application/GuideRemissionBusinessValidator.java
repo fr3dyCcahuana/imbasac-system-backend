@@ -5,6 +5,8 @@ import com.paulfernandosr.possystembackend.guideremission.domain.exception.Inval
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -59,6 +61,9 @@ public class GuideRemissionBusinessValidator {
         }
 
         if ("01".equals(guide.getGuiaModalidadTraslado())) {
+            require(guide.getFechaEntregaTransportista(), "Para transporte público se requiere fecha_entrega_transportista.");
+            validatePublicTransportDates(guide);
+
             boolean hasNewPublicFields = hasText(guide.getNumeroDocumentoTransporte()) && hasText(guide.getEntidadTransporte());
             boolean hasLegacyPublicFields = hasText(guide.getEntidadIdTransporte()) && hasText(guide.getNumeroMtcTransporte());
 
@@ -75,6 +80,35 @@ public class GuideRemissionBusinessValidator {
             require(guide.getConductorApellidos(), "Para transporte privado se requiere conductor_apellidos.");
             require(guide.getConductorLicencia(), "Para transporte privado se requiere conductor_licencia.");
             require(guide.getVehiculoPlaca(), "Para transporte privado se requiere vehiculo_placa.");
+        }
+    }
+
+    private void validatePublicTransportDates(GuideRemissionData guide) {
+        LocalDate issueDate = parseDate(guide.getFechaEmision(), "La fecha de emisión no tiene formato YYYY-MM-DD.");
+        LocalDate transferDate = parseDate(guide.getFechaTraslado(), "La fecha de traslado no tiene formato YYYY-MM-DD.");
+        LocalDate carrierDeliveryDate = parseDate(
+                guide.getFechaEntregaTransportista(),
+                "La fecha de entrega al transportista no tiene formato YYYY-MM-DD."
+        );
+
+        if (carrierDeliveryDate.isBefore(issueDate)) {
+            throw new InvalidGuideRemissionException(
+                    "La fecha de entrega al transportista debe ser igual o posterior a la fecha de emisión."
+            );
+        }
+
+        if (transferDate.isBefore(carrierDeliveryDate)) {
+            throw new InvalidGuideRemissionException(
+                    "La fecha de traslado debe ser igual o posterior a la fecha de entrega al transportista."
+            );
+        }
+    }
+
+    private LocalDate parseDate(String value, String message) {
+        try {
+            return LocalDate.parse(value.trim());
+        } catch (DateTimeParseException ex) {
+            throw new InvalidGuideRemissionException(message);
         }
     }
 

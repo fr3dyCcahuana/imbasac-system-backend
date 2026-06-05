@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -291,6 +292,46 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
         return value instanceof Number number ? number.intValue() : null;
     }
 
+    private SaleV2CreditNoteInfoResponse buildCreditNoteInfo(java.sql.ResultSet rs) throws java.sql.SQLException {
+        Integer count = getInteger(rs, "credit_note_count");
+        Integer acceptedCount = getInteger(rs, "credit_note_accepted_count");
+        java.sql.Timestamp lastEmittedAt = rs.getTimestamp("last_credit_note_emitted_at");
+
+        return SaleV2CreditNoteInfoResponse.builder()
+                .status(rs.getString("credit_note_status"))
+                .count(count == null ? 0 : count)
+                .acceptedCount(acceptedCount == null ? 0 : acceptedCount)
+                .total(nz(rs.getBigDecimal("credit_note_total")))
+                .acceptedTotal(nz(rs.getBigDecimal("credit_note_accepted_total")))
+                .documentsLabel(rs.getString("credit_note_documents_label"))
+                .lastSeries(rs.getString("last_credit_note_series"))
+                .lastNumber(getLong(rs, "last_credit_note_number"))
+                .lastSunatStatus(rs.getString("last_credit_note_sunat_status"))
+                .lastEmittedAt(lastEmittedAt != null ? lastEmittedAt.toLocalDateTime() : null)
+                .build();
+    }
+
+    private SaleV2ItemCreditNoteInfoResponse buildItemCreditNoteInfo(java.sql.ResultSet rs) throws java.sql.SQLException {
+        Integer count = getInteger(rs, "item_credit_note_count");
+
+        return SaleV2ItemCreditNoteInfoResponse.builder()
+                .status(rs.getString("item_credit_note_status"))
+                .count(count == null ? 0 : count)
+                .creditedQuantity(nz(rs.getBigDecimal("item_credited_quantity")))
+                .acceptedQuantity(nz(rs.getBigDecimal("item_accepted_quantity")))
+                .pendingQuantity(nz(rs.getBigDecimal("item_pending_credit_quantity")))
+                .creditedTotal(nz(rs.getBigDecimal("item_credited_total")))
+                .acceptedTotal(nz(rs.getBigDecimal("item_accepted_total")))
+                .returnedToStockQuantity(nz(rs.getBigDecimal("item_returned_to_stock_quantity")))
+                .documentsLabel(rs.getString("item_credit_note_documents_label"))
+                .lastSunatStatus(rs.getString("item_last_credit_note_sunat_status"))
+                .build();
+    }
+
+    private BigDecimal nz(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
     @Override
     public long countSales(String likeParam,
                            String docType,
@@ -352,6 +393,26 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
             u_edit.username AS last_edited_by_username,
             s.created_at AS created_at,
             s.updated_at AS updated_at,
+            COALESCE(cn_info.credit_note_count, 0) AS credit_note_count,
+            COALESCE(cn_info.credit_note_accepted_count, 0) AS credit_note_accepted_count,
+            COALESCE(cn_info.credit_note_total, 0) AS credit_note_total,
+            COALESCE(cn_info.credit_note_accepted_total, 0) AS credit_note_accepted_total,
+            cn_info.credit_note_documents_label AS credit_note_documents_label,
+            cn_info.last_credit_note_series AS last_credit_note_series,
+            cn_info.last_credit_note_number AS last_credit_note_number,
+            cn_info.last_credit_note_sunat_status AS last_credit_note_sunat_status,
+            cn_info.last_credit_note_emitted_at AS last_credit_note_emitted_at,
+            CASE
+                WHEN COALESCE(cn_info.credit_note_count, 0) = 0
+                    THEN 'SIN_NOTA_CREDITO'
+                WHEN COALESCE(cn_info.credit_note_accepted_total, 0) >= (s.total - 0.01)
+                    THEN 'NOTA_CREDITO_TOTAL'
+                WHEN COALESCE(cn_info.credit_note_accepted_count, 0) > 0
+                    THEN 'NOTA_CREDITO_PARCIAL'
+                WHEN COALESCE(cn_info.credit_note_observed_count, 0) > 0
+                    THEN 'NOTA_CREDITO_OBSERVADA'
+                ELSE 'NOTA_CREDITO_PENDIENTE'
+            END AS credit_note_status,
 
             COALESCE(sr.proforma_id, s.source_proforma_id) AS proforma_id,
             COALESCE(pf.series, p_ref.series) AS proforma_series,
@@ -419,6 +480,31 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                  WHERE l.sale_id = s.id
                    AND l.reservation_status <> 'LIBERADO'
           ) comp ON TRUE
+          LEFT JOIN LATERAL (
+                SELECT COUNT(*)::int AS credit_note_count,
+                       COUNT(*) FILTER (
+                           WHERE cn.sunat_status = 'ACEPTADO'
+                       )::int AS credit_note_accepted_count,
+                       COUNT(*) FILTER (
+                           WHERE cn.sunat_status IN ('RECHAZADO', 'ERROR', 'ERROR_COMUNICACION')
+                       )::int AS credit_note_observed_count,
+                       COALESCE(SUM(cn.total), 0) AS credit_note_total,
+                       COALESCE(SUM(cn.total) FILTER (
+                           WHERE cn.sunat_status = 'ACEPTADO'
+                       ), 0) AS credit_note_accepted_total,
+                       STRING_AGG(
+                           cn.series || '-' || LPAD(cn.number::text, 8, '0'),
+                           ', '
+                           ORDER BY cn.id
+                       ) AS credit_note_documents_label,
+                       (ARRAY_AGG(cn.series ORDER BY cn.id DESC))[1] AS last_credit_note_series,
+                       (ARRAY_AGG(cn.number ORDER BY cn.id DESC))[1] AS last_credit_note_number,
+                       (ARRAY_AGG(cn.sunat_status ORDER BY cn.id DESC))[1] AS last_credit_note_sunat_status,
+                       MAX(cn.sunat_sent_at) AS last_credit_note_emitted_at
+                  FROM credit_note cn
+                 WHERE cn.sale_id = s.id
+                   AND COALESCE(cn.status, '') <> 'ANULADA'
+          ) cn_info ON TRUE
          WHERE 1 = 1
     """);
 
@@ -462,6 +548,7 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                     .canEmitSunat(isEmittableForList(saleStatusValue, docTypeValue, sunatStatusValue))
                     .contractId(getLong(rs, "contract_id"))
                     .relation(buildRelationInfo(rs))
+                    .creditNote(buildCreditNoteInfo(rs))
                     .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null)
                     .updatedAt(rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toLocalDateTime() : null)
                     .build();
@@ -555,6 +642,26 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                 s.contract_id     AS contract_id,
                 s.created_at      AS created_at,
                 s.updated_at      AS updated_at,
+                COALESCE(cn_info.credit_note_count, 0) AS credit_note_count,
+                COALESCE(cn_info.credit_note_accepted_count, 0) AS credit_note_accepted_count,
+                COALESCE(cn_info.credit_note_total, 0) AS credit_note_total,
+                COALESCE(cn_info.credit_note_accepted_total, 0) AS credit_note_accepted_total,
+                cn_info.credit_note_documents_label AS credit_note_documents_label,
+                cn_info.last_credit_note_series AS last_credit_note_series,
+                cn_info.last_credit_note_number AS last_credit_note_number,
+                cn_info.last_credit_note_sunat_status AS last_credit_note_sunat_status,
+                cn_info.last_credit_note_emitted_at AS last_credit_note_emitted_at,
+                CASE
+                    WHEN COALESCE(cn_info.credit_note_count, 0) = 0
+                        THEN 'SIN_NOTA_CREDITO'
+                    WHEN COALESCE(cn_info.credit_note_accepted_total, 0) >= (s.total - 0.01)
+                        THEN 'NOTA_CREDITO_TOTAL'
+                    WHEN COALESCE(cn_info.credit_note_accepted_count, 0) > 0
+                        THEN 'NOTA_CREDITO_PARCIAL'
+                    WHEN COALESCE(cn_info.credit_note_observed_count, 0) > 0
+                        THEN 'NOTA_CREDITO_OBSERVADA'
+                    ELSE 'NOTA_CREDITO_PENDIENTE'
+                END AS credit_note_status,
 
                 COALESCE(sr.proforma_id, s.source_proforma_id) AS proforma_id,
                 COALESCE(pf.series, p_ref.series) AS proforma_series,
@@ -649,6 +756,31 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                      WHERE l.sale_id = s.id
                        AND l.reservation_status <> 'LIBERADO'
               ) comp ON TRUE
+              LEFT JOIN LATERAL (
+                    SELECT COUNT(*)::int AS credit_note_count,
+                           COUNT(*) FILTER (
+                               WHERE cn.sunat_status = 'ACEPTADO'
+                           )::int AS credit_note_accepted_count,
+                           COUNT(*) FILTER (
+                               WHERE cn.sunat_status IN ('RECHAZADO', 'ERROR', 'ERROR_COMUNICACION')
+                           )::int AS credit_note_observed_count,
+                           COALESCE(SUM(cn.total), 0) AS credit_note_total,
+                           COALESCE(SUM(cn.total) FILTER (
+                               WHERE cn.sunat_status = 'ACEPTADO'
+                           ), 0) AS credit_note_accepted_total,
+                           STRING_AGG(
+                               cn.series || '-' || LPAD(cn.number::text, 8, '0'),
+                               ', '
+                               ORDER BY cn.id
+                           ) AS credit_note_documents_label,
+                           (ARRAY_AGG(cn.series ORDER BY cn.id DESC))[1] AS last_credit_note_series,
+                           (ARRAY_AGG(cn.number ORDER BY cn.id DESC))[1] AS last_credit_note_number,
+                           (ARRAY_AGG(cn.sunat_status ORDER BY cn.id DESC))[1] AS last_credit_note_sunat_status,
+                           MAX(cn.sunat_sent_at) AS last_credit_note_emitted_at
+                      FROM credit_note cn
+                     WHERE cn.sale_id = s.id
+                       AND COALESCE(cn.status, '') <> 'ANULADA'
+              ) cn_info ON TRUE
              WHERE s.id = ?
         """;
 
@@ -749,6 +881,7 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                     .sunat(sunat)
                     .edit(edit)
                     .relation(buildRelationInfo(rs))
+                    .creditNote(buildCreditNoteInfo(rs))
                     .createdAt(rs.getTimestamp("created_at") != null
                             ? rs.getTimestamp("created_at").toLocalDateTime()
                             : null)
@@ -784,11 +917,34 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
             si.gift_reason AS gift_reason,
             si.facturable_sunat AS facturable_sunat,
             si.affects_stock AS affects_stock,
+            (
+                COALESCE(si.affects_stock, FALSE)
+                OR COALESCE(counter_origin.counter_sale_item_affects_stock, FALSE)
+            ) AS stock_returnable,
             si.visible_in_document AS visible_in_document,
             si.unit_cost_snapshot AS unit_cost_snapshot,
             si.total_cost_snapshot AS total_cost_snapshot,
             si.revenue_total AS revenue_total,
             si.created_at AS created_at,
+            COALESCE(cni_info.item_credit_note_count, 0) AS item_credit_note_count,
+            COALESCE(cni_info.item_credited_quantity, 0) AS item_credited_quantity,
+            COALESCE(cni_info.item_accepted_quantity, 0) AS item_accepted_quantity,
+            GREATEST(
+                0::numeric,
+                si.quantity - COALESCE(cni_info.item_credited_quantity, 0)
+            ) AS item_pending_credit_quantity,
+            COALESCE(cni_info.item_credited_total, 0) AS item_credited_total,
+            COALESCE(cni_info.item_accepted_total, 0) AS item_accepted_total,
+            COALESCE(cni_info.item_returned_to_stock_quantity, 0) AS item_returned_to_stock_quantity,
+            cni_info.item_credit_note_documents_label AS item_credit_note_documents_label,
+            cni_info.item_last_credit_note_sunat_status AS item_last_credit_note_sunat_status,
+            CASE
+                WHEN COALESCE(cni_info.item_credit_note_count, 0) = 0
+                    THEN 'SIN_NOTA_CREDITO'
+                WHEN COALESCE(cni_info.item_credited_quantity, 0) >= (si.quantity - 0.0001)
+                    THEN 'ITEM_ACREDITADO_TOTAL'
+                ELSE 'ITEM_ACREDITADO_PARCIAL'
+            END AS item_credit_note_status,
 
             p.category AS product_category,
 
@@ -834,6 +990,48 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                  ON psu.sale_item_id = si.id
                  OR psu.id = ci.serial_unit_id
           LEFT JOIN product_vehicle_specs vs ON vs.product_id = p.id
+          LEFT JOIN LATERAL (
+                SELECT mapped.counter_sale_item_id,
+                       csi.affects_stock AS counter_sale_item_affects_stock
+                  FROM (
+                        SELECT cscl.counter_sale_item_id,
+                               ROW_NUMBER() OVER (ORDER BY cscl.id) AS generated_line_number
+                          FROM counter_sale_sunat_combo csc
+                          JOIN counter_sale_sunat_combo_line cscl
+                            ON cscl.combo_id = csc.id
+                         WHERE csc.generated_sale_id = si.sale_id
+                  ) mapped
+                  JOIN counter_sale_item csi
+                    ON csi.id = mapped.counter_sale_item_id
+                 WHERE mapped.generated_line_number = si.line_number
+                 LIMIT 1
+          ) counter_origin ON TRUE
+          LEFT JOIN LATERAL (
+                SELECT COUNT(DISTINCT cn.id)::int AS item_credit_note_count,
+                       COALESCE(SUM(cni.quantity), 0) AS item_credited_quantity,
+                       COALESCE(SUM(cni.quantity) FILTER (
+                           WHERE cn.sunat_status = 'ACEPTADO'
+                       ), 0) AS item_accepted_quantity,
+                       COALESCE(SUM(cni.revenue_total), 0) AS item_credited_total,
+                       COALESCE(SUM(cni.revenue_total) FILTER (
+                           WHERE cn.sunat_status = 'ACEPTADO'
+                       ), 0) AS item_accepted_total,
+                       COALESCE(SUM(cni.quantity) FILTER (
+                           WHERE cni.returned_to_stock = TRUE
+                       ), 0) AS item_returned_to_stock_quantity,
+                       STRING_AGG(
+                           cn.series || '-' || LPAD(cn.number::text, 8, '0') ||
+                           ' x ' || TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM cni.quantity::text)),
+                           ', '
+                           ORDER BY cn.id, cni.line_number
+                       ) AS item_credit_note_documents_label,
+                       (ARRAY_AGG(cn.sunat_status ORDER BY cn.id DESC))[1] AS item_last_credit_note_sunat_status
+                  FROM credit_note_item cni
+                  JOIN credit_note cn
+                    ON cn.id = cni.credit_note_id
+                 WHERE cni.sale_item_id = si.id
+                   AND COALESCE(cn.status, '') <> 'ANULADA'
+          ) cni_info ON TRUE
          WHERE si.sale_id = ?
          ORDER BY si.line_number ASC
         """;
@@ -863,7 +1061,7 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                             .anioFabricacion(rs.getObject("v_anio_fabricacion", Integer.class))
                             .capacidadMotor(cap)
                             .combustible(rs.getString("v_combustible"))
-                            .numCilindros(rs.getObject("v_num_cilindros", Integer.class))
+                            .numCilindros(rs.getBigDecimal("v_num_cilindros"))
                             .pesoNeto(rs.getBigDecimal("v_peso_neto"))
                             .pesoBruto(rs.getBigDecimal("v_peso_bruto"))
                             .clase(rs.getString("v_clase"))
@@ -898,6 +1096,7 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                     .giftReason(rs.getString("gift_reason"))
                     .facturableSunat(rs.getBoolean("facturable_sunat"))
                     .affectsStock(rs.getBoolean("affects_stock"))
+                    .stockReturnable(rs.getBoolean("stock_returnable"))
                     .visibleInDocument(rs.getBoolean("visible_in_document"))
                     .unitCostSnapshot(rs.getBigDecimal("unit_cost_snapshot"))
                     .totalCostSnapshot(rs.getBigDecimal("total_cost_snapshot"))
@@ -908,6 +1107,7 @@ public class PostgresSaleV2QueryRepository implements SaleV2QueryRepository {
                     .createdAt(rs.getTimestamp("created_at") != null
                             ? rs.getTimestamp("created_at").toLocalDateTime()
                             : null)
+                    .creditNote(buildItemCreditNoteInfo(rs))
                     .vehicleDetails(vehicleDetails)
                     .build();
         };

@@ -664,7 +664,7 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                                 .bodywork(rs.getString("bodywork"))
                                 .engineCapacity(normalizeVehicleSpecText(rs.getString("engine_capacity")))
                                 .fuel(rs.getString("fuel"))
-                                .cylinders(rs.getObject("cylinders", Integer.class))
+                                .cylinders(rs.getBigDecimal("cylinders"))
                                 .netWeight(rs.getBigDecimal("net_weight"))
                                 .payload(rs.getBigDecimal("payload"))
                                 .grossWeight(rs.getBigDecimal("gross_weight"))

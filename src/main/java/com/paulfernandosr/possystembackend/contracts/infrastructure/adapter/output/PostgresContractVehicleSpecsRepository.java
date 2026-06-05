@@ -49,7 +49,7 @@ public class PostgresContractVehicleSpecsRepository implements ContractVehicleSp
                         // En BD estos campos son VARCHAR porque pueden venir como "110CC" o "8.5HP".
                         .engineCapacity(rs.getString("engineCapacity"))
                         .fuel(rs.getString("fuel"))
-                        .cylinders((Integer) rs.getObject("cylinders"))
+                        .cylinders(rs.getBigDecimal("cylinders"))
                         .netWeight(rs.getBigDecimal("netWeight"))
                         .payload(rs.getBigDecimal("payload"))
                         .grossWeight(rs.getBigDecimal("grossWeight"))

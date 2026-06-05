@@ -26,7 +26,7 @@ public class VehicleDetailsResponse {
     private String capacidadMotor;
     private String combustible;
 
-    private Integer numCilindros;
+    private BigDecimal numCilindros;
 
     private BigDecimal pesoNeto;
     private BigDecimal pesoBruto;

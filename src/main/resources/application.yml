@@ -153,3 +153,11 @@ app:
         allowed-series:
           - F003
           - F004
+      NOTA_CREDITO_FACTURA:
+        default-series: FC01
+        allowed-series:
+          - FC01
+      NOTA_CREDITO_BOLETA:
+        default-series: BC01
+        allowed-series:
+          - BC01

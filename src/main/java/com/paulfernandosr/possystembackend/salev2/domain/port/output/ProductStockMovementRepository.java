@@ -33,6 +33,14 @@ public interface ProductStockMovementRepository {
                         BigDecimal balanceQty,
                         BigDecimal balanceCost);
 
+    void createInCreditNote(Long productId,
+                            BigDecimal quantityIn,
+                            Long creditNoteItemId,
+                            BigDecimal unitCost,
+                            BigDecimal totalCost,
+                            BigDecimal balanceQty,
+                            BigDecimal balanceCost);
+
     /**
      * Movimiento de ingreso por edición administrativa de una venta antes de SUNAT.
      */

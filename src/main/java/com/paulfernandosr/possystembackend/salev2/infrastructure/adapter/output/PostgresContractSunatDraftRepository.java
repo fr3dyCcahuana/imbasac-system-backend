@@ -445,7 +445,7 @@ public class PostgresContractSunatDraftRepository implements ContractSunatDraftR
                         .bodywork(rs.getString("bodywork"))
                         .engineCapacity(rs.getString("engine_capacity"))
                         .fuel(rs.getString("fuel"))
-                        .cylinders(rs.getObject("cylinders", Integer.class))
+                        .cylinders(rs.getBigDecimal("cylinders"))
                         .netWeight(rs.getBigDecimal("net_weight"))
                         .payload(rs.getBigDecimal("payload"))
                         .grossWeight(rs.getBigDecimal("gross_weight"))

@@ -106,6 +106,16 @@ public class DocumentRequest {
         private String documentTypeCode;
         @JsonProperty("nota")
         private String note;
+        @JsonProperty("relacionado_serie")
+        private String relatedSeries;
+        @JsonProperty("relacionado_numero")
+        private String relatedNumber;
+        @JsonProperty("relacionado_tipo_documento")
+        private String relatedDocumentTypeCode;
+        @JsonProperty("relacionado_motivo_codigo")
+        private String relatedReasonCode;
+        @JsonProperty("relacionado_motivo_descripcion")
+        private String relatedReasonDescription;
     }
 
     @Getter

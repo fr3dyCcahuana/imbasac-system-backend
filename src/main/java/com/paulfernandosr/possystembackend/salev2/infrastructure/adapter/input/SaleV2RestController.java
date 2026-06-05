@@ -3,7 +3,9 @@ package com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input;
 import com.paulfernandosr.possystembackend.common.infrastructure.response.SuccessResponse;
 import com.paulfernandosr.possystembackend.salev2.domain.model.VoidSaleV2Response;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.AdminEditSaleV2BeforeSunatUseCase;
+import com.paulfernandosr.possystembackend.salev2.domain.port.input.CreateCreditNoteUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.CreateSaleV2UseCase;
+import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetSaleCreditNotesUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetSaleV2UseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetSalesV2PageUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.EmitSaleV2ToSunatUseCase;
@@ -11,6 +13,8 @@ import com.paulfernandosr.possystembackend.salev2.domain.port.input.EmitSaleV2Su
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.PreviewSaleV2SunatWithCounterSalesUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.VoidSaleV2UseCase;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.PageResponse;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.CreditNoteCreateRequest;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.CreditNoteResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2AdminEditRequest;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2ComposeSunatEmitResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2ComposeSunatPreviewResponse;
@@ -29,6 +33,7 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.security.Principal;
 import java.time.LocalDate;
+import java.util.List;
 
 @RestController
 @RequestMapping("/sales/v2")
@@ -43,6 +48,8 @@ public class SaleV2RestController {
     private final EmitSaleV2ToSunatUseCase emitSaleV2ToSunatUseCase;
     private final PreviewSaleV2SunatWithCounterSalesUseCase previewSaleV2SunatWithCounterSalesUseCase;
     private final EmitSaleV2SunatWithCounterSalesUseCase emitSaleV2SunatWithCounterSalesUseCase;
+    private final CreateCreditNoteUseCase createCreditNoteUseCase;
+    private final GetSaleCreditNotesUseCase getSaleCreditNotesUseCase;
     private final SunatFilePublicUrlService sunatFilePublicUrlService;
 
     @PostMapping
@@ -112,6 +119,22 @@ public class SaleV2RestController {
     public ResponseEntity<SuccessResponse<SaleV2SunatEmissionResponse>> emitSunat(@PathVariable Long saleId) {
         SaleV2SunatEmissionResponse response = emitSaleV2ToSunatUseCase.emit(saleId);
         sunatFilePublicUrlService.enrich(response);
+        return ResponseEntity.ok(SuccessResponse.ok(response));
+    }
+
+    @PostMapping("/{saleId}/credit-notes")
+    public ResponseEntity<SuccessResponse<CreditNoteResponse>> createCreditNote(@PathVariable Long saleId,
+                                                                                @RequestBody CreditNoteCreateRequest request,
+                                                                                Principal principal) {
+        CreditNoteResponse response = createCreditNoteUseCase.create(saleId, request, principal.getName());
+        sunatFilePublicUrlService.enrich(response);
+        return ResponseEntity.ok(SuccessResponse.ok(response));
+    }
+
+    @GetMapping("/{saleId}/credit-notes")
+    public ResponseEntity<SuccessResponse<List<CreditNoteResponse>>> getCreditNotes(@PathVariable Long saleId) {
+        List<CreditNoteResponse> response = getSaleCreditNotesUseCase.getBySaleId(saleId);
+        response.forEach(sunatFilePublicUrlService::enrich);
         return ResponseEntity.ok(SuccessResponse.ok(response));
     }
 

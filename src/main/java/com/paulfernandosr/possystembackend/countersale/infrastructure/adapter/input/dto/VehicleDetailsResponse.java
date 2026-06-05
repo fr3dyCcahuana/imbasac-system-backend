@@ -21,7 +21,7 @@ public class VehicleDetailsResponse {
     private Integer anioFabricacion;
     private String capacidadMotor;
     private String combustible;
-    private Integer numCilindros;
+    private BigDecimal numCilindros;
     private BigDecimal pesoNeto;
     private BigDecimal pesoBruto;
 }

@@ -66,6 +66,7 @@ public class SaleV2DetailResponse {
     private SaleV2SunatInfoResponse sunat;
     private SaleV2EditInfoResponse edit;
     private SaleV2RelationInfoResponse relation;
+    private SaleV2CreditNoteInfoResponse creditNote;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

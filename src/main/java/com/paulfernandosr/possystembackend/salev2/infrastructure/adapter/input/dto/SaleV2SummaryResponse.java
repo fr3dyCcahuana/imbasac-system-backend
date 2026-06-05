@@ -40,6 +40,7 @@ public class SaleV2SummaryResponse {
 
     private Long contractId;
     private SaleV2RelationInfoResponse relation;
+    private SaleV2CreditNoteInfoResponse creditNote;
 
     private java.time.LocalDateTime createdAt;
     private java.time.LocalDateTime updatedAt;

@@ -26,6 +26,8 @@ public class GuideRemissionData {
     @NotBlank
     private String fechaTraslado;
 
+    private String fechaEntregaTransportista;
+
     @NotBlank
     private String guiaMotivoTraslado;
 

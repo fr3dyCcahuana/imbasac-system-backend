@@ -30,6 +30,7 @@ public class SaleV2ItemResponse {
 
     private Boolean facturableSunat;
     private Boolean affectsStock;
+    private Boolean stockReturnable;
     private Boolean visibleInDocument;
 
     private BigDecimal unitCostSnapshot;
@@ -42,6 +43,8 @@ public class SaleV2ItemResponse {
     private String serialUnitStatus;
 
     private LocalDateTime createdAt;
+
+    private SaleV2ItemCreditNoteInfoResponse creditNote;
 
     private VehicleDetailsResponse vehicleDetails;
 }

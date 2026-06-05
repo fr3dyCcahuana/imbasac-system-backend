@@ -22,6 +22,7 @@ public class GuideRemissionPageItem {
     private LocalDate issueDate;
     private LocalTime issueTime;
     private LocalDate transferDate;
+    private LocalDate carrierDeliveryDate;
     private String status;
     private String transferModeCode;
     private String transferModeLabel;

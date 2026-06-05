@@ -14,7 +14,7 @@ public class PurchaseVehicleSpecs {
     private String bodywork;
     private String engineCapacity;
     private String fuel;
-    private Integer cylinders;
+    private BigDecimal cylinders;
 
     private BigDecimal netWeight;
     private BigDecimal payload;

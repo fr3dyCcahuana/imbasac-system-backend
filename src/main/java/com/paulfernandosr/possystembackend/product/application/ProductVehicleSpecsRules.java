@@ -54,7 +54,9 @@ public class ProductVehicleSpecsRules {
         requirePositive(specs.getCylinders(), "cylinders");
 
         requireNonNegative(specs.getNetWeight(), "netWeight");
-        requireNonNegative(specs.getPayload(), "payload");
+        if (specs.getPayload() != null) {
+            requireNonNegative(specs.getPayload(), "payload");
+        }
         requireNonNegative(specs.getGrossWeight(), "grossWeight");
 
         // --------------------

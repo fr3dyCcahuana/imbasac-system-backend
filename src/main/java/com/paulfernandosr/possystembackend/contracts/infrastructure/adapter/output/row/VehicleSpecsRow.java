@@ -18,7 +18,7 @@ public class VehicleSpecsRow {
 
     private String engineCapacity;
     private String fuel;
-    private Integer cylinders;
+    private BigDecimal cylinders;
 
     private BigDecimal netWeight;
     private BigDecimal payload;

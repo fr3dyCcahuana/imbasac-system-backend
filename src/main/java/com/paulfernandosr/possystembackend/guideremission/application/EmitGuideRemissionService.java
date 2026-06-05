@@ -122,6 +122,7 @@ public class EmitGuideRemissionService implements EmitGuideRemissionUseCase {
                         .fechaEmision(format(document.getIssueDate()))
                         .horaEmision(document.getIssueTime() != null ? document.getIssueTime().format(DateTimeFormatter.ISO_LOCAL_TIME) : null)
                         .fechaTraslado(format(document.getTransferDate()))
+                        .fechaEntregaTransportista(format(document.getCarrierDeliveryDate()))
                         .guiaMotivoTraslado(document.getTransferReasonCode())
                         .guiaModalidadTraslado(document.getTransferModeCode())
                         .entidadIdTransporte(document.getLegacyTransportEntityId())

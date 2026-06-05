@@ -50,6 +50,18 @@ public class PostgresProductStockMovementRepository implements ProductStockMovem
     }
 
     @Override
+    public void createInCreditNote(Long productId,
+                                   BigDecimal quantityIn,
+                                   Long creditNoteItemId,
+                                   BigDecimal unitCost,
+                                   BigDecimal totalCost,
+                                   BigDecimal balanceQty,
+                                   BigDecimal balanceCost) {
+        createMovement(productId, "IN_RETURN", "credit_note_item", creditNoteItemId,
+                quantityIn, BigDecimal.ZERO, unitCost, totalCost, balanceQty, balanceCost);
+    }
+
+    @Override
     public void createInEdit(Long productId,
                              BigDecimal quantityIn,
                              Long saleItemId,

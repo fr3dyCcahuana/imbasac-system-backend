@@ -26,6 +26,7 @@ public class GuideRemissionDocument {
     private LocalDate issueDate;
     private LocalTime issueTime;
     private LocalDate transferDate;
+    private LocalDate carrierDeliveryDate;
     private String transferReasonCode;
     private String transferModeCode;
     private String relatedDocumentTypeCode;

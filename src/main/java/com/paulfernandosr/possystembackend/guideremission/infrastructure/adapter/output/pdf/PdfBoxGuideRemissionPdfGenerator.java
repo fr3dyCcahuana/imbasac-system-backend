@@ -267,6 +267,12 @@ public class PdfBoxGuideRemissionPdfGenerator implements GuideRemissionPdfGenera
                 new FieldCell("Hora", formatTime(document.getIssueTime()))
         )));
         rows.add(new FieldRow(List.of(new FieldCell("Fecha inicio traslado", formatDate(document.getTransferDate())))));
+        if ("01".equals(safe(document.getTransferModeCode()))) {
+            rows.add(new FieldRow(List.of(new FieldCell(
+                    "Entrega al transportista",
+                    formatDate(document.getCarrierDeliveryDate())
+            ))));
+        }
         rows.add(new FieldRow(List.of(new FieldCell("Destinatario", firstNotBlank(document.getRecipientName(), "-")))));
         rows.add(new FieldRow(List.of(new FieldCell(recipientDocLabel(document.getRecipientDocumentType()), firstNotBlank(document.getRecipientDocumentNumber(), "-")))));
         rows.add(new FieldRow(List.of(new FieldCell("Punto de partida", buildLocation(
