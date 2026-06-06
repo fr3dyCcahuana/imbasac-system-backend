@@ -121,7 +121,7 @@ public final class SaleV2TaxSupport {
         if (value == null) {
             return "";
         }
-        return value.replaceAll("\\D", "");
+        return value.trim();
     }
 
     public static String normalizeText(String value) {

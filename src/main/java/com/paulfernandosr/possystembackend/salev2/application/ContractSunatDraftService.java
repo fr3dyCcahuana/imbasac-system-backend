@@ -8,7 +8,9 @@ import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.su
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.SunatProps;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
 import com.paulfernandosr.possystembackend.salev2.domain.model.CostPolicy;
+import com.paulfernandosr.possystembackend.salev2.domain.model.DocType;
 import com.paulfernandosr.possystembackend.salev2.domain.model.LockedDocumentSeries;
+import com.paulfernandosr.possystembackend.salev2.domain.model.SaleV2TaxSupport;
 import com.paulfernandosr.possystembackend.salev2.domain.model.StockMovementBalance;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.EmitContractSunatDraftUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetContractSunatDraftUseCase;
@@ -39,7 +41,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -66,6 +70,7 @@ public class ContractSunatDraftService implements
     private final RestClient sunatRestClient;
     private final SunatProps sunatProps;
     private final SunatEmissionResultParser sunatEmissionResultParser;
+    private static final ZoneId EMISSION_ZONE = ZoneId.of("America/Lima");
 
     @Override
     @Transactional
@@ -507,11 +512,35 @@ public class ContractSunatDraftService implements
             throw new InvalidSaleV2Exception("FACTURA requiere cliente SUNAT con RUC.");
         }
 
+        validateIssueDateAllowedBySunat(draft.getIssueDate());
+        SaleV2TaxSupport.validateCustomerDocumentForSunat(
+                DocType.valueOf(draft.getDocType().trim().toUpperCase()),
+                draft.getCustomerDocType(),
+                draft.getCustomerDocNumber(),
+                draft.getTotal()
+        );
+
         // Regla de negocio: paymentMethod solo es obligatorio para contratos CONTADO.
         // En CREDITO, las cuotas ya fueron registradas contra el contrato; al emitir SUNAT
         // se generará la venta final y, si no hay método, se registrará internamente como OTRO.
         if (isContado(paymentType) && (draft.getPaymentMethod() == null || draft.getPaymentMethod().isBlank())) {
             throw new InvalidSaleV2Exception("paymentMethod es obligatorio para contratos al contado.");
+        }
+    }
+
+    private void validateIssueDateAllowedBySunat(LocalDate issueDate) {
+        LocalDate today = LocalDate.now(EMISSION_ZONE);
+        LocalDate minAllowedDate = today.minusDays(3);
+
+        if (issueDate == null) {
+            throw new InvalidSaleV2Exception("La fecha de emision es obligatoria para enviar a SUNAT.");
+        }
+
+        if (issueDate.isBefore(minAllowedDate) || issueDate.isAfter(today)) {
+            throw new InvalidSaleV2Exception(
+                    "La fecha de emision permitida para SUNAT es hoy o maximo 3 dias calendario hacia atras. Fecha venta="
+                            + issueDate + ", rango permitido=" + minAllowedDate + " a " + today
+            );
         }
     }
 

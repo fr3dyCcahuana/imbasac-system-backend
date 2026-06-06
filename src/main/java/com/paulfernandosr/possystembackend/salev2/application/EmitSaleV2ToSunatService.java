@@ -4,6 +4,8 @@ import com.paulfernandosr.possystembackend.common.infrastructure.documentseries.
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.DocumentRequest;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.SunatProps;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
+import com.paulfernandosr.possystembackend.salev2.domain.model.DocType;
+import com.paulfernandosr.possystembackend.salev2.domain.model.SaleV2TaxSupport;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.EmitSaleV2ToSunatUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.output.SaleV2SunatRepository;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2SunatEmissionResponse;
@@ -17,7 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
 
@@ -27,6 +31,7 @@ import java.util.Locale;
 public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
 
     private static final BigDecimal GENERIC_CUSTOMER_TOTAL_LIMIT = new BigDecimal("700.00");
+    private static final ZoneId EMISSION_ZONE = ZoneId.of("America/Lima");
 
     private final SaleV2SunatRepository saleV2SunatRepository;
     private final DocumentSeriesPolicy documentSeriesPolicy;
@@ -198,6 +203,14 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
         }
         documentSeriesPolicy.requireAllowed(docType, sale.getSeries(), InvalidSaleV2Exception::new);
 
+        validateIssueDateAllowedBySunat(sale);
+        SaleV2TaxSupport.validateCustomerDocumentForSunat(
+                DocType.valueOf(docType),
+                sale.getCustomerDocType(),
+                sale.getCustomerDocNumber(),
+                sale.getTotal()
+        );
+
         if (isGenericCustomerDocumentType(sale.getCustomerDocType())) {
             if ("FACTURA".equals(docType)) {
                 throw new InvalidSaleV2Exception("FACTURA no permite cliente genérico. Debe usar RUC.");
@@ -208,6 +221,23 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
             if (sale.getTotal().compareTo(GENERIC_CUSTOMER_TOTAL_LIMIT) > 0) {
                 throw new InvalidSaleV2Exception("No se puede enviar a SUNAT una venta diaria o venta rápida mayor a S/ 700.00 con cliente genérico.");
             }
+        }
+    }
+
+    private void validateIssueDateAllowedBySunat(SaleV2SunatRepository.LockedSunatSale sale) {
+        LocalDate issueDate = sale.getIssueDate();
+        LocalDate today = LocalDate.now(EMISSION_ZONE);
+        LocalDate minAllowedDate = today.minusDays(3);
+
+        if (issueDate == null) {
+            throw new InvalidSaleV2Exception("La fecha de emision es obligatoria para enviar a SUNAT.");
+        }
+
+        if (issueDate.isBefore(minAllowedDate) || issueDate.isAfter(today)) {
+            throw new InvalidSaleV2Exception(
+                    "La fecha de emision permitida para SUNAT es hoy o maximo 3 dias calendario hacia atras. Fecha venta="
+                            + issueDate + ", rango permitido=" + minAllowedDate + " a " + today
+            );
         }
     }
 
@@ -248,10 +278,17 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
 
     private boolean isMotorcycleItem(SaleV2SunatRepository.SaleItemForSunat item) {
         String category = blankIfNull(item.getProductCategory()).trim().toUpperCase(Locale.ROOT);
+        String vehicleType = blankIfNull(item.getVehicleType()).trim().toUpperCase(Locale.ROOT);
+
+        if ("MOTOR".equals(category) || "MOTOR".equals(vehicleType)) {
+            return false;
+        }
+
         return category.contains("MOTOCIC")
                 || "MOTO".equals(category)
                 || "MOTOCICLETA".equals(category)
-                || "MOTOCICLETAS".equals(category);
+                || "MOTOCICLETAS".equals(category)
+                || "MOTOCICLETA".equals(vehicleType);
     }
 
     private void requireMotorcycleValue(Object value, String label, SaleV2SunatRepository.SaleItemForSunat item) {

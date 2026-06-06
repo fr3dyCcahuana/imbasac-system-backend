@@ -91,9 +91,12 @@ public final class SaleV2SunatMapper {
 
         String productCategory = required(item.getProductCategory(), "productCategory");
         boolean motorcycle = isMotorcycle(item);
+        boolean motor = isMotor(item);
         String productDescription = motorcycle
                 ? buildMotorcycleSunatDescription(item)
-                : required(item.getDescription(), "description");
+                : motor
+                    ? buildMotorSunatDescription(item)
+                    : required(item.getDescription(), "description");
 
         String sunatCode;
         if (motorcycle) {
@@ -202,10 +205,54 @@ public final class SaleV2SunatMapper {
         );
     }
 
+    private static String buildMotorSunatDescription(SaleV2SunatRepository.SaleItemForSunat item) {
+        return String.join(", ",
+                nonBlankSegments(
+                        buildMotorCommercialDescription(item),
+                        labelled("MARCA", item.getBrand()),
+                        labelled("COLOR", item.getColor()),
+                        labelled("MODELO", item.getModel()),
+                        labelled("NUM. MOTOR", item.getEngineNumber()),
+                        labelled("DUA", item.getDuaNumber()),
+                        labelled("ITEM DUA", item.getDuaItem()),
+                        labelled("ANIO FABRICACION", item.getYearMake()),
+                        labelled("CARROCERIA", defaultIfBlank(item.getBodywork(), "MOTOR")),
+                        labelled("CAPAC. MOTOR", formatEngineCapacity(item.getEngineCapacity())),
+                        labelled("COMBUSTIBLE", item.getFuel()),
+                        labelled("NUM. CILINDROS", item.getCylinders()),
+                        labelled("PESO NETO", item.getNetWeight()),
+                        labelled("CARGA UTIL", item.getPayload()),
+                        labelled("PESO BRUTO", item.getGrossWeight())
+                )
+        );
+    }
+
+    private static String buildMotorCommercialDescription(SaleV2SunatRepository.SaleItemForSunat item) {
+        String description = cleanCsv(required(item.getDescription(), "description"));
+        String brand = cleanCsv(item.getBrand());
+        String model = cleanCsv(item.getModel());
+        String result = description;
+
+        if (!brand.isBlank() && !containsToken(result, brand)) {
+            result = result + " " + brand;
+        }
+
+        if (!model.isBlank() && !containsToken(result, model)) {
+            result = result + " " + model;
+        }
+
+        return cleanCsv(result);
+    }
+
     private static void validateMotorcycleItems(List<SaleV2SunatRepository.SaleItemForSunat> items) {
         if (items == null) return;
 
         for (SaleV2SunatRepository.SaleItemForSunat item : items) {
+            if (isMotor(item)) {
+                validateMotorItem(item);
+                continue;
+            }
+
             if (!isMotorcycle(item)) continue;
 
             if (nz(item.getQuantity()).compareTo(BigDecimal.ONE) != 0) {
@@ -246,12 +293,45 @@ public final class SaleV2SunatMapper {
         }
     }
 
+    private static void validateMotorItem(SaleV2SunatRepository.SaleItemForSunat item) {
+        if (nz(item.getQuantity()).compareTo(BigDecimal.ONE) != 0) {
+            throw new InvalidSaleV2Exception(
+                    "Cada motor debe emitirse con cantidad 1. Linea=" + item.getLineNumber()
+            );
+        }
+
+        requireMotor(item.getDescription(), "Descripcion", item);
+        requireMotor(item.getEngineNumber(), "Numero de motor", item);
+        requireMotor(item.getYearMake(), "Anio fabricacion", item);
+        requireMotor(item.getBodywork(), "Carroceria", item);
+        requireMotor(item.getColor(), "Color", item);
+        requireMotor(item.getEngineCapacity(), "Capacidad motor", item);
+        requireMotor(item.getFuel(), "Combustible", item);
+        requireMotor(item.getCylinders(), "Numero de cilindros", item);
+        requireMotor(item.getGrossWeight(), "Peso bruto", item);
+        requireMotor(item.getNetWeight(), "Peso neto", item);
+    }
+
+    private static void requireMotor(Object value, String label, SaleV2SunatRepository.SaleItemForSunat item) {
+        if (value == null || String.valueOf(value).trim().isBlank()) {
+            throw new InvalidSaleV2Exception(
+                    "Falta dato de motor para SUNAT: " + label + ". Linea=" + item.getLineNumber()
+            );
+        }
+    }
+
     private static boolean isMotorcycle(SaleV2SunatRepository.SaleItemForSunat item) {
         String category = normalize(item.getProductCategory());
         String type = normalize(item.getVehicleType());
         return "MOTOCICLETAS".equals(category)
                 || "MOTOCICLETA".equals(category)
                 || "MOTOCICLETA".equals(type);
+    }
+
+    private static boolean isMotor(SaleV2SunatRepository.SaleItemForSunat item) {
+        String category = normalize(item.getProductCategory());
+        String type = normalize(item.getVehicleType());
+        return "MOTOR".equals(category) || "MOTOR".equals(type);
     }
 
     private static String normalize(String value) {
@@ -283,6 +363,17 @@ public final class SaleV2SunatMapper {
 
     private static String defaultIfBlank(String value, String fallback) {
         return value == null || value.trim().isBlank() ? fallback : value.trim();
+    }
+
+    private static String labelled(String label, Object value) {
+        String text = cleanCsv(value);
+        return text.isBlank() ? "" : label + ": " + text;
+    }
+
+    private static List<String> nonBlankSegments(String... values) {
+        return java.util.Arrays.stream(values)
+                .filter(v -> v != null && !v.trim().isBlank())
+                .toList();
     }
 
     private static String mapDocumentCode(String docType) {
