@@ -41,6 +41,14 @@ public interface ProductStockMovementRepository {
                             BigDecimal balanceQty,
                             BigDecimal balanceCost);
 
+    void createOutCreditNoteRejection(Long productId,
+                                      BigDecimal quantityOut,
+                                      Long creditNoteItemId,
+                                      BigDecimal unitCost,
+                                      BigDecimal totalCost,
+                                      BigDecimal balanceQty,
+                                      BigDecimal balanceCost);
+
     /**
      * Movimiento de ingreso por edición administrativa de una venta antes de SUNAT.
      */
@@ -78,5 +86,13 @@ public interface ProductStockMovementRepository {
                                         BigDecimal balanceCost);
 
     boolean existsOutProformaInternal(Long proformaItemId);
+
+    boolean existsInProformaInternalReturn(Long proformaItemId);
+
+    boolean existsOutboundSaleItem(Long saleItemId);
+
+    boolean existsInReturnSaleItem(Long saleItemId);
+
+    boolean existsOutCreditNoteRejection(Long creditNoteItemId);
 
 }

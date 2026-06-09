@@ -62,6 +62,18 @@ public class PostgresProductStockMovementRepository implements ProductStockMovem
     }
 
     @Override
+    public void createOutCreditNoteRejection(Long productId,
+                                             BigDecimal quantityOut,
+                                             Long creditNoteItemId,
+                                             BigDecimal unitCost,
+                                             BigDecimal totalCost,
+                                             BigDecimal balanceQty,
+                                             BigDecimal balanceCost) {
+        createMovement(productId, "OUT_CREDIT_NOTE_REJECTED", "credit_note_item", creditNoteItemId,
+                BigDecimal.ZERO, quantityOut, unitCost, totalCost, balanceQty, balanceCost);
+    }
+
+    @Override
     public void createInEdit(Long productId,
                              BigDecimal quantityIn,
                              Long saleItemId,
@@ -99,16 +111,57 @@ public class PostgresProductStockMovementRepository implements ProductStockMovem
 
     @Override
     public boolean existsOutProformaInternal(Long proformaItemId) {
+        return existsMovement("OUT_PROFORMA_INTERNAL", "proforma_item", proformaItemId);
+    }
+
+    @Override
+    public boolean existsInProformaInternalReturn(Long proformaItemId) {
+        return existsMovement("IN_PROFORMA_INTERNAL_RETURN", "proforma_item", proformaItemId);
+    }
+
+    @Override
+    public boolean existsOutboundSaleItem(Long saleItemId) {
+        if (saleItemId == null) return false;
+
         String sql = """
             SELECT COUNT(1)
             FROM product_stock_movement
-            WHERE movement_type = 'OUT_PROFORMA_INTERNAL'
-              AND source_table = 'proforma_item'
+            WHERE movement_type IN ('OUT_SALE', 'OUT_SALE_EDIT')
+              AND source_table = 'sale_item'
               AND source_id = ?
         """;
 
         Long count = jdbcClient.sql(sql)
-                .param(proformaItemId)
+                .param(saleItemId)
+                .query(Long.class)
+                .single();
+
+        return count != null && count > 0;
+    }
+
+    @Override
+    public boolean existsInReturnSaleItem(Long saleItemId) {
+        return existsMovement("IN_RETURN", "sale_item", saleItemId);
+    }
+
+    @Override
+    public boolean existsOutCreditNoteRejection(Long creditNoteItemId) {
+        return existsMovement("OUT_CREDIT_NOTE_REJECTED", "credit_note_item", creditNoteItemId);
+    }
+
+    private boolean existsMovement(String movementType, String sourceTable, Long sourceId) {
+        if (sourceId == null) return false;
+
+        String sql = """
+            SELECT COUNT(1)
+            FROM product_stock_movement
+            WHERE movement_type = ?
+              AND source_table = ?
+              AND source_id = ?
+        """;
+
+        Long count = jdbcClient.sql(sql)
+                .params(movementType, sourceTable, sourceId)
                 .query(Long.class)
                 .single();
 

@@ -6,12 +6,16 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 @RequiredArgsConstructor
 public class SunatEmissionResultParser {
 
     private static final String SUCCESS_RESPONSE = "0";
+    private static final Pattern SUNAT_INFO_CODE_PATTERN = Pattern.compile("(?i)\\b(?:INFO|ERROR)\\s*:?\\s*(\\d{3,5})\\b");
+    private static final Pattern SUNAT_PREFIX_CODE_PATTERN = Pattern.compile("^\\s*(\\d{3,5})\\s*-");
 
     private final ObjectMapper objectMapper;
 
@@ -35,10 +39,15 @@ public class SunatEmissionResultParser {
             String xmlPath = firstNonBlank(textValue(data, "ruta_xml"), textValue(root, "ruta_xml"));
             String cdrPath = firstNonBlank(textValue(data, "ruta_cdr"), textValue(root, "ruta_cdr"));
             String pdfPath = firstNonBlank(textValue(data, "ruta_pdf"), textValue(root, "ruta_pdf"));
+            String hashCode = extractHashCode(data != null ? data.path("codigo_hash") : null);
 
             if (providerError != null) {
                 String description = "Error de comunicación con SUNAT: " + providerError
                         + (detail != null ? " - " + detail : "");
+                String embeddedCode = extractSunatErrorCode(description);
+                if (embeddedCode != null) {
+                    return rejected(embeddedCode, description, hashCode, xmlPath, cdrPath, pdfPath, emittedAt);
+                }
                 return communication(description, xmlPath, cdrPath, pdfPath, emittedAt);
             }
 
@@ -51,8 +60,6 @@ public class SunatEmissionResultParser {
                     textValue(root, "respuesta_sunat_descripcion"),
                     "Respuesta vacía de SUNAT"
             );
-            String hashCode = extractHashCode(data != null ? data.path("codigo_hash") : null);
-
             if (code == null || code.isBlank()) {
                 return communication(
                         "SUNAT/PHP no devolvió código de respuesta. " + description,
@@ -80,20 +87,7 @@ public class SunatEmissionResultParser {
                         .build();
             }
 
-            return SunatEmissionResult.builder()
-                    .status("RECHAZADO")
-                    .code(code)
-                    .description(description)
-                    .hashCode(hashCode)
-                    .xmlPath(xmlPath)
-                    .cdrPath(cdrPath)
-                    .pdfPath(pdfPath)
-                    .emittedAt(emittedAt)
-                    .accepted(false)
-                    .rejected(true)
-                    .communicationError(false)
-                    .retryable(false)
-                    .build();
+            return rejected(code, description, hashCode, xmlPath, cdrPath, pdfPath, emittedAt);
 
         } catch (Exception ex) {
             return communication(
@@ -114,6 +108,29 @@ public class SunatEmissionResultParser {
                 null,
                 emittedAt
         );
+    }
+
+    private SunatEmissionResult rejected(String code,
+                                         String description,
+                                         String hashCode,
+                                         String xmlPath,
+                                         String cdrPath,
+                                         String pdfPath,
+                                         LocalDateTime emittedAt) {
+        return SunatEmissionResult.builder()
+                .status("RECHAZADO")
+                .code(code)
+                .description(description)
+                .hashCode(hashCode)
+                .xmlPath(xmlPath)
+                .cdrPath(cdrPath)
+                .pdfPath(pdfPath)
+                .emittedAt(emittedAt)
+                .accepted(false)
+                .rejected(true)
+                .communicationError(false)
+                .retryable(false)
+                .build();
     }
 
     private SunatEmissionResult communication(String description,
@@ -175,6 +192,22 @@ public class SunatEmissionResultParser {
         for (String value : values) {
             if (value != null && !value.isBlank()) return value.trim();
         }
+        return null;
+    }
+
+    private String extractSunatErrorCode(String text) {
+        if (text == null || text.isBlank()) return null;
+
+        Matcher infoMatcher = SUNAT_INFO_CODE_PATTERN.matcher(text);
+        if (infoMatcher.find()) {
+            return infoMatcher.group(1);
+        }
+
+        Matcher prefixMatcher = SUNAT_PREFIX_CODE_PATTERN.matcher(text);
+        if (prefixMatcher.find()) {
+            return prefixMatcher.group(1);
+        }
+
         return null;
     }
 

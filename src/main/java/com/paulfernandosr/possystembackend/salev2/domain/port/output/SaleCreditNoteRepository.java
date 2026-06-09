@@ -30,6 +30,8 @@ public interface SaleCreditNoteRepository {
                               String pdfPath,
                               LocalDateTime emittedAt);
 
+    void markAsVoided(Long creditNoteId, String reason);
+
     List<CreditNoteView> findCreditNotesBySaleId(Long saleId);
 
     @Getter

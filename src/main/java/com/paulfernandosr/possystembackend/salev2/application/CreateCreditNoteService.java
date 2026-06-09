@@ -149,6 +149,7 @@ public class CreateCreditNoteService implements CreateCreditNoteUseCase {
 
         List<CreditNoteItemResponse> itemResponses = new ArrayList<>();
         List<CreditNoteSunatMapper.CreditNoteLineForSunat> sunatLines = new ArrayList<>();
+        List<ReversibleCreditNoteLine> reversibleLines = new ArrayList<>();
 
         int lineNumber = 1;
         for (ComputedCreditLine line : lines) {
@@ -196,6 +197,17 @@ public class CreateCreditNoteService implements CreateCreditNoteUseCase {
                 }
             }
 
+            reversibleLines.add(ReversibleCreditNoteLine.builder()
+                    .creditNoteItemId(creditNoteItemId)
+                    .saleItemId(original.getSaleItemId())
+                    .productId(original.getProductId())
+                    .quantity(line.quantity())
+                    .unitCost(unitCost)
+                    .totalCost(totalCost)
+                    .returnedToStock(lineReturnsToStock)
+                    .serialUnitId(original.getSerialUnitId())
+                    .build());
+
             itemResponses.add(CreditNoteItemResponse.builder()
                     .creditNoteItemId(creditNoteItemId)
                     .saleItemId(original.getSaleItemId())
@@ -233,6 +245,8 @@ public class CreateCreditNoteService implements CreateCreditNoteUseCase {
                 result.getPdfPath(),
                 result.getEmittedAt()
         );
+
+        rollbackRejectedCreditNoteIfNeeded(creditNoteId, result, reversibleLines);
 
         return buildResponse(
                 creditNoteId,
@@ -301,6 +315,52 @@ public class CreateCreditNoteService implements CreateCreditNoteUseCase {
         } catch (Exception ex) {
             return sunatEmissionResultParser.fromException(ex, LocalDateTime.now());
         }
+    }
+
+    private void rollbackRejectedCreditNoteIfNeeded(Long creditNoteId,
+                                                    SunatEmissionResult result,
+                                                    List<ReversibleCreditNoteLine> lines) {
+        if (result == null || !isDefinitiveRejectedBySunat(result.getStatus(), result.getCode())) {
+            return;
+        }
+
+        if (lines != null) {
+            for (ReversibleCreditNoteLine line : lines) {
+                if (line == null || !Boolean.TRUE.equals(line.getReturnedToStock())) {
+                    continue;
+                }
+                if (productStockMovementRepository.existsOutCreditNoteRejection(line.getCreditNoteItemId())) {
+                    continue;
+                }
+
+                StockMovementBalance balance = productStockRepository.decreaseOnHandOrFail(line.getProductId(), line.getQuantity());
+                productStockMovementRepository.createOutCreditNoteRejection(
+                        line.getProductId(),
+                        line.getQuantity(),
+                        line.getCreditNoteItemId(),
+                        nz(line.getUnitCost()),
+                        nz(line.getTotalCost()),
+                        balance.getQuantityOnHand(),
+                        nz(balance.getAverageCost(), nz(line.getUnitCost()))
+                );
+
+                if (line.getSerialUnitId() != null) {
+                    productSerialUnitRepository.markAsSold(line.getSerialUnitId(), line.getSaleItemId());
+                }
+            }
+        }
+
+        creditNoteRepository.markAsVoided(
+                creditNoteId,
+                "ANULADA AUTOMATICAMENTE POR RECHAZO DEFINITIVO SUNAT: Codigo "
+                        + result.getCode() + " - " + result.getDescription()
+        );
+    }
+
+    private boolean isDefinitiveRejectedBySunat(String sunatStatus, String sunatCode) {
+        String status = blankIfNull(sunatStatus).trim().toUpperCase(Locale.ROOT);
+        String code = blankIfNull(sunatCode).trim();
+        return "RECHAZADO".equals(status) && !code.isBlank() && !"0".equals(code);
     }
 
     private List<ComputedCreditLine> buildLines(String typeCode,
@@ -522,6 +582,19 @@ public class CreateCreditNoteService implements CreateCreditNoteUseCase {
 
     private static String blankIfNull(String value) {
         return value == null ? "" : value;
+    }
+
+    @Getter
+    @Builder
+    private static class ReversibleCreditNoteLine {
+        private Long creditNoteItemId;
+        private Long saleItemId;
+        private Long productId;
+        private BigDecimal quantity;
+        private BigDecimal unitCost;
+        private BigDecimal totalCost;
+        private Boolean returnedToStock;
+        private Long serialUnitId;
     }
 
     private record ComputedCreditLine(SaleCreditNoteRepository.SaleItemForCreditNote original,

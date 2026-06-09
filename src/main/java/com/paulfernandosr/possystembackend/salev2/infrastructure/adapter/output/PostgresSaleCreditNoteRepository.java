@@ -333,6 +333,25 @@ public class PostgresSaleCreditNoteRepository implements SaleCreditNoteRepositor
     }
 
     @Override
+    public void markAsVoided(Long creditNoteId, String reason) {
+        String sql = """
+            UPDATE credit_note
+               SET status = 'ANULADA',
+                   reason = CASE
+                              WHEN ? IS NULL OR ? = '' THEN reason
+                              WHEN reason IS NULL OR reason = '' THEN ?
+                              ELSE reason || E'\n' || ?
+                            END,
+                   updated_at = NOW()
+             WHERE id = ?
+        """;
+
+        jdbcClient.sql(sql)
+                .params(reason, reason, reason, reason, creditNoteId)
+                .update();
+    }
+
+    @Override
     public List<CreditNoteView> findCreditNotesBySaleId(Long saleId) {
         String headerSql = """
             SELECT

@@ -71,6 +71,7 @@ public class ContractSunatDraftService implements
     private final SunatProps sunatProps;
     private final SunatEmissionResultParser sunatEmissionResultParser;
     private static final ZoneId EMISSION_ZONE = ZoneId.of("America/Lima");
+    private final SunatDefinitiveRejectionReleaseService definitiveRejectionReleaseService;
 
     @Override
     @Transactional
@@ -207,6 +208,7 @@ public class ContractSunatDraftService implements
         log.info("SUNAT contract draft request: saleId={}, contractId={}, docType={}, series={}, number={}",
                 draft.getSaleId(), draft.getContractId(), draft.getDocType(), draft.getSeries(), draft.getNumber());
 
+        SunatEmissionResult result;
         try {
             String rawResponse = sunatRestClient.post()
                     .body(sunatRequest)
@@ -215,20 +217,19 @@ public class ContractSunatDraftService implements
 
             log.info("SUNAT contract draft response: {}", rawResponse);
 
-            SunatEmissionResult result = sunatEmissionResultParser.parse(rawResponse, LocalDateTime.now());
-
-            persistEmissionResult(draft, saleId, result);
-
-            if (result.isAccepted()) {
-                contractRepository.updateStatusAndSale(contractId, ContractStatus.FACTURADO, saleId, contract.getNotes());
-            }
-
-            return buildEmissionResponse(draft, result);
+            result = sunatEmissionResultParser.parse(rawResponse, LocalDateTime.now());
         } catch (Exception ex) {
-            SunatEmissionResult result = sunatEmissionResultParser.fromException(ex, LocalDateTime.now());
-            persistEmissionResult(draft, saleId, result);
-            return buildEmissionResponse(draft, result);
+            result = sunatEmissionResultParser.fromException(ex, LocalDateTime.now());
         }
+
+        persistEmissionResult(draft, saleId, result);
+        releaseSaleOnDefinitiveRejection(saleId, result);
+
+        if (result.isAccepted()) {
+            contractRepository.updateStatusAndSale(contractId, ContractStatus.FACTURADO, saleId, contract.getNotes());
+        }
+
+        return buildEmissionResponse(draft, result);
     }
 
     private Long createFinalSaleFromDraft(ContractSunatDraftResponse draft, User user) {
@@ -307,6 +308,23 @@ public class ContractSunatDraftService implements
                 result.getEmittedAt(),
                 draftStatus
         );
+    }
+
+    private void releaseSaleOnDefinitiveRejection(Long saleId, SunatEmissionResult result) {
+        if (result == null || !isDefinitiveRejectedBySunat(result.getStatus(), result.getCode())) {
+            return;
+        }
+
+        definitiveRejectionReleaseService.release(
+                saleId,
+                "Codigo " + result.getCode() + " - " + result.getDescription()
+        );
+    }
+
+    private boolean isDefinitiveRejectedBySunat(String sunatStatus, String sunatCode) {
+        String status = nz(sunatStatus).trim().toUpperCase();
+        String code = nz(sunatCode).trim();
+        return "RECHAZADO".equals(status) && !code.isBlank() && !"0".equals(code);
     }
 
     private SaleV2SunatRepository.LockedSunatSale buildSaleForSunat(ContractSunatDraftResponse draft) {

@@ -39,6 +39,7 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
     private final SunatProps sunatProps;
     private final SunatEmissionResultParser sunatEmissionResultParser;
     private final SaleV2SunatRelationFinalizerService relationFinalizerService;
+    private final SunatDefinitiveRejectionReleaseService definitiveRejectionReleaseService;
 
     @Override
     @Transactional(noRollbackFor = Exception.class)
@@ -120,6 +121,7 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
                 sale.getTotal()
         );
 
+        SunatEmissionResult result;
         try {
             String rawResponse = sunatRestClient.post()
                     .body(request)
@@ -128,15 +130,13 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
 
             log.info("SUNAT V2 response: {}", rawResponse);
 
-            SunatEmissionResult result = sunatEmissionResultParser.parse(rawResponse, LocalDateTime.now());
-            persistAndFinalize(saleId, sale, result);
-            return buildResponse(sale, result);
-
+            result = sunatEmissionResultParser.parse(rawResponse, LocalDateTime.now());
         } catch (Exception ex) {
-            SunatEmissionResult result = sunatEmissionResultParser.fromException(ex, LocalDateTime.now());
-            persistAndFinalize(saleId, sale, result);
-            return buildResponse(sale, result);
+            result = sunatEmissionResultParser.fromException(ex, LocalDateTime.now());
         }
+
+        persistAndFinalize(saleId, sale, result);
+        return buildResponse(sale, result);
     }
 
     private void persistAndFinalize(Long saleId,
@@ -168,6 +168,13 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
                     result.getStatus(),
                     result.getDescription()
             );
+
+            if (isDefinitiveRejectedBySunat(result.getStatus(), result.getCode())) {
+                definitiveRejectionReleaseService.release(
+                        saleId,
+                        "Codigo " + result.getCode() + " - " + result.getDescription()
+                );
+            }
         }
     }
 
@@ -196,6 +203,12 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
     private void validateSale(SaleV2SunatRepository.LockedSunatSale sale) {
         if (!"EMITIDA".equalsIgnoreCase(blankIfNull(sale.getStatus()))) {
             throw new InvalidSaleV2Exception("Solo se puede emitir a SUNAT una venta EMITIDA. Estado actual: " + sale.getStatus());
+        }
+        if (isDefinitiveRejectedBySunat(sale.getSunatStatus(), sale.getSunatResponseCode())) {
+            throw new InvalidSaleV2Exception(
+                    "SUNAT rechazo definitivamente este comprobante y no se puede reenviar con la misma serie y numero. Codigo="
+                            + sale.getSunatResponseCode()
+            );
         }
         String docType = blankIfNull(sale.getDocType()).toUpperCase(Locale.ROOT);
         if (!"BOLETA".equals(docType) && !"FACTURA".equals(docType)) {
@@ -250,6 +263,12 @@ public class EmitSaleV2ToSunatService implements EmitSaleV2ToSunatUseCase {
         };
     }
 
+
+    private boolean isDefinitiveRejectedBySunat(String sunatStatus, String sunatCode) {
+        String status = blankIfNull(sunatStatus).trim().toUpperCase(Locale.ROOT);
+        String code = blankIfNull(sunatCode).trim();
+        return "RECHAZADO".equals(status) && !code.isBlank() && !"0".equals(code);
+    }
 
     private void validateMotorcycleItems(List<SaleV2SunatRepository.SaleItemForSunat> items) {
         for (SaleV2SunatRepository.SaleItemForSunat item : items) {
