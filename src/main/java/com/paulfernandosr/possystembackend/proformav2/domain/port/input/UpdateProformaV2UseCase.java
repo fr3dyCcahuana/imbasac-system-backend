@@ -4,5 +4,5 @@ import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.inp
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.UpdateProformaV2Request;
 
 public interface UpdateProformaV2UseCase {
-    ProformaV2Response update(Long proformaId, UpdateProformaV2Request request);
+    ProformaV2Response update(Long proformaId, UpdateProformaV2Request request, String actorUsername);
 }

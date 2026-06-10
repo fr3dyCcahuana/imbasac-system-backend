@@ -14,8 +14,11 @@ import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.inp
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaV2Response;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.output.model.LockedDocumentSeries;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.output.model.ProductSnapshot;
+import com.paulfernandosr.possystembackend.role.domain.RoleName;
 import com.paulfernandosr.possystembackend.salev2.domain.model.PaymentType;
 import com.paulfernandosr.possystembackend.salev2.domain.model.TaxStatus;
+import com.paulfernandosr.possystembackend.user.domain.User;
+import com.paulfernandosr.possystembackend.user.domain.port.output.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,11 +39,14 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
     private final ProformaRepository proformaRepository;
     private final ProformaItemRepository proformaItemRepository;
     private final ProductSnapshotRepository productSnapshotRepository;
+    private final UserRepository userRepository;
 
     @Override
     @Transactional
-    public ProformaV2Response create(CreateProformaV2Request request) {
+    public ProformaV2Response create(CreateProformaV2Request request, String actorUsername) {
         validateRequest(request);
+        User actor = resolveActor(actorUsername, request.getCreatedBy());
+        Long createdBy = actor != null && actor.getId() != null ? actor.getId() : request.getCreatedBy();
 
         LockedDocumentSeries series = documentSeriesRepository.lock(
                 "PROFORMA",
@@ -211,7 +217,7 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
             total = subtotalBase.setScale(4, RoundingMode.HALF_UP);
         }
 
-        validatePriceCMinimumTotal(request.getPriceList(), total);
+        validatePriceCMinimumTotal(request.getPriceList(), total, isClientRole(actor));
 
         PaymentType paymentType = request.getPaymentType() != null ? request.getPaymentType() : PaymentType.CONTADO;
         Integer creditDays = paymentType == PaymentType.CREDITO ? request.getCreditDays() : null;
@@ -223,7 +229,7 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
 
         Proforma proforma = Proforma.builder()
                 .stationId(request.getStationId())
-                .createdBy(request.getCreatedBy())
+                .createdBy(createdBy)
                 .series(request.getSeries())
                 .number(number)
                 .issueDate(issueDate)
@@ -407,7 +413,11 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
         return v.setScale(2, RoundingMode.HALF_UP);
     }
 
-    private void validatePriceCMinimumTotal(Character priceList, BigDecimal total) {
+    private void validatePriceCMinimumTotal(Character priceList, BigDecimal total, boolean clientRole) {
+        if (!clientRole) {
+            return;
+        }
+
         if (priceList == null || Character.toUpperCase(priceList) != 'C') {
             return;
         }
@@ -418,5 +428,24 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
                     "Precio C requiere un mínimo de S/ 2000.00 para registrar la proforma."
             );
         }
+    }
+
+    private User resolveActor(String actorUsername, Long fallbackUserId) {
+        if (actorUsername != null && !actorUsername.isBlank()) {
+            return userRepository.findByUsername(actorUsername.trim())
+                    .orElseThrow(() -> new InvalidProformaV2Exception("Usuario autenticado no encontrado: " + actorUsername));
+        }
+
+        if (fallbackUserId != null) {
+            return userRepository.findById(fallbackUserId).orElse(null);
+        }
+
+        return null;
+    }
+
+    private boolean isClientRole(User user) {
+        return user != null
+                && user.getRole() != null
+                && RoleName.CLIENTE.equals(user.getRole().getName());
     }
 }

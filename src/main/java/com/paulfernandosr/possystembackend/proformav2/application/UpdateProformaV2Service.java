@@ -12,8 +12,11 @@ import com.paulfernandosr.possystembackend.proformav2.domain.port.output.Proform
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaV2Response;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.UpdateProformaV2Request;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.output.model.ProductSnapshot;
+import com.paulfernandosr.possystembackend.role.domain.RoleName;
 import com.paulfernandosr.possystembackend.salev2.domain.model.PaymentType;
 import com.paulfernandosr.possystembackend.salev2.domain.model.TaxStatus;
+import com.paulfernandosr.possystembackend.user.domain.User;
+import com.paulfernandosr.possystembackend.user.domain.port.output.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,10 +37,11 @@ public class UpdateProformaV2Service implements UpdateProformaV2UseCase {
     private final ProformaRepository proformaRepository;
     private final ProformaItemRepository proformaItemRepository;
     private final ProductSnapshotRepository productSnapshotRepository;
+    private final UserRepository userRepository;
 
     @Override
     @Transactional
-    public ProformaV2Response update(Long proformaId, UpdateProformaV2Request request) {
+    public ProformaV2Response update(Long proformaId, UpdateProformaV2Request request, String actorUsername) {
         validateBasic(proformaId, request);
 
         Proforma locked = proformaRepository.lockById(proformaId)
@@ -69,7 +73,8 @@ public class UpdateProformaV2Service implements UpdateProformaV2UseCase {
         LocalDate dueDate = resolveDueDate(request, locked, paymentType);
 
         CalculatedItems calculated = buildItems(request.getItems(), priceList, taxStatus, igvRate, igvIncluded);
-        validatePriceCMinimumTotal(priceList, calculated.total());
+        User actor = resolveActor(actorUsername, locked.getCreatedBy());
+        validatePriceCMinimumTotal(priceList, calculated.total(), isClientRole(actor));
 
         Long customerId = request.getCustomerId() != null ? request.getCustomerId() : locked.getCustomerId();
         String customerDocType = request.getCustomerDocType() != null ? request.getCustomerDocType() : locked.getCustomerDocType();
@@ -539,7 +544,11 @@ public class UpdateProformaV2Service implements UpdateProformaV2UseCase {
         return value.setScale(2, RoundingMode.HALF_UP);
     }
 
-    private void validatePriceCMinimumTotal(Character priceList, BigDecimal total) {
+    private void validatePriceCMinimumTotal(Character priceList, BigDecimal total, boolean clientRole) {
+        if (!clientRole) {
+            return;
+        }
+
         if (priceList == null || Character.toUpperCase(priceList) != 'C') {
             return;
         }
@@ -550,6 +559,25 @@ public class UpdateProformaV2Service implements UpdateProformaV2UseCase {
                     "Precio C requiere un mínimo de S/ 2000.00 para registrar la proforma."
             );
         }
+    }
+
+    private User resolveActor(String actorUsername, Long fallbackUserId) {
+        if (actorUsername != null && !actorUsername.isBlank()) {
+            return userRepository.findByUsername(actorUsername.trim())
+                    .orElseThrow(() -> new InvalidProformaV2Exception("Usuario autenticado no encontrado: " + actorUsername));
+        }
+
+        if (fallbackUserId != null) {
+            return userRepository.findById(fallbackUserId).orElse(null);
+        }
+
+        return null;
+    }
+
+    private boolean isClientRole(User user) {
+        return user != null
+                && user.getRole() != null
+                && RoleName.CLIENTE.equals(user.getRole().getName());
     }
 
     private record CalculatedItems(

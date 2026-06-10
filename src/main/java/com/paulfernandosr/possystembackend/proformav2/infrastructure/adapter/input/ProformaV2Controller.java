@@ -36,8 +36,12 @@ public class ProformaV2Controller {
     private final UpdateProformaV2UseCase updateUseCase;
 
     @PostMapping
-    public ResponseEntity<SuccessResponse<ProformaV2Response>> create(@RequestBody CreateProformaV2Request request) {
-        ProformaV2Response created = createUseCase.create(request);
+    public ResponseEntity<SuccessResponse<ProformaV2Response>> create(
+            @RequestBody CreateProformaV2Request request,
+            Principal principal
+    ) {
+        String username = principal != null ? principal.getName() : null;
+        ProformaV2Response created = createUseCase.create(request, username);
         return ResponseEntity
                 .created(URI.create("/proformas/v2/" + created.getNumber()))
                 .body(SuccessResponse.ok(created));
@@ -51,9 +55,11 @@ public class ProformaV2Controller {
     @PutMapping("/{id}")
     public ResponseEntity<SuccessResponse<ProformaV2Response>> update(
             @PathVariable("id") Long id,
-            @RequestBody UpdateProformaV2Request request
+            @RequestBody UpdateProformaV2Request request,
+            Principal principal
     ) {
-        return ResponseEntity.ok(SuccessResponse.ok(updateUseCase.update(id, request)));
+        String username = principal != null ? principal.getName() : null;
+        return ResponseEntity.ok(SuccessResponse.ok(updateUseCase.update(id, request, username)));
     }
 
     @PostMapping("/{number}/convert")

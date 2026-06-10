@@ -2,6 +2,7 @@ package com.paulfernandosr.possystembackend.common.infrastructure;
 
 import com.paulfernandosr.possystembackend.common.domain.exception.DomainException;
 import com.paulfernandosr.possystembackend.common.infrastructure.response.ErrorResponse;
+import com.paulfernandosr.possystembackend.proformav2.domain.exception.InvalidProformaV2Exception;
 import com.paulfernandosr.possystembackend.security.domain.exception.InvalidCredentialsException;
 import com.paulfernandosr.possystembackend.security.domain.exception.InvalidSessionException;
 import lombok.RequiredArgsConstructor;
@@ -63,6 +64,14 @@ public class GlobalExceptionHandler {
                 .timestamp(LocalDateTime.now())
                 .build();
         return ResponseEntity.status(exception.getStatusCode()).body(body);
+    }
+
+    @ExceptionHandler(InvalidProformaV2Exception.class)
+    public ResponseEntity<ErrorResponse> handleInvalidProformaV2Exception(InvalidProformaV2Exception exception) {
+        log.error("GlobalExceptionHandler:handleInvalidProformaV2Exception", exception);
+
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.badRequest(exception));
     }
 
     @ExceptionHandler(RuntimeException.class)

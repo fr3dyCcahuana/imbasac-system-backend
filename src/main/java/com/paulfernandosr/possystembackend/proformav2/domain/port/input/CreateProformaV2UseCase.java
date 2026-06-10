@@ -4,5 +4,5 @@ import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.inp
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaV2Response;
 
 public interface CreateProformaV2UseCase {
-    ProformaV2Response create(CreateProformaV2Request request);
+    ProformaV2Response create(CreateProformaV2Request request, String actorUsername);
 }
