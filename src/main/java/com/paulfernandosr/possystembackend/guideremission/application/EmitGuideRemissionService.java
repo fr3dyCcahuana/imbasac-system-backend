@@ -32,11 +32,31 @@ public class EmitGuideRemissionService implements EmitGuideRemissionUseCase {
         GuideRemissionDocument document = guideRemissionRepository.findDocument(properties.getCompany().getRuc(), serie, numero)
                 .orElseThrow(() -> new InvalidGuideRemissionException("No se encontró la guía de remisión " + serie + "-" + numero + "."));
 
-        if (isFinalOrInFlight(document.getStatus())) {
+        if (isAcceptedStatus(document.getStatus())) {
+            return GuideRemissionEmissionResponse.builder()
+                    .success(true)
+                    .status(GuideRemissionStatus.ACCEPTED.name())
+                    .message("La guia ya fue aceptada por SUNAT.")
+                    .serie(serie)
+                    .numero(numero)
+                    .build();
+        }
+
+        if (isRejectedStatus(document.getStatus())) {
             return GuideRemissionEmissionResponse.builder()
                     .success(false)
                     .status(document.getStatus())
-                    .message("La guía no puede emitirse porque su estado actual es " + document.getStatus() + ".")
+                    .message("La guia fue rechazada por SUNAT y no puede reenviarse con la misma serie y numero.")
+                    .serie(serie)
+                    .numero(numero)
+                    .build();
+        }
+
+        if (isPendingSunatStatus(document.getStatus()) && !hasText(document.getTicket())) {
+            return GuideRemissionEmissionResponse.builder()
+                    .success(false)
+                    .status(document.getStatus())
+                    .message("La guia figura enviada a SUNAT, pero no tiene ticket registrado para reconsultar.")
                     .serie(serie)
                     .numero(numero)
                     .build();
@@ -65,6 +85,9 @@ public class EmitGuideRemissionService implements EmitGuideRemissionUseCase {
                 responseEvaluator.assertSuccessfulSubmission(submissionResponse);
                 guideRemissionRepository.saveSubmission(properties.toCompanyPayload(), submissionRequest, submissionResponse);
                 ticket = submissionResponse.getNumTicket();
+            } else {
+                log.info("[guide-remission][emit] Reconsultando ticket existente. serie={}, numero={}, status={}, ticket={}",
+                        serie, numero, document.getStatus(), maskTicket(ticket));
             }
 
             GuideRemissionTicketQuery ticketQuery = GuideRemissionTicketQuery.builder()
@@ -210,15 +233,36 @@ public class EmitGuideRemissionService implements EmitGuideRemissionUseCase {
         return GuideRemissionStatus.TICKET_CHECKED;
     }
 
-    private boolean isFinalOrInFlight(String status) {
+    private boolean isAcceptedStatus(String status) {
         if (!hasText(status)) {
             return false;
         }
         String normalized = status.trim().toUpperCase();
         return normalized.equals(GuideRemissionStatus.ACCEPTED.name())
+                || normalized.equals("ACEPTADA")
+                || normalized.equals("SUCCESS");
+    }
+
+    private boolean isRejectedStatus(String status) {
+        if (!hasText(status)) {
+            return false;
+        }
+        String normalized = status.trim().toUpperCase();
+        return normalized.equals(GuideRemissionStatus.REJECTED.name())
+                || normalized.equals("RECHAZADA");
+    }
+
+    private boolean isPendingSunatStatus(String status) {
+        if (!hasText(status)) {
+            return false;
+        }
+        String normalized = status.trim().toUpperCase();
+        return normalized.equals(GuideRemissionStatus.SUBMITTED.name())
                 || normalized.equals(GuideRemissionStatus.PROCESSING.name())
-                || normalized.equals(GuideRemissionStatus.SUBMITTED.name())
-                || normalized.equals(GuideRemissionStatus.TICKET_CHECKED.name());
+                || normalized.equals(GuideRemissionStatus.TICKET_CHECKED.name())
+                || normalized.equals("ENVIADO")
+                || normalized.equals("ENVIADA")
+                || normalized.equals("EN_PROCESO");
     }
 
     private String format(java.time.LocalDate date) {
@@ -234,6 +278,16 @@ public class EmitGuideRemissionService implements EmitGuideRemissionUseCase {
             return first;
         }
         return hasText(second) ? second : null;
+    }
+
+    private String maskTicket(String ticket) {
+        if (ticket == null || ticket.isBlank()) {
+            return "";
+        }
+        if (ticket.length() <= 8) {
+            return "***";
+        }
+        return ticket.substring(0, 4) + "***" + ticket.substring(ticket.length() - 4);
     }
 
     private boolean hasText(String value) {
