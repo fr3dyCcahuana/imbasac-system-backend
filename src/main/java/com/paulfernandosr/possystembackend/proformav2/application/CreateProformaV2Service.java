@@ -17,6 +17,7 @@ import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.out
 import com.paulfernandosr.possystembackend.role.domain.RoleName;
 import com.paulfernandosr.possystembackend.salev2.domain.model.PaymentType;
 import com.paulfernandosr.possystembackend.salev2.domain.model.TaxStatus;
+import com.paulfernandosr.possystembackend.stockreservation.domain.port.output.ProductStockReservationRepository;
 import com.paulfernandosr.possystembackend.user.domain.User;
 import com.paulfernandosr.possystembackend.user.domain.port.output.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,7 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
     private final ProformaItemRepository proformaItemRepository;
     private final ProductSnapshotRepository productSnapshotRepository;
     private final UserRepository userRepository;
+    private final ProductStockReservationRepository productStockReservationRepository;
 
     @Override
     @Transactional
@@ -267,6 +269,7 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
             it.setProformaId(created.getId());
         }
         proformaItemRepository.batchCreate(items);
+        productStockReservationRepository.replaceActiveForProforma(created.getId(), createdBy);
 
         return ProformaMapper.toResponse(created, items);
     }

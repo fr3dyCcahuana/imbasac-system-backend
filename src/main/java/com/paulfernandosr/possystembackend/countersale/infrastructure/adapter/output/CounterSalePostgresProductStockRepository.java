@@ -56,7 +56,15 @@ public class CounterSalePostgresProductStockRepository implements ProductStockRe
                SET quantity_on_hand = quantity_on_hand - ?,
                    last_movement_at = NOW()
              WHERE product_id = ?
-               AND quantity_on_hand >= ?
+               AND (
+                    quantity_on_hand - COALESCE((
+                      SELECT SUM(r.quantity)
+                        FROM product_stock_reservation r
+                       WHERE r.product_id = product_stock.product_id
+                         AND r.status = 'ACTIVE'
+                         AND r.reserved_date = CURRENT_DATE
+                    ), 0)
+               ) >= ?
             RETURNING quantity_on_hand, average_cost, last_unit_cost
         """;
 

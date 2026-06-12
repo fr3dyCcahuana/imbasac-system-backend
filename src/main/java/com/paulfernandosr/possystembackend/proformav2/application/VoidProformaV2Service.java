@@ -5,6 +5,7 @@ import com.paulfernandosr.possystembackend.proformav2.domain.model.ProformaStatu
 import com.paulfernandosr.possystembackend.proformav2.domain.model.VoidProformaV2Response;
 import com.paulfernandosr.possystembackend.proformav2.domain.port.input.VoidProformaV2UseCase;
 import com.paulfernandosr.possystembackend.proformav2.domain.port.output.ProformaRepository;
+import com.paulfernandosr.possystembackend.stockreservation.domain.port.output.ProductStockReservationRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class VoidProformaV2Service implements VoidProformaV2UseCase {
 
     private final ProformaRepository proformaRepository;
+    private final ProductStockReservationRepository productStockReservationRepository;
 
     @Override
     @Transactional
@@ -35,6 +37,7 @@ public class VoidProformaV2Service implements VoidProformaV2UseCase {
         // No existe columna void_reason; se deja trazabilidad en notes.
         String voidNote = (reason == null || reason.isBlank()) ? "ANULADA" : "ANULADA: " + reason;
         proformaRepository.appendNotesAndSetStatus(proformaId, voidNote, "ANULADA");
+        productStockReservationRepository.releaseActiveForProforma(proformaId);
 
         return VoidProformaV2Response.builder()
                 .proformaId(proformaId)

@@ -13,6 +13,7 @@ import com.paulfernandosr.possystembackend.salev2.domain.port.input.CreateSaleV2
 import com.paulfernandosr.possystembackend.salev2.domain.port.output.*;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2CreateRequest;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2DocumentResponse;
+import com.paulfernandosr.possystembackend.stockreservation.domain.port.output.ProductStockReservationRepository;
 import com.paulfernandosr.possystembackend.user.domain.User;
 import com.paulfernandosr.possystembackend.user.domain.port.output.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +57,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
     private final ProformaRepository proformaRepository;
     private final ProformaItemRepository proformaItemRepository;
     private final SaleReferenceRepository saleReferenceRepository;
+    private final ProductStockReservationRepository productStockReservationRepository;
 
     // Política de costo snapshot (Regla #8)
     private final CostPolicy costPolicy = CostPolicy.PROMEDIO;
@@ -363,6 +365,10 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                 dueDate,
                 request.getNotes()
         );
+
+        if (sourceProforma != null) {
+            productStockReservationRepository.consumeActiveForProforma(sourceProforma.getId());
+        }
 
         for (ComputedLine line : computedLines) {
             Long saleItemId = saleV2Repository.insertSaleItem(

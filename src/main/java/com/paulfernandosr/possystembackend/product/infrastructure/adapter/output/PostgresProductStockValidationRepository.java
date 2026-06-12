@@ -49,10 +49,17 @@ public class PostgresProductStockValidationRepository implements ProductStockVal
                      WHERE psu.product_id = p.id
                        AND psu.status = 'EN_ALMACEN'
                   )
-                  ELSE COALESCE(ps.quantity_on_hand, 0)
+                  ELSE GREATEST(COALESCE(ps.quantity_on_hand, 0) - COALESCE(res.reserved_qty, 0), 0)
                 END AS stock_available
               FROM product p
               LEFT JOIN product_stock ps ON ps.product_id = p.id
+              LEFT JOIN (
+                SELECT product_id, SUM(quantity) AS reserved_qty
+                FROM product_stock_reservation
+                WHERE status = 'ACTIVE'
+                  AND reserved_date = CURRENT_DATE
+                GROUP BY product_id
+              ) res ON res.product_id = p.id
               WHERE p.id IN (""" + placeholders + """
               )
             )

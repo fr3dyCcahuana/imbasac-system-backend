@@ -2,9 +2,12 @@ package com.paulfernandosr.possystembackend.common.infrastructure;
 
 import com.paulfernandosr.possystembackend.common.domain.exception.DomainException;
 import com.paulfernandosr.possystembackend.common.infrastructure.response.ErrorResponse;
+import com.paulfernandosr.possystembackend.countersale.domain.exception.InvalidCounterSaleException;
 import com.paulfernandosr.possystembackend.proformav2.domain.exception.InvalidProformaV2Exception;
+import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
 import com.paulfernandosr.possystembackend.security.domain.exception.InvalidCredentialsException;
 import com.paulfernandosr.possystembackend.security.domain.exception.InvalidSessionException;
+import com.paulfernandosr.possystembackend.stockreservation.domain.exception.StockReservationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSource;
@@ -69,6 +72,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidProformaV2Exception.class)
     public ResponseEntity<ErrorResponse> handleInvalidProformaV2Exception(InvalidProformaV2Exception exception) {
         log.error("GlobalExceptionHandler:handleInvalidProformaV2Exception", exception);
+
+        return ResponseEntity.badRequest()
+                .body(ErrorResponse.badRequest(exception));
+    }
+
+    @ExceptionHandler({
+            InvalidSaleV2Exception.class,
+            InvalidCounterSaleException.class,
+            StockReservationException.class
+    })
+    public ResponseEntity<ErrorResponse> handleBusinessBadRequest(RuntimeException exception) {
+        log.error("GlobalExceptionHandler:handleBusinessBadRequest", exception);
 
         return ResponseEntity.badRequest()
                 .body(ErrorResponse.badRequest(exception));

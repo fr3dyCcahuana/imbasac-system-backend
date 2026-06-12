@@ -86,11 +86,17 @@ public class PostgresProductRepository implements ProductRepository {
                     WHERE su.product_id = id AND su.status = 'EN_ALMACEN'
                   ), 0)
                   ELSE
-                    COALESCE((
+                    GREATEST(COALESCE((
                       SELECT ps.quantity_on_hand
                       FROM product_stock ps
                       WHERE ps.product_id = id
-                    ), 0)
+                    ), 0) - COALESCE((
+                      SELECT SUM(r.quantity)
+                      FROM product_stock_reservation r
+                      WHERE r.product_id = id
+                        AND r.status = 'ACTIVE'
+                        AND r.reserved_date = CURRENT_DATE
+                    ), 0), 0)
                 END AS stock_on_hand,
                 created_at,
                 updated_at
@@ -187,7 +193,7 @@ public class PostgresProductRepository implements ProductRepository {
             p.gift_allowed,
             CASE
               WHEN p.manage_by_serial = TRUE THEN COALESCE(su_agg.serial_qty, 0)
-              ELSE COALESCE(ps.quantity_on_hand, 0)
+              ELSE GREATEST(COALESCE(ps.quantity_on_hand, 0) - COALESCE(res.reserved_qty, 0), 0)
             END AS stock_on_hand,
             COALESCE(img_agg.image_qty, 0) AS image_qty,
             p.created_at,
@@ -195,6 +201,14 @@ public class PostgresProductRepository implements ProductRepository {
           FROM product p
           LEFT JOIN product_stock ps
                  ON ps.product_id = p.id
+          LEFT JOIN (
+            SELECT product_id, SUM(quantity) AS reserved_qty
+            FROM product_stock_reservation
+            WHERE status = 'ACTIVE'
+              AND reserved_date = CURRENT_DATE
+            GROUP BY product_id
+          ) res
+                 ON res.product_id = p.id
           LEFT JOIN (
             SELECT product_id, COUNT(*)::numeric(14,3) AS serial_qty
             FROM product_serial_unit
@@ -354,13 +368,21 @@ public class PostgresProductRepository implements ProductRepository {
                 -- ✅ stock real (on hand)
                 CASE
                   WHEN p.manage_by_serial = TRUE THEN COALESCE(su_agg.serial_qty, 0)
-                  ELSE COALESCE(ps.quantity_on_hand, 0)
+                  ELSE GREATEST(COALESCE(ps.quantity_on_hand, 0) - COALESCE(res.reserved_qty, 0), 0)
                 END AS stock_on_hand,
                 p.created_at,
                 p.updated_at
             FROM product p
             LEFT JOIN product_stock ps
                    ON ps.product_id = p.id
+            LEFT JOIN (
+              SELECT product_id, SUM(quantity) AS reserved_qty
+              FROM product_stock_reservation
+              WHERE status = 'ACTIVE'
+                AND reserved_date = CURRENT_DATE
+              GROUP BY product_id
+            ) res
+                   ON res.product_id = p.id
             LEFT JOIN (
               SELECT
                 product_id,
@@ -418,13 +440,21 @@ public class PostgresProductRepository implements ProductRepository {
                 -- ✅ stock real (on hand)
                 CASE
                   WHEN p.manage_by_serial = TRUE THEN COALESCE(su_agg.serial_qty, 0)
-                  ELSE COALESCE(ps.quantity_on_hand, 0)
+                  ELSE GREATEST(COALESCE(ps.quantity_on_hand, 0) - COALESCE(res.reserved_qty, 0), 0)
                 END AS stock_on_hand,
                 p.created_at,
                 p.updated_at
             FROM product p
             LEFT JOIN product_stock ps
                    ON ps.product_id = p.id
+            LEFT JOIN (
+              SELECT product_id, SUM(quantity) AS reserved_qty
+              FROM product_stock_reservation
+              WHERE status = 'ACTIVE'
+                AND reserved_date = CURRENT_DATE
+              GROUP BY product_id
+            ) res
+                   ON res.product_id = p.id
             LEFT JOIN (
               SELECT
                 product_id,

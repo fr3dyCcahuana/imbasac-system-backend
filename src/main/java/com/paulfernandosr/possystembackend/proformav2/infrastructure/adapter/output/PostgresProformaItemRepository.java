@@ -70,13 +70,22 @@ public class PostgresProformaItemRepository implements ProformaItemRepository {
             p.warehouse_location AS warehouse_location,
             CASE
               WHEN p.manage_by_serial = TRUE THEN COALESCE(su_agg.serial_qty, 0)
-              ELSE COALESCE(ps.quantity_on_hand, 0)
+              ELSE GREATEST(COALESCE(ps.quantity_on_hand, 0) - COALESCE(res.reserved_qty, 0), 0)
             END AS stock_available
           FROM proforma_item pi
           JOIN product p
             ON p.id = pi.product_id
           LEFT JOIN product_stock ps
             ON ps.product_id = p.id
+          LEFT JOIN (
+            SELECT product_id, SUM(quantity) AS reserved_qty
+            FROM product_stock_reservation
+            WHERE status = 'ACTIVE'
+              AND reserved_date = CURRENT_DATE
+              AND proforma_id <> ?
+            GROUP BY product_id
+          ) res
+            ON res.product_id = p.id
           LEFT JOIN (
             SELECT
               product_id,
@@ -90,7 +99,7 @@ public class PostgresProformaItemRepository implements ProformaItemRepository {
           ORDER BY pi.line_number ASC
           """;
         return jdbcClient.sql(sql)
-                .param(proformaId)
+                .params(proformaId, proformaId)
                 .query(new ProformaItemRowMapper())
                 .list();
     }

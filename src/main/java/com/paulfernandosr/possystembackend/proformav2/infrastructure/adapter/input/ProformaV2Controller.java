@@ -8,6 +8,7 @@ import com.paulfernandosr.possystembackend.proformav2.domain.port.input.GetProfo
 import com.paulfernandosr.possystembackend.proformav2.domain.port.input.GetProformasV2PageUseCase;
 import com.paulfernandosr.possystembackend.proformav2.domain.port.input.UpdateProformaV2UseCase;
 import com.paulfernandosr.possystembackend.proformav2.domain.port.input.VoidProformaV2UseCase;
+import com.paulfernandosr.possystembackend.stockreservation.domain.port.input.ExpireStockReservationsUseCase;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.CreateProformaV2Request;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ConvertProformaV2Request;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ConvertProformaV2Response;
@@ -34,6 +35,7 @@ public class ProformaV2Controller {
     private final VoidProformaV2UseCase voidUseCase;
     private final GetProformasV2PageUseCase getProformasV2PageUseCase;
     private final UpdateProformaV2UseCase updateUseCase;
+    private final ExpireStockReservationsUseCase expireStockReservationsUseCase;
 
     @PostMapping
     public ResponseEntity<SuccessResponse<ProformaV2Response>> create(
@@ -50,6 +52,11 @@ public class ProformaV2Controller {
     @GetMapping("/{number}")
     public ResponseEntity<SuccessResponse<ProformaV2Response>> get(@PathVariable("number") Long number) {
         return ResponseEntity.ok(SuccessResponse.ok(getUseCase.getByNumber(number)));
+    }
+
+    @PostMapping("/stock-reservations/expire")
+    public ResponseEntity<SuccessResponse<Integer>> expireStockReservations() {
+        return ResponseEntity.ok(SuccessResponse.ok(expireStockReservationsUseCase.expirePreviousDays()));
     }
 
     @PutMapping("/{id}")
