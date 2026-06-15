@@ -298,16 +298,16 @@ public class EmitCounterSaleSunatCombinationService implements EmitCounterSaleSu
                          FROM sale_counter_sale_sunat_link l
                         WHERE l.counter_sale_id = counter_sale.id
                           AND l.sale_id IS NOT NULL
-                          AND l.reservation_status IN ('PENDING', 'ERROR_COMUNICACION', 'RECHAZADO', 'ACEPTADO')
-                   ) AS has_pending_sale_link,
+                          AND l.reservation_status = 'ACEPTADO'
+                   ) AS has_accepted_sale_link,
                    EXISTS (
                        SELECT 1
                          FROM counter_sale_sunat_combo_member m
                          JOIN counter_sale_sunat_combo c ON c.id = m.combo_id
                         WHERE m.counter_sale_id = counter_sale.id
                           AND c.generated_sale_id IS NOT NULL
-                          AND c.combo_status IN ('PENDING', 'ERROR_COMUNICACION', 'ERROR', 'RECHAZADO', 'ACEPTADO')
-                   ) AS has_pending_direct_combo
+                          AND c.combo_status = 'ACEPTADO'
+                   ) AS has_accepted_direct_combo
               FROM counter_sale
              WHERE id IN (%s)
              FOR UPDATE
@@ -319,8 +319,8 @@ public class EmitCounterSaleSunatCombinationService implements EmitCounterSaleSu
                         rs.getLong("id"),
                         rs.getString("status"),
                         rs.getBoolean("associated_to_sunat"),
-                        rs.getBoolean("has_pending_sale_link"),
-                        rs.getBoolean("has_pending_direct_combo")
+                        rs.getBoolean("has_accepted_sale_link"),
+                        rs.getBoolean("has_accepted_direct_combo")
                 ))
                 .list();
 
@@ -341,9 +341,9 @@ public class EmitCounterSaleSunatCombinationService implements EmitCounterSaleSu
                 );
             }
 
-            if (row.hasPendingSaleLink() || row.hasPendingDirectCombo()) {
+            if (row.hasAcceptedSaleLink() || row.hasAcceptedDirectCombo()) {
                 throw new InvalidCounterSaleException(
-                        "La venta de ventanilla ya tiene una venta generada en Historial de Ventas. Debes reintentar o resolver esa emisión desde Historial de Ventas. counterSaleId=" + row.id()
+                        "La venta de ventanilla ya fue aceptada por SUNAT. counterSaleId=" + row.id()
                 );
             }
         }
@@ -353,8 +353,8 @@ public class EmitCounterSaleSunatCombinationService implements EmitCounterSaleSu
             Long id,
             String status,
             boolean associatedToSunat,
-            boolean hasPendingSaleLink,
-            boolean hasPendingDirectCombo
+            boolean hasAcceptedSaleLink,
+            boolean hasAcceptedDirectCombo
     ) {
     }
 

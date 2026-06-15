@@ -14,4 +14,6 @@ public class ValidateStockRequest {
 
     private Boolean includeSerialUnits; // default false
     private Integer serialLimit;        // default 50
+    private Long sourceProformaNumber;  // numero visible de proforma que origina la venta
+    private Long sourceProformaId;      // alias compatible: historicamente el frontend envio el numero visible aqui
 }

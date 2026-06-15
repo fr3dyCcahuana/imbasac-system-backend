@@ -14,6 +14,7 @@ public interface GetProductSalesDetailPageUseCase {
             boolean onlyWithStock,
             String priceList,
             String context,
+            Long sourceProformaNumber,
             Pageable pageable
     );
 }

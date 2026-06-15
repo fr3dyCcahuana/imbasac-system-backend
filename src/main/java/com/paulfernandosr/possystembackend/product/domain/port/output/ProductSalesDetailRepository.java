@@ -14,6 +14,7 @@ public interface ProductSalesDetailRepository {
             boolean onlyWithStock,
             String priceList,
             String context,
+            Long sourceProformaNumber,
             Pageable pageable
     );
 }

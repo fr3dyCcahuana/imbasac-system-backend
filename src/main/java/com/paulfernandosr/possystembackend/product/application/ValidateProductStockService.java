@@ -16,7 +16,7 @@ public class ValidateProductStockService implements ValidateProductStockUseCase 
     private final ProductStockValidationRepository repo;
 
     @Override
-    public Collection<ProductStockValidationDto> validate(List<Long> ids, boolean includeSerialUnits, int serialLimit) {
-        return repo.validate(ids, includeSerialUnits, serialLimit);
+    public Collection<ProductStockValidationDto> validate(List<Long> ids, boolean includeSerialUnits, int serialLimit, Long sourceProformaNumber) {
+        return repo.validate(ids, includeSerialUnits, serialLimit, sourceProformaNumber);
     }
 }

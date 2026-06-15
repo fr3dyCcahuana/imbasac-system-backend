@@ -6,5 +6,5 @@ import java.util.Collection;
 import java.util.List;
 
 public interface ProductStockValidationRepository {
-    Collection<ProductStockValidationDto> validate(List<Long> ids, boolean includeSerialUnits, int serialLimit);
+    Collection<ProductStockValidationDto> validate(List<Long> ids, boolean includeSerialUnits, int serialLimit, Long sourceProformaNumber);
 }

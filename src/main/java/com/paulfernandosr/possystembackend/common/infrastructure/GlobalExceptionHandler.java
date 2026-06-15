@@ -10,9 +10,11 @@ import com.paulfernandosr.possystembackend.security.domain.exception.InvalidSess
 import com.paulfernandosr.possystembackend.stockreservation.domain.exception.StockReservationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.catalina.connector.ClientAbortException;
 import org.springframework.context.MessageSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -112,12 +114,45 @@ public class GlobalExceptionHandler {
         return ResponseEntity.notFound().build();
     }
 
+    /**
+     * El cliente cerró la conexión (seek/buffer de un video, recarga de página o cierre de un stream SSE).
+     * Es benigno: la respuesta ya está comprometida, no hay nada que enviar. Se evita el ERROR ruidoso y
+     * el HttpMessageNotWritableException de intentar escribir JSON sobre un Content-Type ya fijado (p. ej. video/mp4).
+     */
+    @ExceptionHandler({ClientAbortException.class, AsyncRequestNotUsableException.class})
+    public void handleClientDisconnect(Exception exception) {
+        log.debug("GlobalExceptionHandler:handleClientDisconnect - cliente desconectado: {}", exception.getMessage());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleException(Exception exception) {
+        if (isClientDisconnect(exception)) {
+            log.debug("GlobalExceptionHandler:handleException - cliente desconectado: {}", exception.getMessage());
+            return null;
+        }
         log.error("GlobalExceptionHandler:handleException", exception);
 
         return ResponseEntity.internalServerError()
                 .body(ErrorResponse.internalServerError(exception));
+    }
+
+    /** Detecta desconexiones del cliente envueltas en otras excepciones (broken pipe / connection reset). */
+    private boolean isClientDisconnect(Throwable exception) {
+        for (Throwable current = exception; current != null; current = current.getCause()) {
+            if (current instanceof ClientAbortException || current instanceof AsyncRequestNotUsableException) {
+                return true;
+            }
+            String message = current.getMessage();
+            if (message != null) {
+                String lower = message.toLowerCase(Locale.ROOT);
+                if (lower.contains("connection reset by peer")
+                        || lower.contains("broken pipe")
+                        || lower.contains("connection reset")) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

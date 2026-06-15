@@ -53,7 +53,7 @@ public class PdfBoxGuideRemissionPdfGenerator implements GuideRemissionPdfGenera
     private static final float LOGO_MAX_WIDTH = 104f;
     private static final float LOGO_MAX_HEIGHT = 30f;
 
-    private static final float FOOTER_AREA_HEIGHT = 154f;
+    private static final float FOOTER_AREA_HEIGHT = 190f;
     private static final float FOOTER_TOP_Y = MARGIN_BOTTOM + FOOTER_AREA_HEIGHT;
 
     private static final float SECTION_HEADER_HEIGHT = 14f;
@@ -448,27 +448,39 @@ public class PdfBoxGuideRemissionPdfGenerator implements GuideRemissionPdfGenera
                             PDPageContentStream stream,
                             GuideRemissionCompany company,
                             GuideRemissionDocument document) throws IOException {
-        drawSummaryBlock(stream, document, FOOTER_TOP_Y);
-        drawQrBlock(pdf, stream, company, document, FOOTER_TOP_Y - 40f);
+        float summaryBottomY = drawSummaryBlock(stream, document, FOOTER_TOP_Y);
+        drawQrBlock(pdf, stream, company, document, summaryBottomY - 8f);
         drawLegalText(stream);
     }
 
-    private void drawSummaryBlock(PDPageContentStream stream,
-                                  GuideRemissionDocument document,
-                                  float topY) throws IOException {
+    private float drawSummaryBlock(PDPageContentStream stream,
+                                   GuideRemissionDocument document,
+                                   float topY) throws IOException {
         drawSectionHeader(stream, MARGIN_LEFT, topY, CONTENT_WIDTH, "RESUMEN");
 
         float bodyTop = topY - SECTION_HEADER_HEIGHT;
-        float bodyHeight = 28f;
+        float firstRowHeight = 28f;
+        float observationLabelWidth = 72f;
+        float observationWidth = CONTENT_WIDTH - observationLabelWidth - 12f;
+        boolean hasObservations = notBlank(document.getNotes());
+        List<String> observationLines = hasObservations
+                ? wrapByWidth(document.getNotes(), PDType1Font.HELVETICA, FONT_VALUE, observationWidth)
+                : List.of();
+        float observationRowHeight = hasObservations ? Math.max(18f, (observationLines.size() * 8.8f) + 9f) : 0f;
+        float bodyHeight = firstRowHeight + observationRowHeight;
         float bodyBottom = bodyTop - bodyHeight;
+        float firstRowBottom = bodyTop - firstRowHeight;
 
         drawRect(stream, MARGIN_LEFT, bodyBottom, CONTENT_WIDTH, bodyHeight, 0.30f, COLOR_LINE);
 
         float col1 = 190f;
         float col2 = 136f;
         float col3 = CONTENT_WIDTH - col1 - col2;
-        drawVerticalLine(stream, MARGIN_LEFT + col1, bodyBottom, bodyTop, COLOR_LINE);
-        drawVerticalLine(stream, MARGIN_LEFT + col1 + col2, bodyBottom, bodyTop, COLOR_LINE);
+        drawVerticalLine(stream, MARGIN_LEFT + col1, firstRowBottom, bodyTop, COLOR_LINE);
+        drawVerticalLine(stream, MARGIN_LEFT + col1 + col2, firstRowBottom, bodyTop, COLOR_LINE);
+        if (hasObservations) {
+            drawLine(stream, MARGIN_LEFT, firstRowBottom, PAGE_WIDTH - MARGIN_RIGHT, firstRowBottom, 0.30f, COLOR_LINE);
+        }
 
         writeText(stream, "Peso Total Aprox. (KGM):", MARGIN_LEFT + 6f, bodyTop - 17f, PDType1Font.HELVETICA_BOLD, FONT_SMALL, COLOR_TEXT);
         writeText(stream, safeNumber(document.getTotalWeight()), MARGIN_LEFT + 110f, bodyTop - 17f, PDType1Font.HELVETICA, FONT_VALUE, COLOR_TEXT);
@@ -478,6 +490,20 @@ public class PdfBoxGuideRemissionPdfGenerator implements GuideRemissionPdfGenera
 
         writeText(stream, "Modalidad de transporte:", MARGIN_LEFT + col1 + col2 + 6f, bodyTop - 17f, PDType1Font.HELVETICA_BOLD, FONT_SMALL, COLOR_TEXT);
         writeText(stream, transferMode(document.getTransferModeCode()), MARGIN_LEFT + col1 + col2 + 106f, bodyTop - 17f, PDType1Font.HELVETICA, FONT_VALUE, COLOR_TEXT);
+
+        if (hasObservations) {
+            writeText(stream, "Observaciones:", MARGIN_LEFT + 6f, firstRowBottom - 12f, PDType1Font.HELVETICA_BOLD, FONT_SMALL, COLOR_TEXT);
+            writeWrapped(stream,
+                    document.getNotes(),
+                    MARGIN_LEFT + observationLabelWidth,
+                    firstRowBottom - 12f,
+                    observationWidth,
+                    PDType1Font.HELVETICA,
+                    FONT_VALUE,
+                    8.8f,
+                    COLOR_TEXT);
+        }
+        return bodyBottom;
     }
 
     private void drawQrBlock(PDDocument pdf,

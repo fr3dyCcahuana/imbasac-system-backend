@@ -59,7 +59,7 @@ public interface CounterSaleRepository {
 
     void markAsVoided(Long counterSaleId, Long voidedBy, String voidReason);
 
-    boolean hasGeneratedSunatSale(Long counterSaleId);
+    boolean hasAcceptedSunatSale(Long counterSaleId);
 
     @Getter
     @Setter

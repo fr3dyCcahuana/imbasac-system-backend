@@ -30,6 +30,8 @@
 		<java.version>21</java.version>
 		<jjwt.version>0.12.6</jjwt.version>
 		<mapstruct.version>1.6.3</mapstruct.version>
+		<bytedeco.javacpp.version>1.5.11</bytedeco.javacpp.version>
+		<bytedeco.ffmpeg.version>7.1-1.5.11</bytedeco.ffmpeg.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -57,6 +59,43 @@
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
 			<scope>runtime</scope>
+		</dependency>
+
+		<!-- ffmpeg empaquetado (binario incluido vía Bytedeco/JavaCPP): no requiere instalar ffmpeg en el sistema.
+		     Solo se incluyen los binarios de Windows x64 (dev) y Linux x64 (servidor) para no inflar el JAR. -->
+		<dependency>
+			<groupId>org.bytedeco</groupId>
+			<artifactId>javacpp</artifactId>
+			<version>${bytedeco.javacpp.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.bytedeco</groupId>
+			<artifactId>javacpp</artifactId>
+			<version>${bytedeco.javacpp.version}</version>
+			<classifier>windows-x86_64</classifier>
+		</dependency>
+		<dependency>
+			<groupId>org.bytedeco</groupId>
+			<artifactId>javacpp</artifactId>
+			<version>${bytedeco.javacpp.version}</version>
+			<classifier>linux-x86_64</classifier>
+		</dependency>
+		<dependency>
+			<groupId>org.bytedeco</groupId>
+			<artifactId>ffmpeg</artifactId>
+			<version>${bytedeco.ffmpeg.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.bytedeco</groupId>
+			<artifactId>ffmpeg</artifactId>
+			<version>${bytedeco.ffmpeg.version}</version>
+			<classifier>windows-x86_64</classifier>
+		</dependency>
+		<dependency>
+			<groupId>org.bytedeco</groupId>
+			<artifactId>ffmpeg</artifactId>
+			<version>${bytedeco.ffmpeg.version}</version>
+			<classifier>linux-x86_64</classifier>
 		</dependency>
 		<dependency>
 			<groupId>org.projectlombok</groupId>

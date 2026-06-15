@@ -12,8 +12,8 @@ spring:
       timeout: 10000
   servlet:
     multipart:
-      max-file-size: 50MB
-      max-request-size: 50MB
+      max-file-size: 100MB
+      max-request-size: 100MB
       file-size-threshold: 2MB
 server:
   port: 8091
@@ -117,3 +117,5 @@ app:
 
     manual-pdfs-dir: ./storage/manual-pdfs
     manual-pdfs-public-path: /files/manual-pdfs
+    community-dir: ./storage/community
+    community-public-path: /files/community

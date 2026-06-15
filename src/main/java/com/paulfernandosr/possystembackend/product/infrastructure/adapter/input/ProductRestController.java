@@ -101,9 +101,12 @@ public class ProductRestController {
             @RequestParam(defaultValue = "false") boolean onlyWithStock,
             @RequestParam(defaultValue = "A") String priceList,
             @RequestParam(defaultValue = "PROFORMA") String context,
+            @RequestParam(required = false) Long sourceProformaNumber,
+            @RequestParam(required = false) Long sourceProformaId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size
     ) {
+        Long resolvedSourceProformaNumber = resolveSourceProformaNumber(sourceProformaNumber, sourceProformaId);
         Page<ProductSalesDetail> result = getProductSalesDetailPageUseCase.getPage(
                 query,
                 subQuery,
@@ -112,6 +115,7 @@ public class ProductRestController {
                 onlyWithStock,
                 priceList,
                 context,
+                resolvedSourceProformaNumber,
                 new Pageable(page, size)
         );
 
@@ -129,10 +133,15 @@ public class ProductRestController {
     ) {
         boolean includeSerials = Boolean.TRUE.equals(req.getIncludeSerialUnits());
         int serialLimit = (req.getSerialLimit() == null || req.getSerialLimit() <= 0) ? 50 : req.getSerialLimit();
+        Long sourceProformaNumber = resolveSourceProformaNumber(req.getSourceProformaNumber(), req.getSourceProformaId());
 
         Collection<ProductStockValidationDto> result =
-                validateProductStockUseCase.validate(req.getIds(), includeSerials, serialLimit);
+                validateProductStockUseCase.validate(req.getIds(), includeSerials, serialLimit, sourceProformaNumber);
 
         return ResponseEntity.ok(SuccessResponse.ok(result));
+    }
+
+    private Long resolveSourceProformaNumber(Long sourceProformaNumber, Long sourceProformaId) {
+        return sourceProformaNumber != null ? sourceProformaNumber : sourceProformaId;
     }
 }

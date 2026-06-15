@@ -19,7 +19,7 @@ public class PostgresProductStockValidationRepository implements ProductStockVal
     private final JdbcClient jdbcClient;
 
     @Override
-    public Collection<ProductStockValidationDto> validate(List<Long> ids, boolean includeSerialUnits, int serialLimit) {
+    public Collection<ProductStockValidationDto> validate(List<Long> ids, boolean includeSerialUnits, int serialLimit, Long sourceProformaNumber) {
 
         List<Long> cleanIds = (ids == null) ? List.of() :
                 ids.stream().filter(Objects::nonNull).distinct().toList();
@@ -58,6 +58,13 @@ public class PostgresProductStockValidationRepository implements ProductStockVal
                 FROM product_stock_reservation
                 WHERE status = 'ACTIVE'
                   AND reserved_date = CURRENT_DATE
+                  AND (CAST(? AS BIGINT) IS NULL OR proforma_id <> COALESCE((
+                    SELECT id
+                      FROM proforma
+                     WHERE number = CAST(? AS BIGINT)
+                     ORDER BY id DESC
+                     LIMIT 1
+                  ), -1))
                 GROUP BY product_id
               ) res ON res.product_id = p.id
               WHERE p.id IN (""" + placeholders + """
@@ -74,7 +81,7 @@ public class PostgresProductStockValidationRepository implements ProductStockVal
             """;
 
         List<ProductStockValidationDto> found = jdbcClient.sql(sql)
-                .params(cleanIds.toArray())
+                .params(validationParams(sourceProformaNumber, cleanIds).toArray())
                 .query((rs, rowNum) -> {
                     Boolean affectsStock = (Boolean) rs.getObject("affects_stock");
                     BigDecimal stockAvailable = rs.getBigDecimal("stock_available");
@@ -175,5 +182,13 @@ public class PostgresProductStockValidationRepository implements ProductStockVal
         }
 
         return result;
+    }
+
+    private List<Object> validationParams(Long sourceProformaNumber, List<Long> cleanIds) {
+        List<Object> params = new ArrayList<>();
+        params.add(sourceProformaNumber);
+        params.add(sourceProformaNumber);
+        params.addAll(cleanIds);
+        return params;
     }
 }

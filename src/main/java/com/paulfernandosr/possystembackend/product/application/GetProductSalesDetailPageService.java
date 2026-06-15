@@ -29,6 +29,7 @@ public class GetProductSalesDetailPageService implements GetProductSalesDetailPa
             boolean onlyWithStock,
             String priceList,
             String context,
+            Long sourceProformaNumber,
             Pageable pageable
     ) {
         String pl = (priceList == null ? "A" : priceList.trim().toUpperCase());
@@ -49,6 +50,7 @@ public class GetProductSalesDetailPageService implements GetProductSalesDetailPa
                 onlyWithStock,
                 pl,
                 ctx,
+                sourceProformaNumber,
                 pageable
         );
     }

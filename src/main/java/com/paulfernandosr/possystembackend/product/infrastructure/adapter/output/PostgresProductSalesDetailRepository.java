@@ -31,6 +31,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
             boolean onlyWithStock,
             String priceList,
             String context,
+            Long sourceProformaNumber,
             Pageable pageable
     ) {
         String like = QueryMapper.formatAsLikeParam(query);
@@ -63,11 +64,18 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                     END AS stock_available
                   FROM product p
                   LEFT JOIN product_stock ps ON ps.product_id = p.id
-                  LEFT JOIN (
+                LEFT JOIN (
                     SELECT product_id, SUM(quantity) AS reserved_qty
                     FROM product_stock_reservation
                     WHERE status = 'ACTIVE'
                       AND reserved_date = CURRENT_DATE
+                      AND (CAST(? AS BIGINT) IS NULL OR proforma_id <> COALESCE((
+                        SELECT id
+                          FROM proforma
+                         WHERE number = CAST(? AS BIGINT)
+                         ORDER BY id DESC
+                         LIMIT 1
+                      ), -1))
                     GROUP BY product_id
                   ) res ON res.product_id = p.id
                   WHERE (p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ?)
@@ -83,6 +91,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
 
         long totalElements = jdbcClient.sql(countSql)
                 .params(
+                        sourceProformaNumber, sourceProformaNumber,
                         like, like, like,
                         sub, subLike, subLike, subLike, subLike, subLike,
                         brandFilter, brandFilter,
@@ -144,6 +153,13 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                     FROM product_stock_reservation
                     WHERE status = 'ACTIVE'
                       AND reserved_date = CURRENT_DATE
+                      AND (CAST(? AS BIGINT) IS NULL OR proforma_id <> COALESCE((
+                        SELECT id
+                          FROM proforma
+                         WHERE number = CAST(? AS BIGINT)
+                         ORDER BY id DESC
+                         LIMIT 1
+                      ), -1))
                     GROUP BY product_id
                   ) res ON res.product_id = p.id
                   WHERE (p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ?)
@@ -171,6 +187,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
         List<ProductSalesDetail> content = jdbcClient.sql(pageSql)
                 .params(
                         pl,
+                        sourceProformaNumber, sourceProformaNumber,
                         like, like, like,
                         sub, subLike, subLike, subLike, subLike, subLike,
                         brandFilter, brandFilter,

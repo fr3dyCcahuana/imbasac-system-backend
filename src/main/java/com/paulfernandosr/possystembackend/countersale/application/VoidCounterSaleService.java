@@ -46,13 +46,9 @@ public class VoidCounterSaleService implements VoidCounterSaleUseCase {
             String linkedDoc = buildLinkedDocumentLabel(sale);
             throw new InvalidCounterSaleException("No se puede anular la operación de ventanilla porque ya fue asociada a un comprobante SUNAT" + linkedDoc + ".");
         }
-        if (counterSaleRepository.hasGeneratedSunatSale(counterSaleId)) {
-            throw new InvalidCounterSaleException(
-                    "No se puede anular la operación de ventanilla porque ya tiene una venta generada en Historial de Ventas. " +
-                            "Regulariza o reintenta el comprobante desde Historial de Ventas."
-            );
+        if (counterSaleRepository.hasAcceptedSunatSale(counterSaleId)) {
+            throw new InvalidCounterSaleException("No se puede anular la operación de ventanilla porque ya fue aceptada por SUNAT.");
         }
-
         List<CounterSaleRepository.CounterSaleItemForVoid> items = counterSaleRepository.findItemsByCounterSaleId(counterSaleId);
         List<Long> itemIds = items.stream().map(CounterSaleRepository.CounterSaleItemForVoid::getId).toList();
         var serials = productSerialUnitRepository.lockByCounterSaleItemIds(itemIds);

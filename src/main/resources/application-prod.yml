@@ -15,8 +15,8 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: 50MB
-      max-request-size: 50MB
+      max-file-size: 100MB
+      max-request-size: 100MB
       file-size-threshold: 2MB
 
 server:
@@ -31,7 +31,7 @@ logging:
 security:
   token:
     secret: bSZWQDl3ZDVtUW0memhHNEc3ME82ZlYmYms5enVFSmU=
-    expiration: 1200
+    expiration: 2400
   session:
     ttl: 21600
 
@@ -108,6 +108,8 @@ app:
     products-images-base-url: http://imbasac.cloud/images/products
     manual-pdfs-dir: /var/www/files/manual-pdfs
     manual-pdfs-public-path: /files/manual-pdfs
+    community-dir: /var/www/files/community
+    community-public-path: /files/community
     sunat-xml-public-path: /sunat-files/xml
     sunat-cdr-public-path: /sunat-files/cdr
   document-series:

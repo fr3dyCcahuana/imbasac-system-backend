@@ -172,6 +172,11 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
             boolean associatedToSunat = Boolean.TRUE.equals(rs.getObject("associated_to_sunat", Boolean.class));
             boolean linkedToSale = Boolean.TRUE.equals(rs.getObject("linked_to_sale", Boolean.class));
             String statusValue = rs.getString("status");
+            String linkedSunatStatus = rs.getString("linked_sunat_status");
+            String linkedProcessStatus = rs.getString("linked_process_status");
+            boolean acceptedBySunat = associatedToSunat ||
+                    isAcceptedStatus(linkedSunatStatus) ||
+                    isAcceptedStatus(linkedProcessStatus);
             return CounterSaleSummaryResponse.builder()
                     .counterSaleId(rs.getLong("counter_sale_id"))
                     .series(rs.getString("series"))
@@ -193,13 +198,13 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                     .linkedDocType(rs.getString("linked_doc_type"))
                     .linkedSeries(rs.getString("linked_series"))
                     .linkedNumber((Long) rs.getObject("linked_number"))
-                    .linkedSunatStatus(rs.getString("linked_sunat_status"))
+                    .linkedSunatStatus(linkedSunatStatus)
                     .linkedSunatDescription(rs.getString("linked_sunat_description"))
-                    .linkedProcessStatus(rs.getString("linked_process_status"))
+                    .linkedProcessStatus(linkedProcessStatus)
                     .linkedProcessType(rs.getString("linked_process_type"))
                     .linkedComboId((Long) rs.getObject("linked_combo_id"))
                     .linkedAt(rs.getTimestamp("linked_at") != null ? rs.getTimestamp("linked_at").toLocalDateTime() : null)
-                    .canVoid("EMITIDA".equalsIgnoreCase(statusValue) && !associatedToSunat && !linkedToSale)
+                    .canVoid("EMITIDA".equalsIgnoreCase(statusValue) && !acceptedBySunat)
                     .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null)
                     .updatedAt(rs.getTimestamp("updated_at") != null ? rs.getTimestamp("updated_at").toLocalDateTime() : null)
                     .build();
@@ -368,6 +373,11 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
             boolean associatedToSunat = Boolean.TRUE.equals(rs.getObject("associated_to_sunat", Boolean.class));
             boolean linkedToSale = Boolean.TRUE.equals(rs.getObject("linked_to_sale", Boolean.class));
             String statusValue = rs.getString("status");
+            String linkedSunatStatus = rs.getString("linked_sunat_status");
+            String linkedProcessStatus = rs.getString("linked_process_status");
+            boolean acceptedBySunat = associatedToSunat ||
+                    isAcceptedStatus(linkedSunatStatus) ||
+                    isAcceptedStatus(linkedProcessStatus);
             return CounterSaleDetailResponse.builder()
                     .counterSaleId(rs.getLong("counter_sale_id"))
                     .stationId(rs.getLong("station_id"))
@@ -407,13 +417,13 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                     .linkedDocType(rs.getString("linked_doc_type"))
                     .linkedSeries(rs.getString("linked_series"))
                     .linkedNumber((Long) rs.getObject("linked_number"))
-                    .linkedSunatStatus(rs.getString("linked_sunat_status"))
+                    .linkedSunatStatus(linkedSunatStatus)
                     .linkedSunatDescription(rs.getString("linked_sunat_description"))
-                    .linkedProcessStatus(rs.getString("linked_process_status"))
+                    .linkedProcessStatus(linkedProcessStatus)
                     .linkedProcessType(rs.getString("linked_process_type"))
                     .linkedComboId((Long) rs.getObject("linked_combo_id"))
                     .linkedAt(rs.getTimestamp("linked_at") != null ? rs.getTimestamp("linked_at").toLocalDateTime() : null)
-                    .canVoid("EMITIDA".equalsIgnoreCase(statusValue) && !associatedToSunat && !linkedToSale)
+                    .canVoid("EMITIDA".equalsIgnoreCase(statusValue) && !acceptedBySunat)
                     .voidInfo(CounterSaleVoidInfoResponse.builder()
                             .voidedAt(rs.getTimestamp("voided_at") != null ? rs.getTimestamp("voided_at").toLocalDateTime() : null)
                             .voidedBy((Long) rs.getObject("voided_by"))
@@ -643,6 +653,10 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                 .revenueTotal(rs.getBigDecimal("revenue_total"))
                 .build();
         return jdbcClient.sql(sql).param(saleId).query(mapper).list();
+    }
+
+    private boolean isAcceptedStatus(String value) {
+        return "ACEPTADO".equalsIgnoreCase(value == null ? "" : value.trim());
     }
 
 }

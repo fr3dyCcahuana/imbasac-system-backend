@@ -219,7 +219,7 @@ public class CounterSalePostgresRepository implements CounterSaleRepository {
     }
 
     @Override
-    public boolean hasGeneratedSunatSale(Long counterSaleId) {
+    public boolean hasAcceptedSunatSale(Long counterSaleId) {
         String sql = """
             SELECT
                 EXISTS (
@@ -229,14 +229,14 @@ public class CounterSalePostgresRepository implements CounterSaleRepository {
                         ON c.id = m.combo_id
                      WHERE m.counter_sale_id = ?
                        AND c.generated_sale_id IS NOT NULL
-                       AND c.combo_status IN ('PENDING', 'ERROR', 'ERROR_COMUNICACION', 'RECHAZADO', 'ACEPTADO')
+                       AND c.combo_status = 'ACEPTADO'
                 )
                 OR EXISTS (
                     SELECT 1
                       FROM sale_counter_sale_sunat_link l
                      WHERE l.counter_sale_id = ?
                        AND l.sale_id IS NOT NULL
-                       AND l.reservation_status IN ('PENDING', 'ERROR_COMUNICACION', 'RECHAZADO', 'ACEPTADO')
+                       AND l.reservation_status = 'ACEPTADO'
                 )
         """;
 
