@@ -473,6 +473,48 @@ public class PostgresProductRepository implements ProductRepository {
     }
 
     @Override
+    public Collection<Product> findBySkuIn(Collection<String> skus) {
+        if (skus == null || skus.isEmpty()) {
+            return List.of();
+        }
+
+        String placeholders = skus.stream()
+                .map(sku -> "?")
+                .collect(Collectors.joining(","));
+
+        String sql = """
+            SELECT
+                p.id,
+                p.sku,
+                p.name,
+                p.brand,
+                p.origin_country,
+                p.presentation,
+                p.price_a,
+                p.price_b,
+                p.price_c,
+                p.price_d
+            FROM product p
+            WHERE UPPER(TRIM(p.sku)) IN (""" + placeholders + ")";
+
+        return jdbcClient.sql(sql)
+                .params(skus.toArray())
+                .query((rs, rowNum) -> Product.builder()
+                        .id(rs.getLong("id"))
+                        .sku(rs.getString("sku"))
+                        .name(rs.getString("name"))
+                        .brand(rs.getString("brand"))
+                        .originCountry(rs.getString("origin_country"))
+                        .presentation(rs.getString("presentation"))
+                        .priceA(rs.getBigDecimal("price_a"))
+                        .priceB(rs.getBigDecimal("price_b"))
+                        .priceC(rs.getBigDecimal("price_c"))
+                        .priceD(rs.getBigDecimal("price_d"))
+                        .build())
+                .list();
+    }
+
+    @Override
     public void updateById(Long productId, Product product) {
         String sql = """
             UPDATE product

@@ -6,6 +6,7 @@ import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.inp
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Service
@@ -15,17 +16,34 @@ public class GetProformasV2PageService implements GetProformasV2PageUseCase {
     private final ProformaV2QueryRepository queryRepository;
 
     @Override
-    public PageResponse<ProformaV2SummaryResponse> findPage(String status, String query, int page, int size) {
+    public PageResponse<ProformaV2SummaryResponse> findPage(
+            String status,
+            String query,
+            Long createdBy,
+            Boolean edited,
+            String paymentType,
+            LocalDate dateFrom,
+            LocalDate dateTo,
+            int page,
+            int size
+    ) {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), 200);
 
-        String st = normalizeStatus(status);
-        String like = toLike(query);
+        ProformaQueryFilters filters = new ProformaQueryFilters(
+                normalizeStatus(status),
+                toLike(query),
+                createdBy,
+                edited,
+                normalizeUpper(paymentType),
+                dateFrom,
+                dateTo
+        );
 
-        long total = queryRepository.countPage(st, like);
+        long total = queryRepository.countPage(filters);
         int totalPages = (int) Math.ceil(total / (double) safeSize);
 
-        List<ProformaV2SummaryResponse> rows = queryRepository.findPage(st, like, safeSize, safePage * safeSize);
+        List<ProformaV2SummaryResponse> rows = queryRepository.findPage(filters, safeSize, safePage * safeSize);
 
         PageMetadata meta = PageMetadata.builder()
                 .page(safePage)
@@ -41,12 +59,22 @@ public class GetProformasV2PageService implements GetProformasV2PageUseCase {
                 .build();
     }
 
+    @Override
+    public List<ProformaCreatorResponse> findCreators() {
+        return queryRepository.findCreators();
+    }
+
     private String toLike(String q) {
         if (q == null || q.trim().isBlank()) return "%";
         return "%" + q.trim() + "%";
     }
 
     private String normalizeStatus(String s) {
+        if (s == null || s.isBlank()) return null;
+        return s.trim().toUpperCase();
+    }
+
+    private String normalizeUpper(String s) {
         if (s == null || s.isBlank()) return null;
         return s.trim().toUpperCase();
     }

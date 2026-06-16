@@ -382,7 +382,8 @@ public class PostgresProformaRepository implements ProformaRepository {
                    subtotal = ?,
                    discount_total = ?,
                    total = ?,
-                   updated_at = NOW()
+                   updated_at = NOW(),
+                   edited_at = NOW()
              WHERE id = ?
             """;
 

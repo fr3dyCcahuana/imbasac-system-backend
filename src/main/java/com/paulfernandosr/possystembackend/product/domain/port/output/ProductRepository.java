@@ -25,5 +25,7 @@ public interface ProductRepository {
 
     Collection<Product> findByIdIn(Collection<Long> productIds);
 
+    Collection<Product> findBySkuIn(Collection<String> skus);
+
     void updateById(Long productId, Product product);
 }

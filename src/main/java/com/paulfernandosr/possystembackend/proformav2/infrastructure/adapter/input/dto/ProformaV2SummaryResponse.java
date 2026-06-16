@@ -27,4 +27,16 @@ public class ProformaV2SummaryResponse {
     private BigDecimal total;
     private String status;
     private Long convertedSaleId;
+
+    // Creador de la proforma
+    private Long createdBy;
+    private String createdByName;
+
+    // Indica si la proforma fue editada (edited_at no nulo)
+    private boolean edited;
+
+    // Comprobante electrónico generado al convertir (cuando aplica)
+    private String saleDocType;
+    private String saleSeries;
+    private Long saleNumber;
 }

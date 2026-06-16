@@ -17,12 +17,16 @@ import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.inp
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.PageResponse;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaV2SummaryResponse;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.UpdateProformaV2Request;
+import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaCreatorResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.security.Principal;
+import java.time.LocalDate;
+import java.util.List;
 
 @RestController
 @RequestMapping("/proformas/v2")
@@ -112,11 +116,21 @@ public class ProformaV2Controller {
     public ResponseEntity<SuccessResponse<PageResponse<ProformaV2SummaryResponse>>> findPage(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String query,
+            @RequestParam(required = false) Long createdBy,
+            @RequestParam(required = false) Boolean edited,
+            @RequestParam(required = false) String paymentType,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
         return ResponseEntity.ok(SuccessResponse.ok(
-                getProformasV2PageUseCase.findPage(status, query, page, size)
+                getProformasV2PageUseCase.findPage(status, query, createdBy, edited, paymentType, dateFrom, dateTo, page, size)
         ));
+    }
+
+    @GetMapping("/creators")
+    public ResponseEntity<SuccessResponse<List<ProformaCreatorResponse>>> findCreators() {
+        return ResponseEntity.ok(SuccessResponse.ok(getProformasV2PageUseCase.findCreators()));
     }
 }

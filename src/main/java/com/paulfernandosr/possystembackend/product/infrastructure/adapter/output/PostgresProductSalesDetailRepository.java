@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -134,6 +136,11 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                       WHEN 'D' THEN p.price_d
                       ELSE p.price_a
                     END AS unit_price,
+                    active_offer.offer_id,
+                    active_offer.offer_code,
+                    active_offer.offer_name,
+                    active_offer.offer_price,
+                    active_offer.offer_min_quantity,
                 
                     CASE
                       WHEN (p.manage_by_serial = TRUE
@@ -162,6 +169,24 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                       ), -1))
                     GROUP BY product_id
                   ) res ON res.product_id = p.id
+                  LEFT JOIN LATERAL (
+                    SELECT
+                      pbo.id AS offer_id,
+                      pbo.code AS offer_code,
+                      pbo.name AS offer_name,
+                      pboi.offer_price,
+                      pboi.min_quantity AS offer_min_quantity
+                    FROM product_basic_offer_item pboi
+                    JOIN product_basic_offer pbo ON pbo.id = pboi.offer_id
+                    WHERE pboi.product_id = p.id
+                      AND pbo.status = 'ACTIVE'
+                      AND (pbo.starts_at IS NULL OR pbo.starts_at <= CURRENT_DATE)
+                      AND (pbo.ends_at IS NULL OR pbo.ends_at >= CURRENT_DATE)
+                      AND pboi.offer_price IS NOT NULL
+                      AND pboi.offer_price > 0
+                    ORDER BY pboi.offer_price ASC, pboi.min_quantity ASC, pbo.id DESC
+                    LIMIT 1
+                  ) active_offer ON TRUE
                   WHERE (p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ?)
                     AND (? = '' OR p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ? OR p.brand ILIKE ? OR p.model ILIKE ?)
                     AND (? = '' OR LOWER(TRIM(COALESCE(p.brand, ''))) = LOWER(TRIM(?)))
@@ -173,6 +198,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                   manage_by_serial, compatibility, gift_allowed,
                   affects_stock, facturable_sunat,
                   unit_price,
+                  offer_id, offer_code, offer_name, offer_price, offer_min_quantity,
                   stock_available
                 FROM base
                 WHERE (? = FALSE OR affects_stock = FALSE OR stock_available > 0)
@@ -218,6 +244,16 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
 
                         .priceList(pl)
                         .price(rs.getBigDecimal("unit_price"))
+                        .regularPrice(rs.getBigDecimal("unit_price"))
+                        .offerId(rs.getObject("offer_id") == null ? null : rs.getLong("offer_id"))
+                        .offerCode(rs.getString("offer_code"))
+                        .offerName(rs.getString("offer_name"))
+                        .offerPrice(rs.getBigDecimal("offer_price"))
+                        .offerMinQuantity(rs.getBigDecimal("offer_min_quantity"))
+                        .offerDiscountPercent(calculateOfferDiscountPercent(
+                                rs.getBigDecimal("unit_price"),
+                                rs.getBigDecimal("offer_price")
+                        ))
 
                         // ✅ NUEVO: stock disponible calculado
                         .stockAvailable(rs.getBigDecimal("stock_available"))
@@ -333,5 +369,18 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                 .totalElements(totalElements)
                 .totalPages(totalPages)
                 .build();
+    }
+
+    private static BigDecimal calculateOfferDiscountPercent(BigDecimal regularPrice, BigDecimal offerPrice) {
+        if (regularPrice == null || offerPrice == null || regularPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            return null;
+        }
+        if (offerPrice.compareTo(BigDecimal.ZERO) <= 0 || offerPrice.compareTo(regularPrice) >= 0) {
+            return null;
+        }
+        return BigDecimal.ONE
+                .subtract(offerPrice.divide(regularPrice, 6, RoundingMode.HALF_UP))
+                .multiply(new BigDecimal("100"))
+                .setScale(0, RoundingMode.HALF_UP);
     }
 }

@@ -14,6 +14,7 @@ import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.inp
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaV2Response;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.output.model.LockedDocumentSeries;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.output.model.ProductSnapshot;
+import com.paulfernandosr.possystembackend.productoffer.application.ProductBasicOfferPriceResolver;
 import com.paulfernandosr.possystembackend.role.domain.RoleName;
 import com.paulfernandosr.possystembackend.salev2.domain.model.PaymentType;
 import com.paulfernandosr.possystembackend.salev2.domain.model.TaxStatus;
@@ -42,6 +43,7 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
     private final ProductSnapshotRepository productSnapshotRepository;
     private final UserRepository userRepository;
     private final ProductStockReservationRepository productStockReservationRepository;
+    private final ProductBasicOfferPriceResolver productBasicOfferPriceResolver;
 
     @Override
     @Transactional
@@ -116,6 +118,7 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
                     reqItem.getUnitPriceOverride(),
                     p,
                     request.getPriceList(),
+                    qty,
                     line
             );
 
@@ -373,11 +376,16 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
             BigDecimal unitPriceOverride,
             ProductSnapshot product,
             Character priceList,
+            BigDecimal quantity,
             int line
     ) {
         BigDecimal unitPrice = unitPriceOverride != null
                 ? unitPriceOverride
-                : resolvePriceByList(product, priceList);
+                : productBasicOfferPriceResolver.resolveLowerOfferPrice(
+                        product.getId(),
+                        quantity,
+                        resolvePriceByList(product, priceList)
+                );
 
         if (unitPrice == null) {
             throw new InvalidProformaV2Exception(
