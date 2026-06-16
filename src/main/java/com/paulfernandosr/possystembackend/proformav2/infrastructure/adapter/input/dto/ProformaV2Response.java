@@ -17,6 +17,8 @@ public class ProformaV2Response {
     private String createdByUsername;
     private String createdByFirstName;
     private String createdByLastName;
+    private Long createdByRoleId;
+    private String createdByRoleName;
     private String series;
     private Long number;
     private String issueDate;

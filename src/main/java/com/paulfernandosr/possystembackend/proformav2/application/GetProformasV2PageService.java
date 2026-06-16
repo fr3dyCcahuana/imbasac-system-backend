@@ -20,6 +20,7 @@ public class GetProformasV2PageService implements GetProformasV2PageUseCase {
             String status,
             String query,
             Long createdBy,
+            Long createdByRoleId,
             Boolean edited,
             String paymentType,
             LocalDate dateFrom,
@@ -34,6 +35,7 @@ public class GetProformasV2PageService implements GetProformasV2PageUseCase {
                 normalizeStatus(status),
                 toLike(query),
                 createdBy,
+                createdByRoleId,
                 edited,
                 normalizeUpper(paymentType),
                 dateFrom,
@@ -62,6 +64,11 @@ public class GetProformasV2PageService implements GetProformasV2PageUseCase {
     @Override
     public List<ProformaCreatorResponse> findCreators() {
         return queryRepository.findCreators();
+    }
+
+    @Override
+    public List<ProformaCreatorRoleResponse> findCreatorRoles() {
+        return queryRepository.findCreatorRoles();
     }
 
     private String toLike(String q) {

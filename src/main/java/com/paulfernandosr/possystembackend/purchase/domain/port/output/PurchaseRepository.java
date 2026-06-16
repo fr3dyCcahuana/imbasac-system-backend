@@ -6,6 +6,8 @@ import com.paulfernandosr.possystembackend.purchase.domain.Purchase;
 import com.paulfernandosr.possystembackend.purchase.domain.PurchaseItem;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 public interface PurchaseRepository {
@@ -18,7 +20,13 @@ public interface PurchaseRepository {
 
     Optional<Purchase> findByIdWithItemsForUpdate(Long purchaseId);         // cabecera + items activos, bloqueo de cabecera
 
+    List<Long> findPendingStockEntryPurchaseIds(LocalDate dueDate);
+
     void updateStatus(Long purchaseId, String status, String username);     // REGISTRADA / ANULADA
+
+    void markStockEntryPending(Long purchaseId);
+
+    void markStockEntryLoaded(Long purchaseId, String username);
 
     boolean existsDocumentForAnotherPurchase(Long purchaseId,
                                              String supplierRuc,

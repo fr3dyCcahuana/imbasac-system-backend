@@ -19,6 +19,8 @@ public class ProformaMapper {
                 .createdByUsername(p.getCashierUsername())
                 .createdByFirstName(p.getCashierFirstName())
                 .createdByLastName(p.getCashierLastName())
+                .createdByRoleId(p.getCashierRoleId())
+                .createdByRoleName(p.getCashierRoleName())
                 .series(p.getSeries())
                 .number(p.getNumber())
                 .issueDate(p.getIssueDate() != null ? p.getIssueDate().toString() : null)

@@ -9,6 +9,7 @@ public record ProformaQueryFilters(
         String status,
         String like,
         Long createdBy,
+        Long createdByRoleId,
         Boolean edited,
         String paymentType,
         LocalDate dateFrom,

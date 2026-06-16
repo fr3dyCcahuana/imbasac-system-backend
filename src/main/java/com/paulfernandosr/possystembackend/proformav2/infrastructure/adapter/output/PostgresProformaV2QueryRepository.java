@@ -2,6 +2,7 @@ package com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.ou
 
 import com.paulfernandosr.possystembackend.proformav2.domain.port.output.ProformaV2QueryRepository;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaCreatorResponse;
+import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaCreatorRoleResponse;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaQueryFilters;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaV2SummaryResponse;
 import lombok.RequiredArgsConstructor;
@@ -56,12 +57,15 @@ public class PostgresProformaV2QueryRepository implements ProformaV2QueryReposit
                 u.first_name AS cb_first,
                 u.last_name AS cb_last,
                 u.username AS cb_username,
+                r.id AS cb_role_id,
+                r.name AS cb_role_name,
                 (p.edited_at IS NOT NULL) AS edited,
                 s.doc_type AS sale_doc_type,
                 s.series AS sale_series,
                 s.number AS sale_number
               FROM proforma p
               LEFT JOIN users u ON u.id = p.created_by
+              LEFT JOIN roles r ON r.id = u.role_id
               LEFT JOIN sale s ON s.id = p.converted_sale_id
              WHERE 1=1
         """);
@@ -93,6 +97,8 @@ public class PostgresProformaV2QueryRepository implements ProformaV2QueryReposit
                 .convertedSaleId((Long) rs.getObject("converted_sale_id"))
                 .createdBy((Long) rs.getObject("created_by"))
                 .createdByName(displayName(rs.getString("cb_first"), rs.getString("cb_last"), rs.getString("cb_username")))
+                .createdByRoleId((Long) rs.getObject("cb_role_id"))
+                .createdByRoleName(rs.getString("cb_role_name"))
                 .edited(rs.getBoolean("edited"))
                 .saleDocType(rs.getString("sale_doc_type"))
                 .saleSeries(rs.getString("sale_series"))
@@ -117,6 +123,23 @@ public class PostgresProformaV2QueryRepository implements ProformaV2QueryReposit
                 .query((rs, rowNum) -> ProformaCreatorResponse.builder()
                         .id(rs.getLong("id"))
                         .name(displayName(rs.getString("cb_first"), rs.getString("cb_last"), rs.getString("cb_username")))
+                        .build())
+                .list();
+    }
+
+    @Override
+    public List<ProformaCreatorRoleResponse> findCreatorRoles() {
+        String sql = """
+            SELECT DISTINCT r.id AS id, r.name AS name
+              FROM roles r
+              JOIN users u ON u.role_id = r.id
+             WHERE EXISTS (SELECT 1 FROM proforma p WHERE p.created_by = u.id)
+             ORDER BY r.name
+            """;
+        return jdbcClient.sql(sql)
+                .query((rs, rowNum) -> ProformaCreatorRoleResponse.builder()
+                        .id(rs.getLong("id"))
+                        .name(rs.getString("name"))
                         .build())
                 .list();
     }
@@ -146,6 +169,17 @@ public class PostgresProformaV2QueryRepository implements ProformaV2QueryReposit
         if (f.createdBy() != null) {
             sql.append(" AND p.created_by = ? ");
             params.add(f.createdBy());
+        }
+        if (f.createdByRoleId() != null) {
+            sql.append("""
+                AND EXISTS (
+                    SELECT 1
+                      FROM users u_role
+                     WHERE u_role.id = p.created_by
+                       AND u_role.role_id = ?
+                )
+            """);
+            params.add(f.createdByRoleId());
         }
         if (f.edited() != null) {
             sql.append(Boolean.TRUE.equals(f.edited()) ? " AND p.edited_at IS NOT NULL " : " AND p.edited_at IS NULL ");

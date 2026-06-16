@@ -57,6 +57,8 @@ public class Proforma {
     private String cashierUsername;
     private String cashierFirstName;
     private String cashierLastName;
+    private Long cashierRoleId;
+    private String cashierRoleName;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

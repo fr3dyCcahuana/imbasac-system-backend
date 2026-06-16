@@ -56,6 +56,10 @@ public class Purchase {
     private String status;                   // REGISTRADA / ANULADA
     private String notes;
 
+    private String stockEntryStatus;          // PENDING / LOADED
+    private LocalDateTime stockLoadedAt;
+    private String stockLoadedBy;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

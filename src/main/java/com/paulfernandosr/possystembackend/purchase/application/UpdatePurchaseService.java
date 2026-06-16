@@ -37,6 +37,7 @@ public class UpdatePurchaseService implements UpdatePurchaseUseCase {
     private final ProductFlagsRepository productFlagsRepository;
     private final ProductSerialUnitRepository productSerialUnitRepository;
     private final StockService stockService;
+    private final PurchaseStockEntryService stockEntryService;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -68,6 +69,7 @@ public class UpdatePurchaseService implements UpdatePurchaseUseCase {
         if ("ANULADA".equalsIgnoreCase(before.getStatus())) {
             throw new PurchaseApiException(422, "PURCHASE_ALREADY_CANCELLED", "No se puede editar una compra anulada.");
         }
+        boolean stockAlreadyLoaded = !PurchaseStockEntryService.STATUS_PENDING.equalsIgnoreCase(before.getStockEntryStatus());
 
         request.setId(purchaseId);
         request.setStatus(before.getStatus());
@@ -117,7 +119,7 @@ public class UpdatePurchaseService implements UpdatePurchaseUseCase {
         for (PurchaseItem current : safeItems(before)) {
             if (current.getId() == null) continue;
             if (!incomingExistingById.containsKey(current.getId())) {
-                removeExistingItem(before.getId(), current, actor, editReason);
+                removeExistingItem(before.getId(), current, actor, editReason, stockAlreadyLoaded);
             }
         }
 
@@ -126,10 +128,10 @@ public class UpdatePurchaseService implements UpdatePurchaseUseCase {
             PurchaseItem incoming = incomingItems.get(i);
             if (incoming.getId() == null) {
                 incoming.setLineNumber(nextLine++);
-                addNewItem(purchaseId, incoming, i);
+                addNewItem(purchaseId, incoming, i, stockAlreadyLoaded);
             } else {
                 PurchaseItem current = currentById.get(incoming.getId());
-                updateExistingItem(purchaseId, current, incoming, i);
+                updateExistingItem(purchaseId, current, incoming, i, stockAlreadyLoaded);
             }
         }
 
@@ -138,6 +140,10 @@ public class UpdatePurchaseService implements UpdatePurchaseUseCase {
         String afterJson = toJson(after);
 
         purchaseRepository.insertEditHistory(purchaseId, editNumber, editReason, actor, beforeJson, afterJson);
+
+        if (!stockAlreadyLoaded && stockEntryService.isDueForStockEntry(after)) {
+            return stockEntryService.loadStockIfPending(purchaseId, actor);
+        }
 
         return after;
     }
@@ -152,7 +158,7 @@ public class UpdatePurchaseService implements UpdatePurchaseUseCase {
         }
     }
 
-    private void addNewItem(Long purchaseId, PurchaseItem item, int itemIndex) {
+    private void addNewItem(Long purchaseId, PurchaseItem item, int itemIndex, boolean stockAlreadyLoaded) {
         ProductFlags flags = getFlagsOrThrow(item.getProductId(), itemIndex);
         boolean affectsStock = Boolean.TRUE.equals(flags.getAffectsStock());
         boolean manageBySerial = Boolean.TRUE.equals(flags.getManageBySerial());
@@ -167,7 +173,7 @@ public class UpdatePurchaseService implements UpdatePurchaseUseCase {
 
         Long itemId = purchaseRepository.insertItem(purchaseId, item);
 
-        if (affectsStock) {
+        if (affectsStock && stockAlreadyLoaded) {
             stockService.registerInbound(
                     item.getProductId(),
                     item.getQuantity(),
@@ -178,9 +184,15 @@ public class UpdatePurchaseService implements UpdatePurchaseUseCase {
             );
         }
 
-        if (manageBySerial) {
+        if (manageBySerial && stockAlreadyLoaded) {
             // La validación ya normalizó los seriales.
             productSerialUnitRepository.insertInboundSerialUnits(
+                    itemId,
+                    item.getProductId(),
+                    item.getSerialUnits()
+            );
+        } else if (manageBySerial) {
+            productSerialUnitRepository.insertPendingInboundSerialUnits(
                     itemId,
                     item.getProductId(),
                     item.getSerialUnits()
@@ -191,7 +203,8 @@ public class UpdatePurchaseService implements UpdatePurchaseUseCase {
     private void updateExistingItem(Long purchaseId,
                                     PurchaseItem current,
                                     PurchaseItem incoming,
-                                    int itemIndex) {
+                                    int itemIndex,
+                                    boolean stockAlreadyLoaded) {
         ProductFlags flags = getFlagsOrThrow(current.getProductId(), itemIndex);
         boolean affectsStock = Boolean.TRUE.equals(flags.getAffectsStock());
         boolean manageBySerial = Boolean.TRUE.equals(flags.getManageBySerial());
@@ -226,7 +239,7 @@ public class UpdatePurchaseService implements UpdatePurchaseUseCase {
         }
 
         BigDecimal diff = nvl(incoming.getQuantity()).subtract(nvl(current.getQuantity()));
-        if (affectsStock && diff.compareTo(BigDecimal.ZERO) > 0) {
+        if (affectsStock && stockAlreadyLoaded && diff.compareTo(BigDecimal.ZERO) > 0) {
             stockService.registerInbound(
                     current.getProductId(),
                     diff,
@@ -235,7 +248,7 @@ public class UpdatePurchaseService implements UpdatePurchaseUseCase {
                     "purchase_item",
                     current.getId()
             );
-        } else if (affectsStock && diff.compareTo(BigDecimal.ZERO) < 0) {
+        } else if (affectsStock && stockAlreadyLoaded && diff.compareTo(BigDecimal.ZERO) < 0) {
             BigDecimal qtyToReverse = diff.abs();
             assertStockAvailable(current.getProductId(), qtyToReverse,
                     "No se puede reducir la cantidad porque el stock actual no alcanza para revertir la diferencia.");
@@ -319,7 +332,8 @@ public class UpdatePurchaseService implements UpdatePurchaseUseCase {
     private void removeExistingItem(Long purchaseId,
                                     PurchaseItem current,
                                     String actor,
-                                    String editReason) {
+                                    String editReason,
+                                    boolean stockAlreadyLoaded) {
         ProductFlags flags = getFlagsOrThrow(current.getProductId(), -1);
         boolean affectsStock = Boolean.TRUE.equals(flags.getAffectsStock());
         boolean manageBySerial = Boolean.TRUE.equals(flags.getManageBySerial());
@@ -332,7 +346,7 @@ public class UpdatePurchaseService implements UpdatePurchaseUseCase {
             }
         }
 
-        if (affectsStock) {
+        if (affectsStock && stockAlreadyLoaded) {
             assertStockAvailable(current.getProductId(), current.getQuantity(),
                     "No se puede quitar el ítem porque el stock actual no alcanza para revertir la cantidad ingresada por la compra.");
             stockService.registerOutbound(

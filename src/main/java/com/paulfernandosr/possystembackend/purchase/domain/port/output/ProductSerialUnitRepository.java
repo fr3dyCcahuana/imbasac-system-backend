@@ -27,6 +27,14 @@ public interface ProductSerialUnitRepository {
             List<PurchaseSerialUnit> serialUnits
     );
 
+    void insertPendingInboundSerialUnits(
+            Long purchaseItemId,
+            Long productId,
+            List<PurchaseSerialUnit> serialUnits
+    );
+
+    void markSerialUnitsByPurchaseItemAsInWarehouse(Long purchaseItemId);
+
     void updateInboundSerialUnit(PurchaseSerialUnit serialUnit);
 
     int countBlockedSerialUnitsByPurchaseItemId(Long purchaseItemId);

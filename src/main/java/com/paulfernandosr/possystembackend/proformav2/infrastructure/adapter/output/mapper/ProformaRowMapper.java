@@ -48,6 +48,12 @@ public class ProformaRowMapper implements RowMapper<Proforma> {
         if (cols.contains("cashier_last_name")) {
             builder.cashierLastName(rs.getString("cashier_last_name"));
         }
+        if (cols.contains("cashier_role_id")) {
+            builder.cashierRoleId((Long) rs.getObject("cashier_role_id"));
+        }
+        if (cols.contains("cashier_role_name")) {
+            builder.cashierRoleName(rs.getString("cashier_role_name"));
+        }
 
         builder.customerUbigeo(readString(rs, cols, "customer_ubigeo_resolved", "customer_ubigeo"));
         builder.customerDepartment(readString(rs, cols, "customer_department_resolved", "customer_department"));

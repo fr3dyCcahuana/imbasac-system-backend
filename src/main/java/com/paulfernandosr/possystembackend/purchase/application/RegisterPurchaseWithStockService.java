@@ -11,7 +11,6 @@ import com.paulfernandosr.possystembackend.purchase.domain.port.input.CreatePurc
 import com.paulfernandosr.possystembackend.purchase.domain.port.output.ProductFlagsRepository;
 import com.paulfernandosr.possystembackend.purchase.domain.port.output.ProductSerialUnitRepository;
 import com.paulfernandosr.possystembackend.purchase.domain.port.output.PurchaseRepository;
-import com.paulfernandosr.possystembackend.stock.domain.port.input.StockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,7 +43,7 @@ public class RegisterPurchaseWithStockService implements CreatePurchaseUseCase {
     private final PurchaseRepository purchaseRepository;
     private final ProductFlagsRepository productFlagsRepository;
     private final ProductSerialUnitRepository productSerialUnitRepository;
-    private final StockService stockService;
+    private final PurchaseStockEntryService stockEntryService;
 
     private static String resolveActor(String username) {
         return (username == null || username.isBlank()) ? "SYSTEM" : username.trim();
@@ -77,37 +76,28 @@ public class RegisterPurchaseWithStockService implements CreatePurchaseUseCase {
         // 2) Insertar compra + detalle (debe retornar IDs de purchase_item)
         purchase.setCreatedBy(actor);
         purchase.setUpdatedBy(actor);
+        purchase.setStockEntryStatus(PurchaseStockEntryService.STATUS_PENDING);
         Purchase created = purchaseRepository.create(purchase, actor);
 
         // Completa valores de respuesta (repositorio solo retorna id)
         created.setCreatedBy(actor);
         created.setUpdatedBy(actor);
+        created.setStockEntryStatus(PurchaseStockEntryService.STATUS_PENDING);
+
+        if (stockEntryService.isDueForStockEntry(created)) {
+            return stockEntryService.loadStockIfPending(created.getId(), actor);
+        }
 
         // 3) Registrar stock + seriales (si aplica)
         for (PurchaseItem item : created.getItems()) {
             ProductFlags flags = ctx.flagsByProductId.get(item.getProductId());
             if (flags == null) continue;
 
-            boolean affectsStock = Boolean.TRUE.equals(flags.getAffectsStock());
             boolean manageBySerial = Boolean.TRUE.equals(flags.getManageBySerial());
-
-            if (!affectsStock) {
-                continue; // servicios u otros que no afectan stock
-            }
-
-            // Movimiento IN del kardex (para todos los que afectan stock)
-            stockService.registerInbound(
-                    item.getProductId(),
-                    item.getQuantity(),
-                    item.getUnitCost(),
-                    "IN_PURCHASE",
-                    "purchase_item",
-                    item.getId()
-            );
 
             // Seriales: insertar unidades físicas por item
             if (manageBySerial) {
-                productSerialUnitRepository.insertInboundSerialUnits(
+                productSerialUnitRepository.insertPendingInboundSerialUnits(
                         item.getId(),
                         item.getProductId(),
                         item.getSerialUnits()

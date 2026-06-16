@@ -31,6 +31,8 @@ public class ProformaV2SummaryResponse {
     // Creador de la proforma
     private Long createdBy;
     private String createdByName;
+    private Long createdByRoleId;
+    private String createdByRoleName;
 
     // Indica si la proforma fue editada (edited_at no nulo)
     private boolean edited;

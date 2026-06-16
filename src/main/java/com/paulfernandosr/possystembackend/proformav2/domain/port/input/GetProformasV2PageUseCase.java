@@ -2,6 +2,7 @@ package com.paulfernandosr.possystembackend.proformav2.domain.port.input;
 
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.PageResponse;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaCreatorResponse;
+import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaCreatorRoleResponse;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaV2SummaryResponse;
 
 import java.time.LocalDate;
@@ -12,6 +13,7 @@ public interface GetProformasV2PageUseCase {
             String status,
             String query,
             Long createdBy,
+            Long createdByRoleId,
             Boolean edited,
             String paymentType,
             LocalDate dateFrom,
@@ -21,4 +23,6 @@ public interface GetProformasV2PageUseCase {
     );
 
     List<ProformaCreatorResponse> findCreators();
+
+    List<ProformaCreatorRoleResponse> findCreatorRoles();
 }

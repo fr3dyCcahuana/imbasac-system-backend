@@ -74,12 +74,15 @@ public class PostgresProformaRepository implements ProformaRepository {
               u.username   AS cashier_username,
               u.first_name AS cashier_first_name,
               u.last_name  AS cashier_last_name,
+              r.id         AS cashier_role_id,
+              r.name       AS cashier_role_name,
               COALESCE(p.customer_ubigeo, c.ubigeo)         AS customer_ubigeo_resolved,
               COALESCE(p.customer_department, c.department) AS customer_department_resolved,
               COALESCE(p.customer_province, c.province)     AS customer_province_resolved,
               COALESCE(p.customer_district, c.district)     AS customer_district_resolved
             FROM proforma p
             LEFT JOIN users u ON u.id = p.created_by
+            LEFT JOIN roles r ON r.id = u.role_id
             """ + CUSTOMER_LOCATION_LATERAL_SQL;
 
     @Override

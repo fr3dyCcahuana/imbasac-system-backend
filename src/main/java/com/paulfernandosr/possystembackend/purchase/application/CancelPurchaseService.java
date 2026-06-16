@@ -36,6 +36,7 @@ public class CancelPurchaseService implements CancelPurchaseUseCase {
         if ("ANULADA".equalsIgnoreCase(purchase.getStatus())) {
             return;
         }
+        boolean stockAlreadyLoaded = !PurchaseStockEntryService.STATUS_PENDING.equalsIgnoreCase(purchase.getStockEntryStatus());
 
         int blockedSerials = productSerialUnitRepository.countBlockedSerialUnitsByPurchaseId(purchaseId);
         if (blockedSerials > 0) {
@@ -49,7 +50,7 @@ public class CancelPurchaseService implements CancelPurchaseUseCase {
         if (purchase.getItems() != null) {
             for (PurchaseItem item : purchase.getItems()) {
                 ProductFlags flags = productFlagsRepository.findById(item.getProductId()).orElse(null);
-                if (flags == null || !Boolean.TRUE.equals(flags.getAffectsStock())) {
+                if (flags == null || !Boolean.TRUE.equals(flags.getAffectsStock()) || !stockAlreadyLoaded) {
                     continue;
                 }
 
@@ -71,14 +72,16 @@ public class CancelPurchaseService implements CancelPurchaseUseCase {
                     continue;
                 }
 
-                stockService.registerOutbound(
-                        item.getProductId(),
-                        item.getQuantity(),
-                        null,
-                        "OUT_CANCEL_PURCHASE",
-                        "purchase_item",
-                        item.getId()
-                );
+                if (stockAlreadyLoaded) {
+                    stockService.registerOutbound(
+                            item.getProductId(),
+                            item.getQuantity(),
+                            null,
+                            "OUT_CANCEL_PURCHASE",
+                            "purchase_item",
+                            item.getId()
+                    );
+                }
 
                 if (Boolean.TRUE.equals(flags.getManageBySerial())) {
                     productSerialUnitRepository.markSerialUnitsByPurchaseItemAsBaja(item.getId());

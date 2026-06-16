@@ -18,6 +18,7 @@ import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.inp
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaV2SummaryResponse;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.UpdateProformaV2Request;
 import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaCreatorResponse;
+import com.paulfernandosr.possystembackend.proformav2.infrastructure.adapter.input.dto.ProformaCreatorRoleResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -117,6 +118,7 @@ public class ProformaV2Controller {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String query,
             @RequestParam(required = false) Long createdBy,
+            @RequestParam(required = false) Long createdByRoleId,
             @RequestParam(required = false) Boolean edited,
             @RequestParam(required = false) String paymentType,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
@@ -125,12 +127,17 @@ public class ProformaV2Controller {
             @RequestParam(defaultValue = "20") int size
     ) {
         return ResponseEntity.ok(SuccessResponse.ok(
-                getProformasV2PageUseCase.findPage(status, query, createdBy, edited, paymentType, dateFrom, dateTo, page, size)
+                getProformasV2PageUseCase.findPage(status, query, createdBy, createdByRoleId, edited, paymentType, dateFrom, dateTo, page, size)
         ));
     }
 
     @GetMapping("/creators")
     public ResponseEntity<SuccessResponse<List<ProformaCreatorResponse>>> findCreators() {
         return ResponseEntity.ok(SuccessResponse.ok(getProformasV2PageUseCase.findCreators()));
+    }
+
+    @GetMapping("/creator-roles")
+    public ResponseEntity<SuccessResponse<List<ProformaCreatorRoleResponse>>> findCreatorRoles() {
+        return ResponseEntity.ok(SuccessResponse.ok(getProformasV2PageUseCase.findCreatorRoles()));
     }
 }

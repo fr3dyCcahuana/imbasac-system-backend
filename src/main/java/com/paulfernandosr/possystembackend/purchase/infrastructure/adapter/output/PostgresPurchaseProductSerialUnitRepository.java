@@ -82,6 +82,20 @@ public class PostgresPurchaseProductSerialUnitRepository implements ProductSeria
     public void insertInboundSerialUnits(Long purchaseItemId,
                                          Long productId,
                                          List<PurchaseSerialUnit> serialUnits) {
+        insertSerialUnits(purchaseItemId, productId, serialUnits, "EN_ALMACEN");
+    }
+
+    @Override
+    public void insertPendingInboundSerialUnits(Long purchaseItemId,
+                                                Long productId,
+                                                List<PurchaseSerialUnit> serialUnits) {
+        insertSerialUnits(purchaseItemId, productId, serialUnits, "PENDIENTE_INGRESO");
+    }
+
+    private void insertSerialUnits(Long purchaseItemId,
+                                   Long productId,
+                                   List<PurchaseSerialUnit> serialUnits,
+                                   String status) {
         if (serialUnits == null || serialUnits.isEmpty()) return;
 
         String sql = """
@@ -98,7 +112,7 @@ public class PostgresPurchaseProductSerialUnitRepository implements ProductSeria
               purchase_item_id,
               created_at,
               updated_at
-            ) VALUES (?,?,?,?,?,?,?,?, 'EN_ALMACEN',?, NOW(), NOW())
+            ) VALUES (?,?,?,?,?,?,?,?, ?, ?, NOW(), NOW())
             """;
 
         for (PurchaseSerialUnit u : serialUnits) {
@@ -112,10 +126,26 @@ public class PostgresPurchaseProductSerialUnitRepository implements ProductSeria
                             u.getYearMake(),
                             emptyToNull(u.getDuaNumber()),
                             u.getDuaItem(),
+                            status,
                             purchaseItemId
                     )
                     .update();
         }
+    }
+
+    @Override
+    public void markSerialUnitsByPurchaseItemAsInWarehouse(Long purchaseItemId) {
+        String sql = """
+            UPDATE product_serial_unit
+               SET status = 'EN_ALMACEN',
+                   updated_at = NOW()
+             WHERE purchase_item_id = ?
+               AND status = 'PENDIENTE_INGRESO'
+            """;
+
+        jdbcClient.sql(sql)
+                .param(purchaseItemId)
+                .update();
     }
 
     @Override
@@ -132,7 +162,7 @@ public class PostgresPurchaseProductSerialUnitRepository implements ProductSeria
                    updated_at = NOW()
              WHERE id = ?
                AND purchase_item_id = ?
-               AND status = 'EN_ALMACEN'
+               AND status IN ('EN_ALMACEN', 'PENDIENTE_INGRESO')
                AND sale_item_id IS NULL
                AND contract_id IS NULL
                AND NOT EXISTS (
@@ -168,7 +198,7 @@ public class PostgresPurchaseProductSerialUnitRepository implements ProductSeria
               FROM product_serial_unit psu
              WHERE psu.purchase_item_id = ?
                AND (
-                    psu.status <> 'EN_ALMACEN'
+                    psu.status NOT IN ('EN_ALMACEN', 'PENDIENTE_INGRESO')
                     OR psu.sale_item_id IS NOT NULL
                     OR psu.contract_id IS NOT NULL
                     OR EXISTS (
@@ -195,7 +225,7 @@ public class PostgresPurchaseProductSerialUnitRepository implements ProductSeria
              WHERE pi.purchase_id = ?
                AND COALESCE(pi.status, 'ACTIVE') = 'ACTIVE'
                AND (
-                    psu.status <> 'EN_ALMACEN'
+                    psu.status NOT IN ('EN_ALMACEN', 'PENDIENTE_INGRESO')
                     OR psu.sale_item_id IS NOT NULL
                     OR psu.contract_id IS NOT NULL
                     OR EXISTS (
@@ -220,7 +250,7 @@ public class PostgresPurchaseProductSerialUnitRepository implements ProductSeria
                SET status = 'BAJA',
                    updated_at = NOW()
              WHERE purchase_item_id = ?
-               AND status = 'EN_ALMACEN'
+               AND status IN ('EN_ALMACEN', 'PENDIENTE_INGRESO')
                AND sale_item_id IS NULL
                AND contract_id IS NULL
                AND NOT EXISTS (

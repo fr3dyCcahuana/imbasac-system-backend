@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -61,12 +62,15 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
       delivery_guide_series,
       delivery_guide_number,
       delivery_guide_company,
+      stock_entry_status,
+      stock_loaded_at,
+      stock_loaded_by,
       created_by,
       updated_by,
       created_at,
       updated_at
     )
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, ?, ?, NOW(), NOW())
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, ?, ?, NOW(), NOW())
     RETURNING id
 """;
         try {
@@ -100,6 +104,9 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                             purchase.getDeliveryGuideSeries(),
                             purchase.getDeliveryGuideNumber(),
                             purchase.getDeliveryGuideCompany(),
+                            purchase.getStockEntryStatus(),
+                            purchase.getStockLoadedAt(),
+                            purchase.getStockLoadedBy(),
                             username,
                             username
                     )
@@ -223,6 +230,9 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                     p.igv_amount,
                     p.total,
                     p.status,
+                    p.stock_entry_status,
+                    p.stock_loaded_at,
+                    p.stock_loaded_by,
                     p.created_by,
                     p.updated_by,
                     p.created_at,
@@ -284,6 +294,9 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                     p.total,
                     p.status,
                     p.notes,
+                    p.stock_entry_status,
+                    p.stock_loaded_at,
+                    p.stock_loaded_by,
                     p.created_by,
                     p.updated_by,
                     p.created_at,
@@ -334,6 +347,9 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                             .total(rs.getBigDecimal("total"))
                             .status(rs.getString("status"))
                             .notes(rs.getString("notes"))
+                            .stockEntryStatus(rs.getString("stock_entry_status"))
+                            .stockLoadedAt(toLocalDateTime(rs.getTimestamp("stock_loaded_at")))
+                            .stockLoadedBy(rs.getString("stock_loaded_by"))
                             .createdBy(rs.getString("created_by"))
                             .updatedBy(rs.getString("updated_by"))
                             .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null)
@@ -726,6 +742,23 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
     }
 
     @Override
+    public List<Long> findPendingStockEntryPurchaseIds(LocalDate dueDate) {
+        String sql = """
+                SELECT id
+                  FROM purchase
+                 WHERE COALESCE(stock_entry_status, 'LOADED') = 'PENDING'
+                   AND status = 'REGISTRADA'
+                   AND entry_date <= ?
+                 ORDER BY entry_date, id
+                """;
+
+        return jdbcClient.sql(sql)
+                .param(dueDate)
+                .query(Long.class)
+                .list();
+    }
+
+    @Override
     public boolean existsDocumentForAnotherPurchase(Long purchaseId,
                                                     String supplierRuc,
                                                     String documentType,
@@ -1010,6 +1043,41 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
 
         jdbcClient.sql(sql)
                 .params(status, username, purchaseId)
+                .update();
+    }
+
+    @Override
+    public void markStockEntryPending(Long purchaseId) {
+        String sql = """
+                UPDATE purchase
+                   SET stock_entry_status = 'PENDING',
+                       stock_loaded_at = NULL,
+                       stock_loaded_by = NULL,
+                       updated_at = NOW()
+                 WHERE id = ?
+                   AND COALESCE(stock_entry_status, 'LOADED') <> 'LOADED'
+                """;
+
+        jdbcClient.sql(sql)
+                .param(purchaseId)
+                .update();
+    }
+
+    @Override
+    public void markStockEntryLoaded(Long purchaseId, String username) {
+        String sql = """
+                UPDATE purchase
+                   SET stock_entry_status = 'LOADED',
+                       stock_loaded_at = NOW(),
+                       stock_loaded_by = ?,
+                       updated_by = ?,
+                       updated_at = NOW()
+                 WHERE id = ?
+                   AND COALESCE(stock_entry_status, 'PENDING') = 'PENDING'
+                """;
+
+        jdbcClient.sql(sql)
+                .params(username, username, purchaseId)
                 .update();
     }
 }
