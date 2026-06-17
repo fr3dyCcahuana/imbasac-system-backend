@@ -225,14 +225,14 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
                     line.getLineKind().name(),
                     line.getGiftReason(),
                     Boolean.TRUE.equals(line.getProduct().getFacturableSunat()),
-                    Boolean.TRUE.equals(line.getProduct().getAffectsStock()),
+                    Boolean.TRUE.equals(line.getAffectsStock()),
                     line.getVisibleInDocument(),
                     line.getUnitCostSnapshot(),
                     line.getTotalCostSnapshot(),
                     line.getRevenueTotal()
             );
 
-            if (Boolean.TRUE.equals(line.getProduct().getAffectsStock())) {
+            if (Boolean.TRUE.equals(line.getAffectsStock())) {
                 StockMovementBalance balance = productStockRepository.decreaseOnHandOrFail(line.getProduct().getId(), line.getQuantity());
                 BigDecimal unitCost = nz(line.getUnitCostSnapshot());
                 BigDecimal totalCost = line.getTotalCostSnapshot() != null
@@ -473,7 +473,8 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
 
             BigDecimal unitCostSnapshot = null;
             BigDecimal totalCostSnapshot = null;
-            boolean affectsStock = Boolean.TRUE.equals(product.getAffectsStock());
+            boolean affectsStock = Boolean.TRUE.equals(product.getAffectsStock())
+                    && !Boolean.TRUE.equals(item.getStockAlreadyDiscounted());
             if (affectsStock) {
                 unitCostSnapshot = (costPolicy == CostPolicy.PROMEDIO)
                         ? nz(productStockRepository.getAverageCost(product.getId()))
@@ -491,6 +492,7 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
                     .lineKind(kind)
                     .giftReason(item.getGiftReason())
                     .visibleInDocument(visibleInDocument)
+                    .affectsStock(affectsStock)
                     .unitCostSnapshot(unitCostSnapshot)
                     .totalCostSnapshot(totalCostSnapshot)
                     .revenueTotal(baseLine.setScale(4, RoundingMode.HALF_UP))
@@ -771,6 +773,7 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
         private LineKind lineKind;
         private String giftReason;
         private Boolean visibleInDocument;
+        private Boolean affectsStock;
         private BigDecimal unitCostSnapshot;
         private BigDecimal totalCostSnapshot;
         private BigDecimal revenueTotal;
@@ -896,7 +899,7 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
             itemMap.put("lineKind", line.getLineKind().name());
             itemMap.put("giftReason", line.getGiftReason());
             itemMap.put("facturableSunat", line.getProduct().getFacturableSunat());
-            itemMap.put("affectsStock", line.getProduct().getAffectsStock());
+            itemMap.put("affectsStock", line.getAffectsStock());
             itemMap.put("visibleInDocument", line.getVisibleInDocument());
             itemMap.put("revenueTotal", line.getRevenueTotal());
             itemMap.put("igvLine", line.getIgvLine());

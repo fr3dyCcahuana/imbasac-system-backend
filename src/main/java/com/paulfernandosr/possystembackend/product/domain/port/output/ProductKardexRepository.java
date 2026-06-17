@@ -5,6 +5,7 @@ import com.paulfernandosr.possystembackend.common.domain.Pageable;
 import com.paulfernandosr.possystembackend.product.domain.ProductKardexEntry;
 
 import java.time.LocalDate;
+import java.util.List;
 
 public interface ProductKardexRepository {
 
@@ -23,5 +24,13 @@ public interface ProductKardexRepository {
             LocalDate dateFrom,
             LocalDate dateTo,
             Pageable pageable
+    );
+
+    List<ProductKardexEntry> findInventoryReportProducts(List<Long> productIds);
+
+    List<ProductKardexEntry> findInventoryReportMovements(
+            List<Long> productIds,
+            LocalDate dateFrom,
+            LocalDate dateTo
     );
 }

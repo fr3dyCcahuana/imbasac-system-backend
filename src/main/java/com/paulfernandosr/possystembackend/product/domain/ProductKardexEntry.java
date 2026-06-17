@@ -24,6 +24,7 @@ public class ProductKardexEntry {
     private String model;
     private String presentation;
     private Boolean manageBySerial;
+    private String existenceTypeCode;
 
     private String movementType;
     private String movementLabel;     // COMPRA, VENTA, VENTANILLA, AJUSTE, DEVOLUCION, OTRO

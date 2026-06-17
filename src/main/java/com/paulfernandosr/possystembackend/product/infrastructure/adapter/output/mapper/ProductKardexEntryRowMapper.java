@@ -27,6 +27,7 @@ public class ProductKardexEntryRowMapper implements RowMapper<ProductKardexEntry
                 .model(rs.getString("model"))
                 .presentation(rs.getString("presentation"))
                 .manageBySerial(rs.getObject("manage_by_serial", Boolean.class))
+                .existenceTypeCode(rs.getString("existence_type_code"))
 
                 .movementType(rs.getString("movement_type"))
                 .movementLabel(rs.getString("movement_label"))

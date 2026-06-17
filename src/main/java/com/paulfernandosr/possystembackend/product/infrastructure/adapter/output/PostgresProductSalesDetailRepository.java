@@ -3,6 +3,7 @@ package com.paulfernandosr.possystembackend.product.infrastructure.adapter.outpu
 import com.paulfernandosr.possystembackend.common.domain.Page;
 import com.paulfernandosr.possystembackend.common.domain.Pageable;
 import com.paulfernandosr.possystembackend.common.infrastructure.mapper.QueryMapper;
+import com.paulfernandosr.possystembackend.product.domain.ProductExistenceType;
 import com.paulfernandosr.possystembackend.product.domain.ProductImage;
 import com.paulfernandosr.possystembackend.product.domain.ProductSalesDetail;
 import com.paulfernandosr.possystembackend.product.domain.ProductSerialUnit;
@@ -113,6 +114,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                     p.name,
                     p.brand,
                     p.model,
+                    p.existence_type_code,
                     p.category,
                     p.warehouse_location,
                     p.presentation,
@@ -195,6 +197,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                 )
                 SELECT
                   id, sku, barcode, name, brand, model, category, warehouse_location, presentation, factor,
+                  existence_type_code,
                   manage_by_serial, compatibility, gift_allowed,
                   affects_stock, facturable_sunat,
                   unit_price,
@@ -230,6 +233,8 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                         .name(rs.getString("name"))
                         .brand(rs.getString("brand"))
                         .model(rs.getString("model"))
+                        .existenceTypeCode(rs.getString("existence_type_code"))
+                        .existenceTypeDescription(ProductExistenceType.description(rs.getString("existence_type_code")))
                         .category(rs.getString("category"))
                         .warehouseLocation(rs.getString("warehouse_location"))
                         .presentation(rs.getString("presentation"))

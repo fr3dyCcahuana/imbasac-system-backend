@@ -82,6 +82,7 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                   model,
                   presentation,
                   manage_by_serial,
+                  existence_type_code,
                   movement_type,
                   movement_label,
                   direction,
@@ -131,6 +132,147 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                 .totalPages(totalPages.intValue())
                 .totalElements(totalElements)
                 .build();
+    }
+
+    @Override
+    public List<ProductKardexEntry> findInventoryReportProducts(List<Long> productIds) {
+        if (productIds == null || productIds.isEmpty()) {
+            return List.of();
+        }
+
+        String placeholders = placeholders(productIds.size());
+        String orderBy = orderByProductIds(productIds);
+        String sql = """
+                SELECT
+                  p.id AS id,
+                  NULL::timestamp AS movement_date,
+                  p.id AS product_id,
+                  p.sku,
+                  p.name AS product_name,
+                  p.category,
+                  p.brand,
+                  p.model,
+                  p.presentation,
+                  p.manage_by_serial,
+                  p.existence_type_code,
+                  NULL::varchar AS movement_type,
+                  NULL::varchar AS movement_label,
+                  NULL::varchar AS direction,
+                  NULL::varchar AS source_table,
+                  NULL::bigint AS source_id,
+                  NULL::varchar AS source_document_type,
+                  NULL::varchar AS source_series,
+                  NULL::varchar AS source_number,
+                  NULL::date AS source_issue_date,
+                  NULL::varchar AS source_status,
+                  NULL::integer AS source_line_number,
+                  NULL::varchar AS counterpart_type,
+                  NULL::varchar AS counterpart_document_number,
+                  NULL::varchar AS counterpart_name,
+                  0::numeric AS quantity_in,
+                  0::numeric AS quantity_out,
+                  0::numeric AS movement_quantity,
+                  NULL::numeric AS stock_before,
+                  NULL::numeric AS stock_after,
+                  NULL::numeric AS unit_cost,
+                  NULL::numeric AS total_cost,
+                  NULL::numeric AS average_cost_after,
+                  NULL::numeric AS source_unit_price,
+                  NULL::numeric AS source_line_total,
+                  NULL::varchar AS adjustment_reason,
+                  NULL::varchar AS note
+                FROM product p
+                WHERE p.id IN (%s)
+                ORDER BY %s
+                """.formatted(placeholders, orderBy);
+
+        return jdbcClient.sql(sql)
+                .params(productIds.toArray())
+                .query(new ProductKardexEntryRowMapper())
+                .list();
+    }
+
+    @Override
+    public List<ProductKardexEntry> findInventoryReportMovements(
+            List<Long> productIds,
+            LocalDate dateFrom,
+            LocalDate dateTo
+    ) {
+        if (productIds == null || productIds.isEmpty()) {
+            return List.of();
+        }
+
+        String baseSql = baseSql();
+        String placeholders = placeholders(productIds.size());
+        String sql = baseSql + """
+                SELECT
+                  id,
+                  movement_date,
+                  product_id,
+                  sku,
+                  product_name,
+                  category,
+                  brand,
+                  model,
+                  presentation,
+                  manage_by_serial,
+                  existence_type_code,
+                  movement_type,
+                  movement_label,
+                  direction,
+                  source_table,
+                  source_id,
+                  source_document_type,
+                  source_series,
+                  source_number,
+                  source_issue_date,
+                  source_status,
+                  source_line_number,
+                  counterpart_type,
+                  counterpart_document_number,
+                  counterpart_name,
+                  quantity_in,
+                  quantity_out,
+                  movement_quantity,
+                  stock_before,
+                  stock_after,
+                  unit_cost,
+                  total_cost,
+                  average_cost_after,
+                  source_unit_price,
+                  source_line_total,
+                  adjustment_reason,
+                  note
+                FROM enriched
+                WHERE product_id IN (%s)
+                  AND movement_date >= ?
+                  AND movement_date < ?
+                ORDER BY product_id ASC, movement_date ASC, id ASC
+                """.formatted(placeholders);
+
+        LocalDate safeFrom = dateFrom != null ? dateFrom : LocalDate.of(1900, 1, 1);
+        LocalDate safeTo = dateTo != null ? dateTo : LocalDate.now();
+        List<Object> params = new ArrayList<>(productIds);
+        params.add(safeFrom.atStartOfDay());
+        params.add(safeTo.plusDays(1).atStartOfDay());
+
+        return jdbcClient.sql(sql)
+                .params(params.toArray())
+                .query(new ProductKardexEntryRowMapper())
+                .list();
+    }
+
+    private String placeholders(int size) {
+        return String.join(", ", java.util.Collections.nCopies(size, "?"));
+    }
+
+    private String orderByProductIds(List<Long> productIds) {
+        StringBuilder sql = new StringBuilder("CASE p.id ");
+        for (int i = 0; i < productIds.size(); i++) {
+            sql.append("WHEN ").append(productIds.get(i)).append(" THEN ").append(i).append(" ");
+        }
+        sql.append("ELSE ").append(productIds.size()).append(" END");
+        return sql.toString();
     }
 
     private SqlWhere buildWhere(
@@ -251,6 +393,7 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                     p.model,
                     p.presentation,
                     p.manage_by_serial,
+                    p.existence_type_code,
 
                     m.movement_type,
                     CASE
@@ -281,28 +424,28 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                     CASE
                       WHEN m.source_table = 'purchase_item' THEN pu.document_type
                       WHEN m.source_table = 'sale_item' THEN s.doc_type
-                      WHEN m.source_table = 'counter_sale_item' THEN 'VENTANILLA'
+                      WHEN m.source_table = 'counter_sale_item' THEN COALESCE(NULLIF(cs.associated_doc_type, ''), cs_sunat.doc_type, 'VENTANILLA')
                       WHEN m.source_table = 'product_stock_adjustment' THEN 'AJUSTE'
                       ELSE m.source_table
                     END AS source_document_type,
                     CASE
                       WHEN m.source_table = 'purchase_item' THEN pu.document_series
                       WHEN m.source_table = 'sale_item' THEN s.series
-                      WHEN m.source_table = 'counter_sale_item' THEN cs.series
+                      WHEN m.source_table = 'counter_sale_item' THEN COALESCE(NULLIF(cs.associated_series, ''), cs_sunat.series, cs.series)
                       WHEN m.source_table = 'product_stock_adjustment' THEN NULL
                       ELSE NULL
                     END AS source_series,
                     CASE
                       WHEN m.source_table = 'purchase_item' THEN pu.document_number
                       WHEN m.source_table = 'sale_item' THEN s.number::text
-                      WHEN m.source_table = 'counter_sale_item' THEN cs.number::text
+                      WHEN m.source_table = 'counter_sale_item' THEN COALESCE(cs.associated_number::text, cs_sunat.number::text, cs.number::text)
                       WHEN m.source_table = 'product_stock_adjustment' THEN psa.id::text
                       ELSE m.source_id::text
                     END AS source_number,
                     CASE
                       WHEN m.source_table = 'purchase_item' THEN COALESCE(pu.entry_date, pu.issue_date)
                       WHEN m.source_table = 'sale_item' THEN s.issue_date
-                      WHEN m.source_table = 'counter_sale_item' THEN cs.issue_date
+                      WHEN m.source_table = 'counter_sale_item' THEN COALESCE(cs_sunat.issue_date, cs.associated_at::date, cs.issue_date)
                       WHEN m.source_table = 'product_stock_adjustment' THEN psa.created_at::date
                       ELSE m.created_at::date
                     END AS source_issue_date,
@@ -398,6 +541,9 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                         AND m.source_id = csi.id
                   LEFT JOIN counter_sale cs
                          ON cs.id = csi.counter_sale_id
+                  LEFT JOIN sale cs_sunat
+                         ON m.source_table = 'counter_sale_item'
+                        AND cs_sunat.id = cs.associated_sale_id
 
                   LEFT JOIN product_stock_adjustment psa
                          ON m.source_table = 'product_stock_adjustment'

@@ -4,14 +4,21 @@ import com.paulfernandosr.possystembackend.common.domain.Page;
 import com.paulfernandosr.possystembackend.common.domain.Pageable;
 import com.paulfernandosr.possystembackend.common.infrastructure.mapper.PageMapper;
 import com.paulfernandosr.possystembackend.common.infrastructure.response.SuccessResponse;
+import com.paulfernandosr.possystembackend.product.domain.InventoryReportExportRequest;
 import com.paulfernandosr.possystembackend.product.domain.ProductKardexEntry;
+import com.paulfernandosr.possystembackend.product.domain.port.input.ExportInventoryReportUseCase;
 import com.paulfernandosr.possystembackend.product.domain.port.input.GetProductKardexPageUseCase;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
@@ -22,7 +29,10 @@ import java.util.Collection;
 @RequestMapping("/products/kardex")
 public class ProductKardexRestController {
 
+    private static final MediaType XLSX_MEDIA_TYPE = MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
     private final GetProductKardexPageUseCase getProductKardexPageUseCase;
+    private final ExportInventoryReportUseCase exportInventoryReportUseCase;
 
     @GetMapping
     public ResponseEntity<SuccessResponse<Collection<ProductKardexEntry>>> getKardexPage(
@@ -73,5 +83,19 @@ public class ProductKardexRestController {
 
         SuccessResponse.Metadata metadata = PageMapper.mapPage(result);
         return ResponseEntity.ok(SuccessResponse.ok(result.getContent(), metadata));
+    }
+
+    @PostMapping("/inventory-report/export")
+    public ResponseEntity<byte[]> exportInventoryReport(
+            @Valid @RequestBody InventoryReportExportRequest request
+    ) {
+        byte[] file = exportInventoryReportUseCase.export(request);
+        String filename = "registro_inventario_" + request.format().name().toLowerCase()
+                + "_" + request.dateFrom() + "_" + request.dateTo() + ".xlsx";
+
+        return ResponseEntity.ok()
+                .contentType(XLSX_MEDIA_TYPE)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(file);
     }
 }

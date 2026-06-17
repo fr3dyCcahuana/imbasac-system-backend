@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.product.application;
 
 import com.paulfernandosr.possystembackend.product.domain.Product;
+import com.paulfernandosr.possystembackend.product.domain.ProductExistenceType;
 import com.paulfernandosr.possystembackend.product.domain.ProductVehicleSpecs;
 import com.paulfernandosr.possystembackend.product.domain.exception.InvalidProductException;
 import com.paulfernandosr.possystembackend.product.domain.port.input.UpdateProductInfoUseCase;
@@ -26,6 +27,8 @@ public class UpdateProductInfoService implements UpdateProductInfoUseCase {
     @Override
     @Transactional
     public void updateProductInfoById(Long productId, Product product) {
+        normalizeAndValidateExistenceType(product);
+
         boolean requiresSpecs = Boolean.TRUE.equals(product.getManageBySerial())
                 && ProductVehicleSpecsRules.isVehicleCategory(product.getCategory());
 
@@ -57,5 +60,12 @@ public class UpdateProductInfoService implements UpdateProductInfoUseCase {
                 specsRepository.create(specs);
             }
         }
+    }
+    private void normalizeAndValidateExistenceType(Product product) {
+        String code = ProductExistenceType.normalize(product.getExistenceTypeCode());
+        if (!ProductExistenceType.isAllowed(code)) {
+            throw new InvalidProductException("Tipo de existencia no permitido: " + code);
+        }
+        product.setExistenceTypeCode(code);
     }
 }

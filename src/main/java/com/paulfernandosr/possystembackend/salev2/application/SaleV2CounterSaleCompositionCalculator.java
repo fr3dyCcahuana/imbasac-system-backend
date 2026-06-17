@@ -175,6 +175,7 @@ public class SaleV2CounterSaleCompositionCalculator {
                     .giftReason(null)
                     .unitPriceOverride(line.getComposedUnitPrice())
                     .serialUnitIds(List.of())
+                    .stockAlreadyDiscounted("COUNTER_SALE".equalsIgnoreCase(line.getSourceType()))
                     .build());
         }
 

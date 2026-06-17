@@ -17,6 +17,7 @@ public class ProductRowMapper implements RowMapper<Product> {
                 .brand(rs.getString("brand"))
                 .model(rs.getString("model"))
                 .productType(rs.getString("product_type"))
+                .existenceTypeCode(rs.getString("existence_type_code"))
                 .category(rs.getString("category"))
                 .presentation(rs.getString("presentation"))
                 .factor(rs.getBigDecimal("factor"))

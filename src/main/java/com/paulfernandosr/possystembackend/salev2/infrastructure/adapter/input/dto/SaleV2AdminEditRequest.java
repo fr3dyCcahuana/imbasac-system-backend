@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.paulfernandosr.possystembackend.salev2.domain.model.*;
 import lombok.*;
 
@@ -60,6 +61,13 @@ public class SaleV2AdminEditRequest {
         private String giftReason;
         private BigDecimal unitPriceOverride;
         private List<Long> serialUnitIds;
+
+        /**
+         * Uso interno para composicion SUNAT con ventanilla.
+         * Las lineas de ventanilla ya descontaron stock al registrarse como counter_sale.
+         */
+        @JsonIgnore
+        private Boolean stockAlreadyDiscounted;
     }
 
     @Getter

@@ -15,6 +15,8 @@ public class ProductSalesDetail {
     private String name;
     private String brand;
     private String model;
+    private String existenceTypeCode;
+    private String existenceTypeDescription;
     private String category;
     private String warehouseLocation;
     private String presentation;

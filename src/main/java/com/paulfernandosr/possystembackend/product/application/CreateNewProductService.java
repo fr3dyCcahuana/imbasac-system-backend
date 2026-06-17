@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.product.application;
 
 import com.paulfernandosr.possystembackend.product.domain.Product;
+import com.paulfernandosr.possystembackend.product.domain.ProductExistenceType;
 import com.paulfernandosr.possystembackend.product.domain.ProductVehicleSpecs;
 import com.paulfernandosr.possystembackend.product.domain.exception.InvalidProductException;
 import com.paulfernandosr.possystembackend.product.domain.port.input.CreateNewProductUseCase;
@@ -26,6 +27,8 @@ public class CreateNewProductService implements CreateNewProductUseCase {
     @Override
     @Transactional
     public Product createNewProduct(Product product) {
+        normalizeAndValidateExistenceType(product);
+
         // Reglas: si manageBySerial=true y category=MOTOR|MOTOCICLETAS, la ficha técnica es obligatoria.
         boolean requiresSpecs = Boolean.TRUE.equals(product.getManageBySerial())
                 && ProductVehicleSpecsRules.isVehicleCategory(product.getCategory());
@@ -55,5 +58,12 @@ public class CreateNewProductService implements CreateNewProductUseCase {
         }
 
         return created;
+    }
+    private void normalizeAndValidateExistenceType(Product product) {
+        String code = ProductExistenceType.normalize(product.getExistenceTypeCode());
+        if (!ProductExistenceType.isAllowed(code)) {
+            throw new InvalidProductException("Tipo de existencia no permitido: " + code);
+        }
+        product.setExistenceTypeCode(code);
     }
 }
