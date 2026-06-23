@@ -50,10 +50,18 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
     public byte[] export(InventoryReportExportRequest request) {
         validate(request);
 
-        List<Long> productIds = normalizeIds(request.productIds());
-        List<ProductKardexEntry> products = productKardexRepository.findInventoryReportProducts(productIds);
+        boolean includeAllProductsWithMovements = Boolean.TRUE.equals(request.includeAllProductsWithMovements());
+        List<Long> productIds = includeAllProductsWithMovements ? List.of() : normalizeIds(request.productIds());
+        List<ProductKardexEntry> products = includeAllProductsWithMovements
+                ? productKardexRepository.findInventoryReportProductsWithMovements(request.dateFrom(), request.dateTo())
+                : productKardexRepository.findInventoryReportProducts(productIds);
+        List<Long> movementProductIds = products.stream()
+                .map(ProductKardexEntry::getProductId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
         List<ProductKardexEntry> movements = productKardexRepository.findInventoryReportMovements(
-                productIds,
+                movementProductIds,
                 request.dateFrom(),
                 request.dateTo()
         );
@@ -97,6 +105,9 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
         }
         if (request.dateFrom().isAfter(request.dateTo())) {
             throw new IllegalArgumentException("La fecha inicial no puede ser mayor que la fecha final.");
+        }
+        if (Boolean.TRUE.equals(request.includeAllProductsWithMovements())) {
+            return;
         }
         if (request.productIds() == null || request.productIds().isEmpty()) {
             throw new IllegalArgumentException("Seleccione al menos un producto.");
@@ -159,6 +170,9 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
         if (movements.isEmpty()) {
             Row row = sheet.createRow(rowIndex++);
             mergeAndSet(row, 0, lastColumn, "Sin movimientos en el rango seleccionado.", styles.note);
+            rowIndex = valued
+                    ? appendValuedTotalsRow(sheet, rowIndex, List.of(), styles)
+                    : appendPhysicalTotalsRow(sheet, rowIndex, List.of(), styles);
             return rowIndex;
         }
 
@@ -171,7 +185,88 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
             }
         }
 
+        rowIndex = valued
+                ? appendValuedTotalsRow(sheet, rowIndex, movements, styles)
+                : appendPhysicalTotalsRow(sheet, rowIndex, movements, styles);
+
         return rowIndex;
+    }
+
+    private int appendValuedTotalsRow(Sheet sheet, int rowIndex, List<ProductKardexEntry> movements, ReportStyles styles) {
+        Row row = sheet.createRow(rowIndex++);
+        row.setHeightInPoints(22f);
+
+        mergeAndSet(row, 0, 4, "TOTALES", styles.totalLabel);
+        setNumber(row, 5, sum(movements, ProductKardexEntry::getQuantityIn), styles.totalQuantity, true);
+        setCell(row, 6, "", styles.totalMoney);
+        setNumber(row, 7, sumEntryTotal(movements), styles.totalMoney, true);
+        setNumber(row, 8, sum(movements, ProductKardexEntry::getQuantityOut), styles.totalQuantity, true);
+        setCell(row, 9, "", styles.totalMoney);
+        setNumber(row, 10, sumExitTotal(movements), styles.totalMoney, true);
+
+        ProductKardexEntry last = lastMovement(movements);
+        setNumber(row, 11, last != null ? last.getStockAfter() : BigDecimal.ZERO, styles.totalQuantity, true);
+        setNumber(row, 12, last != null ? last.getAverageCostAfter() : BigDecimal.ZERO, styles.totalMoney, true);
+        setNumber(row, 13, last != null ? balanceTotal(last) : BigDecimal.ZERO, styles.totalMoney, true);
+        return rowIndex;
+    }
+
+    private int appendPhysicalTotalsRow(Sheet sheet, int rowIndex, List<ProductKardexEntry> movements, ReportStyles styles) {
+        Row row = sheet.createRow(rowIndex++);
+        row.setHeightInPoints(22f);
+
+        mergeAndSet(row, 0, 4, "TOTALES", styles.totalLabel);
+        setNumber(row, 5, sum(movements, ProductKardexEntry::getQuantityIn), styles.totalQuantity, true);
+        setNumber(row, 6, sum(movements, ProductKardexEntry::getQuantityOut), styles.totalQuantity, true);
+
+        ProductKardexEntry last = lastMovement(movements);
+        setNumber(row, 7, last != null ? last.getStockAfter() : BigDecimal.ZERO, styles.totalQuantity, true);
+        return rowIndex;
+    }
+
+    private BigDecimal sum(List<ProductKardexEntry> movements, java.util.function.Function<ProductKardexEntry, BigDecimal> extractor) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (ProductKardexEntry movement : movements) {
+            if (movement == null) continue;
+            BigDecimal value = extractor.apply(movement);
+            if (value != null) {
+                total = total.add(value);
+            }
+        }
+        return total;
+    }
+
+    private BigDecimal sumEntryTotal(List<ProductKardexEntry> movements) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (ProductKardexEntry movement : movements) {
+            if (movement != null && positive(movement.getQuantityIn())) {
+                BigDecimal value = entryTotalValue(movement);
+                if (value != null) {
+                    total = total.add(value);
+                }
+            }
+        }
+        return total.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal sumExitTotal(List<ProductKardexEntry> movements) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (ProductKardexEntry movement : movements) {
+            if (movement != null && positive(movement.getQuantityOut())) {
+                BigDecimal value = firstNonNull(movement.getSourceLineTotal(), movement.getTotalCost());
+                if (value != null) {
+                    total = total.add(value);
+                }
+            }
+        }
+        return total.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private ProductKardexEntry lastMovement(List<ProductKardexEntry> movements) {
+        if (movements == null || movements.isEmpty()) {
+            return null;
+        }
+        return movements.get(movements.size() - 1);
     }
 
     private String reportTitle(InventoryReportFormat format) {
@@ -210,8 +305,8 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
     private int appendValuedHeader(Sheet sheet, int rowIndex, CellStyle headerStyle) {
         Row group = sheet.createRow(rowIndex++);
         Row columns = sheet.createRow(rowIndex++);
-        group.setHeightInPoints(36f);
-        columns.setHeightInPoints(28f);
+        group.setHeightInPoints(42f);
+        columns.setHeightInPoints(34f);
 
         mergeAndSet(group, 0, 3, "DOCUMENTO DE TRASLADO, COMPROBANTE DE PAGO, DOCUMENTO INTERNO O SIMILAR", headerStyle);
         mergeAndSet(group, 4, 4, "TIPO DE OPERACION", headerStyle);
@@ -221,9 +316,9 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
 
         String[] headers = {
                 "FECHA", "TIPO (TABLA 10)", "SERIE", "NUMERO", "(TABLA 12)",
-                "CANTIDAD", "COSTO UNITARIO", "COSTO TOTAL",
-                "CANTIDAD", "COSTO UNITARIO", "COSTO TOTAL",
-                "CANTIDAD", "COSTO UNITARIO", "COSTO TOTAL"
+                "CANTIDAD", "COSTO\nUNITARIO", "COSTO\nTOTAL",
+                "CANTIDAD", "PRECIO\nUNITARIO", "PRECIO\nTOTAL",
+                "CANTIDAD", "COSTO\nUNITARIO", "COSTO\nTOTAL"
         };
         for (int i = 0; i < headers.length; i++) {
             setCell(columns, i, headers[i], headerStyle);
@@ -258,12 +353,12 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
         setCell(row, 4, operationTypeCode(movement), styles.table);
 
         setNumber(row, 5, movement.getQuantityIn(), styles.quantity);
-        setNumber(row, 6, positive(movement.getQuantityIn()) ? movement.getUnitCost() : null, styles.money);
-        setNumber(row, 7, positive(movement.getQuantityIn()) ? movement.getTotalCost() : null, styles.money);
+        setNumber(row, 6, positive(movement.getQuantityIn()) ? entryUnitValue(movement) : null, styles.money);
+        setNumber(row, 7, positive(movement.getQuantityIn()) ? entryTotalValue(movement) : null, styles.money);
 
         setNumber(row, 8, movement.getQuantityOut(), styles.quantity);
-        setNumber(row, 9, positive(movement.getQuantityOut()) ? movement.getUnitCost() : null, styles.money);
-        setNumber(row, 10, positive(movement.getQuantityOut()) ? movement.getTotalCost() : null, styles.money);
+        setNumber(row, 9, positive(movement.getQuantityOut()) ? firstNonNull(movement.getSourceUnitPrice(), movement.getUnitCost()) : null, styles.money);
+        setNumber(row, 10, positive(movement.getQuantityOut()) ? firstNonNull(movement.getSourceLineTotal(), movement.getTotalCost()) : null, styles.money);
 
         setNumber(row, 11, movement.getStockAfter(), styles.quantity);
         setNumber(row, 12, movement.getAverageCostAfter(), styles.money);
@@ -292,6 +387,24 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
 
     private boolean positive(BigDecimal value) {
         return value != null && value.compareTo(BigDecimal.ZERO) > 0;
+    }
+
+    private BigDecimal firstNonNull(BigDecimal preferred, BigDecimal fallback) {
+        return preferred != null ? preferred : fallback;
+    }
+
+    private BigDecimal entryUnitValue(ProductKardexEntry movement) {
+        if ("credit_note_item".equals(text(movement.getSourceTable()))) {
+            return firstNonNull(movement.getSourceUnitPrice(), movement.getUnitCost());
+        }
+        return movement.getUnitCost();
+    }
+
+    private BigDecimal entryTotalValue(ProductKardexEntry movement) {
+        if ("credit_note_item".equals(text(movement.getSourceTable()))) {
+            return firstNonNull(movement.getSourceLineTotal(), movement.getTotalCost());
+        }
+        return movement.getTotalCost();
     }
 
     private String dateLabel(ProductKardexEntry movement) {
@@ -346,7 +459,7 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
 
     private void configureColumns(Sheet sheet, InventoryReportFormat format) {
         int[] widths = format == InventoryReportFormat.VALUED
-                ? new int[]{12, 16, 14, 16, 14, 13, 16, 16, 13, 16, 16, 13, 16, 16}
+                ? new int[]{13, 17, 14, 16, 18, 16, 17, 17, 16, 17, 17, 16, 17, 17}
                 : new int[]{14, 18, 14, 18, 18, 16, 16, 18};
 
         for (int i = 0; i < widths.length; i++) {
@@ -402,7 +515,22 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
         note.setAlignment(HorizontalAlignment.CENTER);
         note.setWrapText(true);
 
-        return new ReportStyles(title, bold, text, header, table, date, quantity, money, note);
+        CellStyle totalLabel = bordered(workbook);
+        totalLabel.setFont(boldFont);
+        totalLabel.setAlignment(HorizontalAlignment.RIGHT);
+        totalLabel.setVerticalAlignment(VerticalAlignment.CENTER);
+
+        CellStyle totalQuantity = bordered(workbook);
+        totalQuantity.setFont(boldFont);
+        totalQuantity.setDataFormat(dataFormat.getFormat("#,##0.####"));
+        totalQuantity.setAlignment(HorizontalAlignment.RIGHT);
+
+        CellStyle totalMoney = bordered(workbook);
+        totalMoney.setFont(boldFont);
+        totalMoney.setDataFormat(dataFormat.getFormat("#,##0.00"));
+        totalMoney.setAlignment(HorizontalAlignment.RIGHT);
+
+        return new ReportStyles(title, bold, text, header, table, date, quantity, money, note, totalLabel, totalQuantity, totalMoney);
     }
 
     private CellStyle bordered(Workbook workbook) {
@@ -438,8 +566,12 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
     }
 
     private void setNumber(Row row, int column, BigDecimal value, CellStyle style) {
+        setNumber(row, column, value, style, false);
+    }
+
+    private void setNumber(Row row, int column, BigDecimal value, CellStyle style, boolean showZero) {
         Cell cell = row.createCell(column);
-        if (value != null && value.compareTo(BigDecimal.ZERO) != 0) {
+        if (value != null && (showZero || value.compareTo(BigDecimal.ZERO) != 0)) {
             cell.setCellValue(value.doubleValue());
         } else {
             cell.setBlank();
@@ -460,7 +592,10 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
             CellStyle date,
             CellStyle quantity,
             CellStyle money,
-            CellStyle note
+            CellStyle note,
+            CellStyle totalLabel,
+            CellStyle totalQuantity,
+            CellStyle totalMoney
     ) {
     }
 }

@@ -140,6 +140,7 @@ public class UpdatePurchaseService implements UpdatePurchaseUseCase {
         String afterJson = toJson(after);
 
         purchaseRepository.insertEditHistory(purchaseId, editNumber, editReason, actor, beforeJson, afterJson);
+        purchaseRepository.refreshProductCostReferencesByPurchase(purchaseId);
 
         if (!stockAlreadyLoaded && stockEntryService.isDueForStockEntry(after)) {
             return stockEntryService.loadStockIfPending(purchaseId, actor);

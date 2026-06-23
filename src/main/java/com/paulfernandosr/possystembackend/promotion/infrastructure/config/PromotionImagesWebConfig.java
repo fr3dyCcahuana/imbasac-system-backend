@@ -10,7 +10,7 @@ import java.nio.file.Paths;
 @Configuration
 public class PromotionImagesWebConfig implements WebMvcConfigurer {
 
-    @Value("${app.files.promotions-images-dir:uploads/promotions}")
+    @Value("${app.files.promotions-images-dir}")
     private String promotionsImagesDir;
 
     @Value("${app.files.promotions-images-public-path:/images/promotions}")

@@ -193,6 +193,77 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
     }
 
     @Override
+    public List<ProductKardexEntry> findInventoryReportProductsWithMovements(LocalDate dateFrom, LocalDate dateTo) {
+        String baseSql = baseSql();
+        String sql = baseSql + """
+                , product_rows AS (
+                    SELECT DISTINCT
+                      product_id,
+                      sku,
+                      product_name,
+                      category,
+                      brand,
+                      model,
+                      presentation,
+                      manage_by_serial,
+                      existence_type_code
+                    FROM enriched
+                    WHERE movement_date >= ?
+                      AND movement_date < ?
+                      AND tax_export_eligible = TRUE
+                )
+                SELECT
+                  product_id AS id,
+                  NULL::timestamp AS movement_date,
+                  product_id,
+                  sku,
+                  product_name,
+                  category,
+                  brand,
+                  model,
+                  presentation,
+                  manage_by_serial,
+                  existence_type_code,
+                  NULL::varchar AS movement_type,
+                  NULL::varchar AS movement_label,
+                  NULL::varchar AS direction,
+                  NULL::varchar AS source_table,
+                  NULL::bigint AS source_id,
+                  NULL::varchar AS source_document_type,
+                  NULL::varchar AS source_series,
+                  NULL::varchar AS source_number,
+                  NULL::date AS source_issue_date,
+                  NULL::varchar AS source_status,
+                  NULL::integer AS source_line_number,
+                  NULL::varchar AS counterpart_type,
+                  NULL::varchar AS counterpart_document_number,
+                  NULL::varchar AS counterpart_name,
+                  0::numeric AS quantity_in,
+                  0::numeric AS quantity_out,
+                  0::numeric AS movement_quantity,
+                  NULL::numeric AS stock_before,
+                  NULL::numeric AS stock_after,
+                  NULL::numeric AS unit_cost,
+                  NULL::numeric AS total_cost,
+                  NULL::numeric AS average_cost_after,
+                  NULL::numeric AS source_unit_price,
+                  NULL::numeric AS source_line_total,
+                  NULL::varchar AS adjustment_reason,
+                  NULL::varchar AS note
+                FROM product_rows
+                ORDER BY sku ASC, product_id ASC
+                """;
+
+        LocalDate safeFrom = dateFrom != null ? dateFrom : LocalDate.of(1900, 1, 1);
+        LocalDate safeTo = dateTo != null ? dateTo : LocalDate.now();
+
+        return jdbcClient.sql(sql)
+                .params(safeFrom.atStartOfDay(), safeTo.plusDays(1).atStartOfDay())
+                .query(new ProductKardexEntryRowMapper())
+                .list();
+    }
+
+    @Override
     public List<ProductKardexEntry> findInventoryReportMovements(
             List<Long> productIds,
             LocalDate dateFrom,
@@ -247,6 +318,7 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                 WHERE product_id IN (%s)
                   AND movement_date >= ?
                   AND movement_date < ?
+                  AND tax_export_eligible = TRUE
                 ORDER BY product_id ASC, movement_date ASC, id ASC
                 """.formatted(placeholders);
 
@@ -400,6 +472,7 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                       WHEN m.source_table = 'purchase_item' THEN 'COMPRA'
                       WHEN m.source_table = 'sale_item' THEN 'VENTA'
                       WHEN m.source_table = 'counter_sale_item' THEN 'VENTANILLA'
+                      WHEN m.source_table = 'credit_note_item' THEN 'NOTA DE CREDITO'
                       WHEN m.source_table = 'product_stock_adjustment' THEN 'AJUSTE'
                       WHEN m.movement_type ILIKE '%RETURN%' THEN 'DEVOLUCION'
                       ELSE 'OTRO'
@@ -414,6 +487,7 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                       WHEN m.source_table = 'purchase_item' THEN 'PURCHASE'
                       WHEN m.source_table = 'sale_item' THEN 'SALE'
                       WHEN m.source_table = 'counter_sale_item' THEN 'COUNTER_SALE'
+                      WHEN m.source_table = 'credit_note_item' THEN 'SALE'
                       WHEN m.source_table = 'product_stock_adjustment' THEN 'ADJUSTMENT'
                       ELSE 'OTHER'
                     END AS source_filter,
@@ -424,28 +498,32 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                     CASE
                       WHEN m.source_table = 'purchase_item' THEN pu.document_type
                       WHEN m.source_table = 'sale_item' THEN s.doc_type
-                      WHEN m.source_table = 'counter_sale_item' THEN COALESCE(NULLIF(cs.associated_doc_type, ''), cs_sunat.doc_type, 'VENTANILLA')
+                      WHEN m.source_table = 'counter_sale_item' THEN COALESCE(NULLIF(cs.associated_doc_type, ''), cs_link_emit.emitted_doc_type, cs_combo_emit.emitted_doc_type, cs_sunat.doc_type, 'VENTANILLA')
+                      WHEN m.source_table = 'credit_note_item' THEN 'NOTA_CREDITO'
                       WHEN m.source_table = 'product_stock_adjustment' THEN 'AJUSTE'
                       ELSE m.source_table
                     END AS source_document_type,
                     CASE
                       WHEN m.source_table = 'purchase_item' THEN pu.document_series
                       WHEN m.source_table = 'sale_item' THEN s.series
-                      WHEN m.source_table = 'counter_sale_item' THEN COALESCE(NULLIF(cs.associated_series, ''), cs_sunat.series, cs.series)
+                      WHEN m.source_table = 'counter_sale_item' THEN COALESCE(NULLIF(cs.associated_series, ''), cs_link_emit.emitted_series, cs_combo_emit.emitted_series, cs_sunat.series, cs.series)
+                      WHEN m.source_table = 'credit_note_item' THEN cn.series
                       WHEN m.source_table = 'product_stock_adjustment' THEN NULL
                       ELSE NULL
                     END AS source_series,
                     CASE
                       WHEN m.source_table = 'purchase_item' THEN pu.document_number
                       WHEN m.source_table = 'sale_item' THEN s.number::text
-                      WHEN m.source_table = 'counter_sale_item' THEN COALESCE(cs.associated_number::text, cs_sunat.number::text, cs.number::text)
+                      WHEN m.source_table = 'counter_sale_item' THEN COALESCE(cs.associated_number::text, cs_link_emit.emitted_number::text, cs_combo_emit.emitted_number::text, cs_sunat.number::text, cs.number::text)
+                      WHEN m.source_table = 'credit_note_item' THEN cn.number::text
                       WHEN m.source_table = 'product_stock_adjustment' THEN psa.id::text
                       ELSE m.source_id::text
                     END AS source_number,
                     CASE
                       WHEN m.source_table = 'purchase_item' THEN COALESCE(pu.entry_date, pu.issue_date)
                       WHEN m.source_table = 'sale_item' THEN s.issue_date
-                      WHEN m.source_table = 'counter_sale_item' THEN COALESCE(cs_sunat.issue_date, cs.associated_at::date, cs.issue_date)
+                      WHEN m.source_table = 'counter_sale_item' THEN COALESCE(cs_sunat.issue_date, cs_link_emit.issue_date, cs_combo_emit.issue_date, cs.associated_at::date, cs.issue_date)
+                      WHEN m.source_table = 'credit_note_item' THEN cn.issue_date
                       WHEN m.source_table = 'product_stock_adjustment' THEN psa.created_at::date
                       ELSE m.created_at::date
                     END AS source_issue_date,
@@ -453,6 +531,7 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                       WHEN m.source_table = 'purchase_item' THEN pu.status
                       WHEN m.source_table = 'sale_item' THEN s.status
                       WHEN m.source_table = 'counter_sale_item' THEN cs.status
+                      WHEN m.source_table = 'credit_note_item' THEN cn.sunat_status
                       WHEN m.source_table = 'product_stock_adjustment' THEN psa.movement_type
                       ELSE NULL
                     END AS source_status,
@@ -460,6 +539,7 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                       WHEN m.source_table = 'purchase_item' THEN pi.line_number
                       WHEN m.source_table = 'sale_item' THEN si.line_number
                       WHEN m.source_table = 'counter_sale_item' THEN csi.line_number
+                      WHEN m.source_table = 'credit_note_item' THEN cni.line_number
                       ELSE NULL
                     END AS source_line_number,
 
@@ -467,6 +547,7 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                       WHEN m.source_table = 'purchase_item' THEN 'PROVEEDOR'
                       WHEN m.source_table = 'sale_item' THEN 'CLIENTE'
                       WHEN m.source_table = 'counter_sale_item' THEN 'CLIENTE'
+                      WHEN m.source_table = 'credit_note_item' THEN 'CLIENTE'
                       WHEN m.source_table = 'product_stock_adjustment' THEN 'INTERNO'
                       ELSE 'OTRO'
                     END AS counterpart_type,
@@ -474,12 +555,14 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                       WHEN m.source_table = 'purchase_item' THEN pu.supplier_ruc
                       WHEN m.source_table = 'sale_item' THEN s.customer_doc_number
                       WHEN m.source_table = 'counter_sale_item' THEN cs.customer_doc_number
+                      WHEN m.source_table = 'credit_note_item' THEN cn.customer_doc_number
                       ELSE NULL
                     END AS counterpart_document_number,
                     CASE
                       WHEN m.source_table = 'purchase_item' THEN pu.supplier_business_name
                       WHEN m.source_table = 'sale_item' THEN s.customer_name
                       WHEN m.source_table = 'counter_sale_item' THEN cs.customer_name
+                      WHEN m.source_table = 'credit_note_item' THEN cn.customer_name
                       WHEN m.source_table = 'product_stock_adjustment' THEN 'AJUSTE INTERNO'
                       ELSE NULL
                     END AS counterpart_name,
@@ -505,20 +588,46 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                     CASE
                       WHEN m.source_table = 'purchase_item' THEN pi.unit_cost
                       WHEN m.source_table = 'sale_item' THEN si.unit_price
-                      WHEN m.source_table = 'counter_sale_item' THEN csi.unit_price
+                      WHEN m.source_table = 'counter_sale_item' THEN COALESCE(cs_link_emit.emitted_unit_price, cs_combo_emit.emitted_unit_price, csi.unit_price)
+                      WHEN m.source_table = 'credit_note_item' THEN cni.unit_price
                       WHEN m.source_table = 'product_stock_adjustment' THEN psa.unit_cost
                       ELSE NULL
                     END AS source_unit_price,
                     CASE
                       WHEN m.source_table = 'purchase_item' THEN pi.total_cost
                       WHEN m.source_table = 'sale_item' THEN si.revenue_total
-                      WHEN m.source_table = 'counter_sale_item' THEN csi.revenue_total
+                      WHEN m.source_table = 'counter_sale_item' THEN COALESCE(cs_link_emit.emitted_revenue_total, cs_combo_emit.emitted_revenue_total, csi.revenue_total)
+                      WHEN m.source_table = 'credit_note_item' THEN cni.revenue_total
                       WHEN m.source_table = 'product_stock_adjustment' THEN psa.total_cost
                       ELSE NULL
                     END AS source_line_total,
 
                     psa.reason AS adjustment_reason,
-                    COALESCE(psa.note, pu.notes, s.notes, cs.notes) AS note
+                    COALESCE(psa.note, pu.notes, s.notes, cs.notes, cn.reason) AS note,
+
+                    CASE
+                      WHEN m.source_table = 'purchase_item'
+                           AND UPPER(COALESCE(pu.document_type, '')) IN ('FACTURA', 'BOLETA') THEN TRUE
+                      WHEN m.source_table = 'sale_item'
+                           AND COALESCE(m.quantity_out, 0) > 0
+                           AND UPPER(COALESCE(s.doc_type, '')) IN ('FACTURA', 'BOLETA')
+                           AND UPPER(COALESCE(s.status, '')) = 'EMITIDA' THEN TRUE
+                      WHEN m.source_table = 'counter_sale_item'
+                           AND m.movement_type = 'OUT_COUNTER_SALE'
+                           AND UPPER(COALESCE(cs.associated_doc_type, cs_link_emit.emitted_doc_type, cs_combo_emit.emitted_doc_type, cs_sunat.doc_type, '')) IN ('FACTURA', 'BOLETA')
+                           AND (
+                                COALESCE(cs.associated_to_sunat, FALSE) = TRUE
+                             OR cs_link_emit.counter_sale_item_id IS NOT NULL
+                             OR cs_combo_emit.counter_sale_item_id IS NOT NULL
+                             OR UPPER(COALESCE(cs_sunat.status, '')) = 'EMITIDA'
+                           )
+                           THEN TRUE
+                      WHEN m.source_table = 'credit_note_item'
+                           AND m.movement_type = 'IN_RETURN'
+                           AND UPPER(COALESCE(cn.status, '')) = 'EMITIDA'
+                           THEN TRUE
+                      ELSE FALSE
+                    END AS tax_export_eligible
 
                   FROM product_stock_movement m
                   INNER JOIN product p
@@ -544,6 +653,53 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                   LEFT JOIN sale cs_sunat
                          ON m.source_table = 'counter_sale_item'
                         AND cs_sunat.id = cs.associated_sale_id
+                  LEFT JOIN LATERAL (
+                    SELECT li.counter_sale_item_id,
+                           li.emitted_unit_price,
+                           li.emitted_revenue_total,
+                           l.emitted_doc_type,
+                           l.emitted_series,
+                           l.emitted_number,
+                           COALESCE(sl.issue_date, l.associated_at::date) AS issue_date
+                      FROM sale_counter_sale_sunat_link_item li
+                      JOIN sale_counter_sale_sunat_link l
+                        ON l.sale_id = li.sale_id
+                       AND l.counter_sale_id = li.counter_sale_id
+                      LEFT JOIN sale sl
+                        ON sl.id = l.sale_id
+                     WHERE m.source_table = 'counter_sale_item'
+                       AND li.counter_sale_item_id = csi.id
+                       AND l.reservation_status = 'ACEPTADO'
+                     ORDER BY COALESCE(l.associated_at, l.updated_at, l.reserved_at) DESC NULLS LAST,
+                              li.id DESC
+                     LIMIT 1
+                  ) cs_link_emit ON TRUE
+                  LEFT JOIN LATERAL (
+                    SELECT cl.counter_sale_item_id,
+                           cl.emitted_unit_price,
+                           cl.emitted_revenue_total,
+                           c.emitted_doc_type,
+                           c.emitted_series,
+                           c.emitted_number,
+                           COALESCE(sg.issue_date, c.issue_date, c.associated_at::date) AS issue_date
+                      FROM counter_sale_sunat_combo_line cl
+                      JOIN counter_sale_sunat_combo c
+                        ON c.id = cl.combo_id
+                      LEFT JOIN sale sg
+                        ON sg.id = c.generated_sale_id
+                     WHERE m.source_table = 'counter_sale_item'
+                       AND cl.counter_sale_item_id = csi.id
+                       AND c.combo_status = 'ACEPTADO'
+                     ORDER BY COALESCE(c.associated_at, c.updated_at, c.created_at) DESC NULLS LAST,
+                              cl.id DESC
+                     LIMIT 1
+                  ) cs_combo_emit ON TRUE
+
+                  LEFT JOIN credit_note_item cni
+                         ON m.source_table = 'credit_note_item'
+                        AND m.source_id = cni.id
+                  LEFT JOIN credit_note cn
+                         ON cn.id = cni.credit_note_id
 
                   LEFT JOIN product_stock_adjustment psa
                          ON m.source_table = 'product_stock_adjustment'

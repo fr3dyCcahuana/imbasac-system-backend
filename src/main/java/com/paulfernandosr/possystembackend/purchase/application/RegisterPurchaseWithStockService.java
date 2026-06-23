@@ -78,6 +78,7 @@ public class RegisterPurchaseWithStockService implements CreatePurchaseUseCase {
         purchase.setUpdatedBy(actor);
         purchase.setStockEntryStatus(PurchaseStockEntryService.STATUS_PENDING);
         Purchase created = purchaseRepository.create(purchase, actor);
+        purchaseRepository.refreshProductCostReferencesByPurchase(created.getId());
 
         // Completa valores de respuesta (repositorio solo retorna id)
         created.setCreatedBy(actor);

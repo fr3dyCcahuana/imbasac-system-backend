@@ -1080,4 +1080,46 @@ public class PostgresPurchaseRepository implements PurchaseRepository {
                 .params(username, username, purchaseId)
                 .update();
     }
+
+    @Override
+    public void refreshProductCostReferencesByPurchase(Long purchaseId) {
+        String sql = """
+                WITH affected AS (
+                    SELECT DISTINCT product_id
+                      FROM purchase_item
+                     WHERE purchase_id = ?
+                       AND product_id IS NOT NULL
+                ),
+                latest AS (
+                    SELECT DISTINCT ON (pi.product_id)
+                           pi.product_id,
+                           pi.unit_cost
+                      FROM purchase_item pi
+                      JOIN purchase pu
+                        ON pu.id = pi.purchase_id
+                      JOIN affected a
+                        ON a.product_id = pi.product_id
+                     WHERE COALESCE(pu.status, 'REGISTRADA') <> 'ANULADA'
+                       AND COALESCE(pi.status, 'ACTIVE') = 'ACTIVE'
+                       AND pi.unit_cost IS NOT NULL
+                     ORDER BY
+                           pi.product_id,
+                           COALESCE(pu.entry_date, pu.issue_date) DESC,
+                           pu.issue_date DESC,
+                           pi.created_at DESC,
+                           pi.id DESC
+                )
+                UPDATE product pr
+                   SET cost_reference = latest.unit_cost,
+                       updated_at = NOW()
+                  FROM affected
+                  LEFT JOIN latest
+                    ON latest.product_id = affected.product_id
+                 WHERE pr.id = affected.product_id
+                """;
+
+        jdbcClient.sql(sql)
+                .param(purchaseId)
+                .update();
+    }
 }

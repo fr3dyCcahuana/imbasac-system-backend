@@ -28,6 +28,11 @@ public interface ProductKardexRepository {
 
     List<ProductKardexEntry> findInventoryReportProducts(List<Long> productIds);
 
+    List<ProductKardexEntry> findInventoryReportProductsWithMovements(
+            LocalDate dateFrom,
+            LocalDate dateTo
+    );
+
     List<ProductKardexEntry> findInventoryReportMovements(
             List<Long> productIds,
             LocalDate dateFrom,

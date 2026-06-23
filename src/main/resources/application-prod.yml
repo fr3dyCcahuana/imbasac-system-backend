@@ -27,6 +27,18 @@ server:
 logging:
   level:
     root: INFO
+    org.springframework.web: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+
+  file:
+    name: /opt/pos-backend/pos-backend.log
+
+  logback:
+    rollingpolicy:
+      max-file-size: 20MB
+      max-history: 30
+      total-size-cap: 1GB
 
 security:
   token:
@@ -106,6 +118,8 @@ app:
     products-images-dir: /var/www/images/products
     products-images-public-path: /images/products
     products-images-base-url: http://imbasac.cloud/images/products
+    promotions-images-dir: /var/www/images/promotions
+    promotions-images-public-path: /images/promotions
     manual-pdfs-dir: /var/www/files/manual-pdfs
     manual-pdfs-public-path: /files/manual-pdfs
     community-dir: /var/www/files/community

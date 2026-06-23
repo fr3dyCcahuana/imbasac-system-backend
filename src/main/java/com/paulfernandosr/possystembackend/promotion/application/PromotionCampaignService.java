@@ -3,6 +3,7 @@ package com.paulfernandosr.possystembackend.promotion.application;
 import com.paulfernandosr.possystembackend.product.infrastructure.adapter.input.ProductImagePublicUrlService;
 import com.paulfernandosr.possystembackend.promotion.domain.PromotionCampaign;
 import com.paulfernandosr.possystembackend.promotion.domain.PromotionItem;
+import com.paulfernandosr.possystembackend.promotion.infrastructure.adapter.input.PromotionImagePublicUrlService;
 import com.paulfernandosr.possystembackend.promotion.infrastructure.adapter.input.dto.PromotionCampaignRequest;
 import com.paulfernandosr.possystembackend.promotion.infrastructure.adapter.input.dto.PromotionItemRequest;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ public class PromotionCampaignService {
 
     private final JdbcClient jdbcClient;
     private final ProductImagePublicUrlService imageUrlService;
+    private final PromotionImagePublicUrlService promotionImageUrlService;
 
     public List<PromotionCampaign> findAll(String status, String kind) {
         String statusFilter = clean(status);
@@ -84,8 +86,8 @@ public class PromotionCampaignService {
                         clean(request.subtitle()),
                         clean(request.description()),
                         clean(request.badge()),
-                        clean(request.heroImageUrl()),
-                        clean(request.bannerImageUrl()),
+                        promotionImageUrlService.toStorageKey(request.heroImageUrl()),
+                        promotionImageUrlService.toStorageKey(request.bannerImageUrl()),
                         value(request.discountType(), "PERCENT"),
                         request.discountValue() == null ? java.math.BigDecimal.ZERO : request.discountValue(),
                         ts(request.startsAt()),
@@ -138,8 +140,8 @@ public class PromotionCampaignService {
                         clean(request.subtitle()),
                         clean(request.description()),
                         clean(request.badge()),
-                        clean(request.heroImageUrl()),
-                        clean(request.bannerImageUrl()),
+                        promotionImageUrlService.toStorageKey(request.heroImageUrl()),
+                        promotionImageUrlService.toStorageKey(request.bannerImageUrl()),
                         value(request.discountType(), "PERCENT"),
                         request.discountValue() == null ? java.math.BigDecimal.ZERO : request.discountValue(),
                         ts(request.startsAt()),
@@ -216,8 +218,8 @@ public class PromotionCampaignService {
                         rs.getString("subtitle"),
                         rs.getString("description"),
                         rs.getString("badge"),
-                        imageUrlService.toPublicUrl(rs.getString("hero_image_url")),
-                        imageUrlService.toPublicUrl(rs.getString("banner_image_url")),
+                        promotionImageUrlService.toPublicUrl(rs.getString("hero_image_url")),
+                        promotionImageUrlService.toPublicUrl(rs.getString("banner_image_url")),
                         rs.getString("discount_type"),
                         rs.getBigDecimal("discount_value"),
                         toLocalDateTime(rs.getTimestamp("starts_at")),

@@ -48,6 +48,7 @@ public class PostgresProductPurchasePriceRepository implements ProductPurchasePr
                     ON p.id = pi.purchase_id
             WHERE pi.product_id = ?
               AND COALESCE(p.status, 'REGISTRADA') <> 'ANULADA'
+              AND COALESCE(pi.status, 'ACTIVE') = 'ACTIVE'
             ORDER BY
                 COALESCE(p.entry_date, p.issue_date) DESC,
                 p.issue_date DESC,

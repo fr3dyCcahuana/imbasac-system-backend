@@ -90,5 +90,6 @@ public class CancelPurchaseService implements CancelPurchaseUseCase {
         }
 
         purchaseRepository.updateStatus(purchaseId, "ANULADA", actor);
+        purchaseRepository.refreshProductCostReferencesByPurchase(purchaseId);
     }
 }

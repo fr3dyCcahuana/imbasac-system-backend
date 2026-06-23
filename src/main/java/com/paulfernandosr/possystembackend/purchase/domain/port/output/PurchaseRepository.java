@@ -28,6 +28,8 @@ public interface PurchaseRepository {
 
     void markStockEntryLoaded(Long purchaseId, String username);
 
+    void refreshProductCostReferencesByPurchase(Long purchaseId);
+
     boolean existsDocumentForAnotherPurchase(Long purchaseId,
                                              String supplierRuc,
                                              String documentType,

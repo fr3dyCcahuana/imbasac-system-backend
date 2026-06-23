@@ -113,7 +113,7 @@ app:
   files:
     products-images-dir: src/main/resources/static/images/products
     products-images-public-path: /images/products
-    promotions-images-dir: src/main/resources/static/images/promotions
+    promotions-images-dir: /var/www/images/promotions
     promotions-images-public-path: /images/promotions
 
     manual-pdfs-dir: ./storage/manual-pdfs

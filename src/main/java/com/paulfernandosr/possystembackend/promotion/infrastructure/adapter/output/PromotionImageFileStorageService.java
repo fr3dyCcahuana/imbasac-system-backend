@@ -13,7 +13,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PromotionImageFileStorageService {
 
-    @Value("${app.files.promotions-images-dir:uploads/promotions}")
+    @Value("${app.files.promotions-images-dir}")
     private String promotionsImagesDir;
 
     public String store(Long campaignId, MultipartFile file) {

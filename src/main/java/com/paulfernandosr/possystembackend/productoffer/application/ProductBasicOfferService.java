@@ -29,6 +29,8 @@ public class ProductBasicOfferService {
     private final ProductImagePublicUrlService imageUrlService;
 
     public List<ProductBasicOffer> findAll(String status) {
+        expireOverdueActiveOffersInternal();
+
         String normalizedStatus = clean(status);
         if ("ALL".equalsIgnoreCase(normalizedStatus)) {
             normalizedStatus = null;
@@ -55,6 +57,8 @@ public class ProductBasicOfferService {
         if (id == null || id <= 0) {
             throw new IllegalArgumentException("id de oferta es obligatorio.");
         }
+
+        expireOverdueActiveOffersInternal();
 
         ProductBasicOffer base = jdbcClient.sql("""
                 SELECT id, code, name, starts_at, ends_at, status, created_at, updated_at
@@ -275,6 +279,22 @@ public class ProductBasicOfferService {
                 throw new IllegalArgumentException("El precio de oferta debe ser mayor a 0.");
             }
         }
+    }
+
+    @Transactional
+    public int expireOverdueActiveOffers() {
+        return expireOverdueActiveOffersInternal();
+    }
+
+    private int expireOverdueActiveOffersInternal() {
+        return jdbcClient.sql("""
+                UPDATE product_basic_offer
+                   SET status = 'EXPIRED',
+                       updated_at = NOW()
+                 WHERE status = 'ACTIVE'
+                   AND ends_at < CURRENT_DATE
+                """)
+                .update();
     }
 
     private static String clean(String value) {
