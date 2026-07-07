@@ -81,17 +81,19 @@ public class VoidCounterSaleService implements VoidCounterSaleUseCase {
 
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new InvalidCounterSaleException("Usuario inválido: " + username));
-        if (user.isNotOnRegister()) {
-            throw new InvalidCounterSaleException("El usuario no tiene una sesión de caja abierta para registrar la reversa.");
-        }
-
-        OpenSaleSession openSession = saleSessionControlRepository.findOpenByUserId(user.getId());
-        if (openSession == null) {
-            throw new InvalidCounterSaleException("No se encontró una sesión de caja abierta para registrar la reversa.");
-        }
-
         BigDecimal total = sale.getTotal() == null ? BigDecimal.ZERO : sale.getTotal();
-        saleSessionAccumulatorRepository.addExpense(openSession.getId(), total);
+        if (user.requiresCashSession()) {
+            if (user.isNotOnRegister()) {
+                throw new InvalidCounterSaleException("El usuario no tiene una sesion de caja abierta para registrar la reversa.");
+            }
+
+            OpenSaleSession openSession = saleSessionControlRepository.findOpenByUserId(user.getId());
+            if (openSession == null) {
+                throw new InvalidCounterSaleException("No se encontro una sesion de caja abierta para registrar la reversa.");
+            }
+
+            saleSessionAccumulatorRepository.addExpense(openSession.getId(), total);
+        }
 
         if (sale.getSaleSessionId() != null) {
             BigDecimal discount = sale.getDiscountTotal() == null ? BigDecimal.ZERO : sale.getDiscountTotal();

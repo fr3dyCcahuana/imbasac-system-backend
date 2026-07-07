@@ -7,6 +7,8 @@ import com.paulfernandosr.possystembackend.productoffer.infrastructure.adapter.i
 import com.paulfernandosr.possystembackend.productoffer.infrastructure.adapter.input.dto.ProductBasicOfferRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -189,6 +191,7 @@ public class ProductBasicOfferService {
     }
 
     private List<ProductBasicOfferItem> findItems(Long offerId) {
+        boolean showStock = canViewStock();
         return jdbcClient.sql("""
                 SELECT
                     pboi.id,
@@ -242,7 +245,7 @@ public class ProductBasicOfferService {
                         rs.getBigDecimal("regular_price"),
                         rs.getBigDecimal("offer_price"),
                         rs.getBigDecimal("min_quantity"),
-                        rs.getBigDecimal("stock_on_hand"),
+                        showStock ? rs.getBigDecimal("stock_on_hand") : null,
                         imageUrlService.toPublicUrl(rs.getString("image_url")),
                         rs.getInt("sort_order")
                 ))
@@ -295,6 +298,14 @@ public class ProductBasicOfferService {
                    AND ends_at < CURRENT_DATE
                 """)
                 .update();
+    }
+
+    /** Solo los usuarios con MANAGE_PRODUCT_OFFERS_STOCK pueden ver el stock en el listado de ofertas. */
+    private boolean canViewStock() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getAuthorities() == null) return false;
+        return auth.getAuthorities().stream()
+                .anyMatch(a -> "MANAGE_PRODUCT_OFFERS_STOCK".equals(a.getAuthority()));
     }
 
     private static String clean(String value) {

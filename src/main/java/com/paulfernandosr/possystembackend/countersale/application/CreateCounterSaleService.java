@@ -43,21 +43,27 @@ public class CreateCounterSaleService implements CreateCounterSaleUseCase {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new InvalidCounterSaleException("Usuario inválido: " + username));
 
-        if (user.isNotOnRegister()) {
-            throw new InvalidCounterSaleException("El usuario no tiene una sesión de caja abierta.");
-        }
-
         validateRequest(request);
 
-        OpenSaleSession openSession = saleSessionControlRepository.findOpenByUserId(user.getId());
-        if (openSession == null) {
-            throw new InvalidCounterSaleException("El usuario no tiene una sesión de caja abierta.");
-        }
-        if (!Objects.equals(openSession.getStationId(), request.getStationId())) {
-            throw new InvalidCounterSaleException("La estación no coincide con la sesión de caja abierta del usuario.");
-        }
-        if (request.getSaleSessionId() != null && !Objects.equals(request.getSaleSessionId(), openSession.getId())) {
-            throw new InvalidCounterSaleException("saleSessionId no coincide con la sesión de caja abierta del usuario.");
+        Long resolvedSaleSessionId = null;
+        if (user.requiresCashSession()) {
+            if (user.isNotOnRegister()) {
+                throw new InvalidCounterSaleException("El usuario no tiene una sesion de caja abierta.");
+            }
+
+            OpenSaleSession openSession = saleSessionControlRepository.findOpenByUserId(user.getId());
+            if (openSession == null) {
+                throw new InvalidCounterSaleException("El usuario no tiene una sesion de caja abierta.");
+            }
+            if (!Objects.equals(openSession.getStationId(), request.getStationId())) {
+                throw new InvalidCounterSaleException("La estacion no coincide con la sesion de caja abierta del usuario.");
+            }
+            if (request.getSaleSessionId() != null && !Objects.equals(request.getSaleSessionId(), openSession.getId())) {
+                throw new InvalidCounterSaleException("saleSessionId no coincide con la sesion de caja abierta del usuario.");
+            }
+            resolvedSaleSessionId = openSession.getId();
+        } else if (request.getSaleSessionId() != null) {
+            throw new InvalidCounterSaleException("Este rol no debe enviar saleSessionId porque no trabaja con apertura de caja.");
         }
 
         LocalDate issueDate = request.getIssueDate() != null ? request.getIssueDate() : LocalDate.now();
@@ -200,7 +206,7 @@ public class CreateCounterSaleService implements CreateCounterSaleUseCase {
 
         Long counterSaleId = counterSaleRepository.insertCounterSale(
                 request.getStationId(),
-                openSession.getId(),
+                resolvedSaleSessionId,
                 user.getId(),
                 request.getSeries().trim().toUpperCase(),
                 number,
@@ -275,7 +281,9 @@ public class CreateCounterSaleService implements CreateCounterSaleUseCase {
         );
 
         counterSalePaymentRepository.insert(counterSaleId, request.getPayment().getMethod().name(), totals.total);
-        saleSessionAccumulatorRepository.addSaleIncomeAndDiscount(openSession.getId(), totals.total, totals.discountTotal);
+        if (resolvedSaleSessionId != null) {
+            saleSessionAccumulatorRepository.addSaleIncomeAndDiscount(resolvedSaleSessionId, totals.total, totals.discountTotal);
+        }
         documentSeriesRepository.incrementNextNumber(locked.getId());
 
         return CounterSaleDocumentResponse.builder()
