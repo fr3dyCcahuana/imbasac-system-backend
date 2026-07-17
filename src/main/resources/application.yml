@@ -120,6 +120,8 @@ app:
     manual-pdfs-public-path: /files/manual-pdfs
     community-dir: ./storage/community
     community-public-path: /files/community
+    company-community-dir: ./storage/company-community
+    company-community-public-path: /files/company-community
     sunat-xml-public-path: /sunat-files/xml
     sunat-cdr-public-path: /sunat-files/cdr
   document-series:
