@@ -14,6 +14,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.expression.WebExpressionAuthorizationManager;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -96,6 +97,10 @@ public class SecurityConfig {
                         .hasAuthority("MANAGE_COMPANY_COMMUNITY_DELETE")
                         .requestMatchers("/company-community/**")
                         .hasAuthority("MANAGE_COMPANY_COMMUNITY_VIEW")
+                    .requestMatchers(org.springframework.http.HttpMethod.GET, "/motorcycle-availability/contract-prefill")
+                    .access(new WebExpressionAuthorizationManager("hasAuthority('MANAGE_MOTORCYCLE_AVAILABILITY_VIEW') and hasAuthority('MANAGE_CONTRACTS')"))
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/motorcycle-availability/**")
+                        .hasAuthority("MANAGE_MOTORCYCLE_AVAILABILITY_VIEW")
                         .requestMatchers("/community-notifications/**")
                         .authenticated()
 //                        .requestMatchers("/permissions/**").hasAnyAuthority("MANAGE_PERMISSIONS")
