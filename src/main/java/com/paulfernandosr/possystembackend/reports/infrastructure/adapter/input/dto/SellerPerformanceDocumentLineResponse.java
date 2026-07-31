@@ -7,16 +7,13 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
-import java.util.List;
 
 @Getter
 @Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class SellerPerformanceProductDetailResponse {
-    private String source;
-    private String sourceLabel;
+public class SellerPerformanceDocumentLineResponse {
     private Long productId;
     private String productName;
     private String brand;
@@ -27,6 +24,4 @@ public class SellerPerformanceProductDetailResponse {
     private BigDecimal eligibleSales;
     private BigDecimal commissionBase;
     private BigDecimal estimatedCommission;
-    private Long countDocuments;
-    private List<SellerPerformanceProductDocumentResponse> documents;
 }

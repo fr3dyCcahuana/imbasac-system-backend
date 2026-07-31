@@ -10,7 +10,10 @@ import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceCategoryDetailResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerCommissionConfigResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceDetailResponse;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceDocumentLineResponse;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceDocumentResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceProductDetailResponse;
+import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceProductDocumentResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SellerPerformanceRowResponse;
 import com.paulfernandosr.possystembackend.reports.infrastructure.adapter.input.dto.SunatComparisonResponse;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +22,7 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -713,9 +717,160 @@ public class PostgresReportsRepository implements ReportsRepository {
                         .build())
                 .list();
 
+        String documentLinesSql = """
+                WITH commissioned_lines AS (
+                  %s
+                )
+                SELECT
+                  source,
+                  CASE source
+                    WHEN 'COUNTER_SALE' THEN 'Venta por ventanilla'
+                    WHEN 'CONTRACT' THEN 'Contratos'
+                    WHEN 'PROFORMA' THEN 'Proformas'
+                    ELSE source
+                  END AS source_label,
+                  doc_id,
+                  series,
+                  number,
+                  CASE
+                    WHEN NULLIF(TRIM(series), '') IS NULL THEN CONCAT('#', doc_id)
+                    WHEN number IS NULL THEN TRIM(series)
+                    ELSE CONCAT(TRIM(series), '-', LPAD(number::text, 8, '0'))
+                  END AS document_code,
+                  period_date AS issue_date,
+                  product_id,
+                  product_name,
+                  brand,
+                  category,
+                  incentive_group,
+                  commission_rate,
+                  COALESCE(SUM(quantity), 0) AS quantity,
+                  COALESCE(SUM(eligible_sales), 0) AS eligible_sales,
+                  COALESCE(SUM(commission_base), 0) AS commission_base,
+                  COALESCE(SUM(estimated_commission), 0) AS estimated_commission
+                FROM commissioned_lines
+                GROUP BY source, doc_id, series, number, period_date, product_id, product_name, brand, category, incentive_group, commission_rate
+                ORDER BY period_date DESC, source ASC, series ASC, number DESC, product_name ASC
+                """.formatted(baseCte);
+
+        List<SellerPerformanceDocumentLineRow> documentLineRows = jdbcClient.sql(documentLinesSql)
+                .params(from, to, from, to, from, to,
+                        incentiveThreshold, incentiveThreshold, incentiveThreshold, incentiveThreshold,
+                        sellerId)
+                .query((rs, rowNum) -> SellerPerformanceDocumentLineRow.builder()
+                        .source(rs.getString("source"))
+                        .sourceLabel(rs.getString("source_label"))
+                        .documentId(rs.getLong("doc_id"))
+                        .series(rs.getString("series"))
+                        .number(rs.getObject("number") != null ? rs.getLong("number") : null)
+                        .documentCode(rs.getString("document_code"))
+                        .issueDate(rs.getObject("issue_date", LocalDate.class))
+                        .productId(rs.getObject("product_id") != null ? rs.getLong("product_id") : null)
+                        .productName(rs.getString("product_name"))
+                        .brand(rs.getString("brand"))
+                        .category(rs.getString("category"))
+                        .incentiveGroup(rs.getString("incentive_group"))
+                        .commissionRate(rs.getBigDecimal("commission_rate"))
+                        .quantity(rs.getBigDecimal("quantity"))
+                        .eligibleSales(rs.getBigDecimal("eligible_sales"))
+                        .commissionBase(rs.getBigDecimal("commission_base"))
+                        .estimatedCommission(rs.getBigDecimal("estimated_commission"))
+                        .build())
+                .list();
+
+        attachProductDocuments(products, documentLineRows);
+        List<SellerPerformanceDocumentResponse> documents = buildSellerPerformanceDocuments(documentLineRows);
+
         totals.setCategories(categories);
         totals.setProducts(products);
+        totals.setDocuments(documents);
         return totals;
+    }
+
+    private void attachProductDocuments(List<SellerPerformanceProductDetailResponse> products,
+                                        List<SellerPerformanceDocumentLineRow> rows) {
+        Map<String, List<SellerPerformanceProductDocumentResponse>> documentsByProduct = rows.stream()
+                .collect(Collectors.groupingBy(
+                        row -> productDocumentKey(row.getSource(), row.getProductId(), row.getProductName(), row.getIncentiveGroup()),
+                        LinkedHashMap::new,
+                        Collectors.mapping(this::toProductDocument, Collectors.toList())
+                ));
+
+        for (SellerPerformanceProductDetailResponse product : products) {
+            String key = productDocumentKey(
+                    product.getSource(),
+                    product.getProductId(),
+                    product.getProductName(),
+                    product.getIncentiveGroup()
+            );
+            product.setDocuments(documentsByProduct.getOrDefault(key, List.of()));
+        }
+    }
+
+    private List<SellerPerformanceDocumentResponse> buildSellerPerformanceDocuments(List<SellerPerformanceDocumentLineRow> rows) {
+        Map<String, SellerPerformanceDocumentAccumulator> documentsByKey = new LinkedHashMap<>();
+
+        for (SellerPerformanceDocumentLineRow row : rows) {
+            String key = documentKey(row.getSource(), row.getDocumentId());
+            SellerPerformanceDocumentAccumulator accumulator = documentsByKey.computeIfAbsent(
+                    key,
+                    ignored -> new SellerPerformanceDocumentAccumulator(row)
+            );
+
+            accumulator.quantity = add(accumulator.quantity, row.getQuantity());
+            accumulator.eligibleSales = add(accumulator.eligibleSales, row.getEligibleSales());
+            accumulator.commissionBase = add(accumulator.commissionBase, row.getCommissionBase());
+            accumulator.estimatedCommission = add(accumulator.estimatedCommission, row.getEstimatedCommission());
+            accumulator.products.add(SellerPerformanceDocumentLineResponse.builder()
+                    .productId(row.getProductId())
+                    .productName(row.getProductName())
+                    .brand(row.getBrand())
+                    .category(row.getCategory())
+                    .incentiveGroup(row.getIncentiveGroup())
+                    .commissionRate(row.getCommissionRate())
+                    .quantity(row.getQuantity())
+                    .eligibleSales(row.getEligibleSales())
+                    .commissionBase(row.getCommissionBase())
+                    .estimatedCommission(row.getEstimatedCommission())
+                    .build());
+        }
+
+        return documentsByKey.values().stream()
+                .map(SellerPerformanceDocumentAccumulator::toResponse)
+                .toList();
+    }
+
+    private SellerPerformanceProductDocumentResponse toProductDocument(SellerPerformanceDocumentLineRow row) {
+        return SellerPerformanceProductDocumentResponse.builder()
+                .source(row.getSource())
+                .sourceLabel(row.getSourceLabel())
+                .documentId(row.getDocumentId())
+                .series(row.getSeries())
+                .number(row.getNumber())
+                .documentCode(row.getDocumentCode())
+                .issueDate(row.getIssueDate())
+                .quantity(row.getQuantity())
+                .eligibleSales(row.getEligibleSales())
+                .commissionBase(row.getCommissionBase())
+                .estimatedCommission(row.getEstimatedCommission())
+                .build();
+    }
+
+    private String productDocumentKey(String source, Long productId, String productName, String incentiveGroup) {
+        return String.join("|",
+                source == null ? "" : source,
+                productId == null ? "" : productId.toString(),
+                productName == null ? "" : productName,
+                incentiveGroup == null ? "" : incentiveGroup
+        );
+    }
+
+    private String documentKey(String source, Long documentId) {
+        return (source == null ? "" : source) + "|" + (documentId == null ? "" : documentId);
+    }
+
+    private BigDecimal add(BigDecimal left, BigDecimal right) {
+        return (left == null ? BigDecimal.ZERO : left).add(right == null ? BigDecimal.ZERO : right);
     }
 
     private String periodExpression(ReportGroupBy groupBy) {
@@ -963,6 +1118,8 @@ public class PostgresReportsRepository implements ReportsRepository {
                 SELECT
                   'COUNTER_SALE' AS source,
                   cs.id AS doc_id,
+                  cs.series,
+                  cs.number,
                   csi.id AS line_id,
                   cs.issue_date AS period_date,
                   COALESCE(cs.created_by, 0) AS seller_id,
@@ -1003,6 +1160,8 @@ public class PostgresReportsRepository implements ReportsRepository {
                 SELECT
                   'CONTRACT' AS source,
                   c.id AS doc_id,
+                  c.series,
+                  c.number,
                   ci.id AS line_id,
                   c.issue_date AS period_date,
                   COALESCE(c.created_by, 0) AS seller_id,
@@ -1029,6 +1188,8 @@ public class PostgresReportsRepository implements ReportsRepository {
                 SELECT
                   'PROFORMA' AS source,
                   p.id AS doc_id,
+                  p.series,
+                  p.number,
                   COALESCE(pi.line_number, 0) AS line_id,
                   p.issue_date AS period_date,
                   COALESCE(p.created_by, 0) AS seller_id,
@@ -1168,5 +1329,69 @@ public class PostgresReportsRepository implements ReportsRepository {
     }
 
     private record ChannelPointRow(String source, SalesProfitChannelPointResponse point) {
+    }
+
+    @lombok.Getter
+    @lombok.Builder
+    private static class SellerPerformanceDocumentLineRow {
+        private String source;
+        private String sourceLabel;
+        private Long documentId;
+        private String series;
+        private Long number;
+        private String documentCode;
+        private LocalDate issueDate;
+        private Long productId;
+        private String productName;
+        private String brand;
+        private String category;
+        private String incentiveGroup;
+        private BigDecimal commissionRate;
+        private BigDecimal quantity;
+        private BigDecimal eligibleSales;
+        private BigDecimal commissionBase;
+        private BigDecimal estimatedCommission;
+    }
+
+    private static class SellerPerformanceDocumentAccumulator {
+        private final String source;
+        private final String sourceLabel;
+        private final Long documentId;
+        private final String series;
+        private final Long number;
+        private final String documentCode;
+        private final LocalDate issueDate;
+        private BigDecimal quantity = BigDecimal.ZERO;
+        private BigDecimal eligibleSales = BigDecimal.ZERO;
+        private BigDecimal commissionBase = BigDecimal.ZERO;
+        private BigDecimal estimatedCommission = BigDecimal.ZERO;
+        private final List<SellerPerformanceDocumentLineResponse> products = new ArrayList<>();
+
+        private SellerPerformanceDocumentAccumulator(SellerPerformanceDocumentLineRow row) {
+            this.source = row.getSource();
+            this.sourceLabel = row.getSourceLabel();
+            this.documentId = row.getDocumentId();
+            this.series = row.getSeries();
+            this.number = row.getNumber();
+            this.documentCode = row.getDocumentCode();
+            this.issueDate = row.getIssueDate();
+        }
+
+        private SellerPerformanceDocumentResponse toResponse() {
+            return SellerPerformanceDocumentResponse.builder()
+                    .source(source)
+                    .sourceLabel(sourceLabel)
+                    .documentId(documentId)
+                    .series(series)
+                    .number(number)
+                    .documentCode(documentCode)
+                    .issueDate(issueDate)
+                    .quantity(quantity)
+                    .eligibleSales(eligibleSales)
+                    .commissionBase(commissionBase)
+                    .estimatedCommission(estimatedCommission)
+                    .products(products)
+                    .build();
+        }
     }
 }

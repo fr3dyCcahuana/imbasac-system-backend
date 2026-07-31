@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 @Getter
@@ -14,19 +15,17 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class SellerPerformanceProductDetailResponse {
+public class SellerPerformanceDocumentResponse {
     private String source;
     private String sourceLabel;
-    private Long productId;
-    private String productName;
-    private String brand;
-    private String category;
-    private String incentiveGroup;
-    private BigDecimal commissionRate;
+    private Long documentId;
+    private String series;
+    private Long number;
+    private String documentCode;
+    private LocalDate issueDate;
     private BigDecimal quantity;
     private BigDecimal eligibleSales;
     private BigDecimal commissionBase;
     private BigDecimal estimatedCommission;
-    private Long countDocuments;
-    private List<SellerPerformanceProductDocumentResponse> documents;
+    private List<SellerPerformanceDocumentLineResponse> products;
 }

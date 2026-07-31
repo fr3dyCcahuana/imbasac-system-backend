@@ -31,4 +31,5 @@ public class SellerPerformanceDetailResponse {
     private SellerCommissionConfigResponse commissionConfig;
     private List<SellerPerformanceCategoryDetailResponse> categories;
     private List<SellerPerformanceProductDetailResponse> products;
+    private List<SellerPerformanceDocumentResponse> documents;
 }
