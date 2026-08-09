@@ -97,6 +97,7 @@ public class PostgresSaleCreditNoteRepository implements SaleCreditNoteRepositor
                 si.total_cost_snapshot,
                 si.revenue_total,
                 p.category AS product_category,
+                p.sunat_product_code AS sunat_product_code,
                 counter_origin.counter_sale_item_id AS counter_sale_item_id,
                 counter_origin.counter_sale_item_affects_stock AS counter_sale_item_affects_stock,
                 (
@@ -150,6 +151,7 @@ public class PostgresSaleCreditNoteRepository implements SaleCreditNoteRepositor
                         .totalCostSnapshot(rs.getBigDecimal("total_cost_snapshot"))
                         .revenueTotal(rs.getBigDecimal("revenue_total"))
                         .productCategory(rs.getString("product_category"))
+                        .sunatProductCode(rs.getString("sunat_product_code"))
                         .serialUnitId((Long) rs.getObject("serial_unit_id"))
                         .counterSaleItemId((Long) rs.getObject("counter_sale_item_id"))
                         .counterSaleItemAffectsStock(rs.getObject("counter_sale_item_affects_stock", Boolean.class))

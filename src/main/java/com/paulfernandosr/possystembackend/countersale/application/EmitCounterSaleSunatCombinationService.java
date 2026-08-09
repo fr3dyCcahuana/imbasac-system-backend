@@ -2,6 +2,7 @@ package com.paulfernandosr.possystembackend.countersale.application;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatProductCodeValidator;
 import com.paulfernandosr.possystembackend.countersale.domain.exception.InvalidCounterSaleException;
 import com.paulfernandosr.possystembackend.countersale.domain.port.input.EmitCounterSaleSunatCombinationUseCase;
 import com.paulfernandosr.possystembackend.countersale.infrastructure.adapter.input.dto.*;
@@ -33,6 +34,7 @@ import java.util.List;
 public class EmitCounterSaleSunatCombinationService implements EmitCounterSaleSunatCombinationUseCase {
 
     private static final String SUCCESS_RESPONSE = "0";
+    private static final String MOTORCYCLE_SUNAT_CODE = "25101801";
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
@@ -557,16 +559,40 @@ public class EmitCounterSaleSunatCombinationService implements EmitCounterSaleSu
         BigDecimal basePrice = qty.signum() == 0
                 ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
                 : line.getEmittedRevenueTotal().divide(qty, 6, RoundingMode.HALF_UP);
-        String inferredSunatCode = SunatCodeInferer.infer(line.getItem().getDescription(), line.getItem().getProductCategory());
+        String sunatProductCode = resolveSunatProductCode(line.getItem());
         return DocumentRequest.Item.builder()
                 .product(line.getItem().getDescription())
                 .quantity(qty.stripTrailingZeros().toPlainString())
                 .basePrice(basePrice.toPlainString())
-                .sunatCode(inferredSunatCode)
+                .sunatCode(sunatProductCode)
                 .productCode(blankIfNull(line.getItem().getSku()))
                 .unitCode("NIU")
                 .igvTypeCode("GRAVADA".equalsIgnoreCase(blankIfNull(result.getAnchor().getTaxStatus())) ? "10" : "20")
                 .build();
+    }
+
+    private String resolveSunatProductCode(CounterSaleItemResponse item) {
+        String context = "Codigo Producto SUNAT counterSaleItemId=" + item.getCounterSaleItemId();
+        String configured = blankIfNull(item.getSunatProductCode()).trim();
+        String category = blankIfNull(item.getProductCategory()).trim().toUpperCase();
+
+        try {
+            if (!configured.isBlank()) {
+                return SunatProductCodeValidator.requireValid(configured, context);
+            }
+            if (category.contains("MOTOCIC") || "MOTO".equals(category) || "MOTOCICLETA".equals(category)) {
+                return SunatProductCodeValidator.requireValid(MOTORCYCLE_SUNAT_CODE, context);
+            }
+            return SunatCodeInferer.infer(item.getDescription(), item.getProductCategory());
+        } catch (Exception ex) {
+            throw new InvalidCounterSaleException(
+                    "No se pudo resolver Codigo Producto SUNAT valido para venta al contado. "
+                            + context
+                            + " producto=" + item.getDescription()
+                            + " categoria=" + item.getProductCategory()
+                            + ". Detalle: " + ex.getMessage()
+            );
+        }
     }
 
     private BigDecimal totalTaxed(CounterSaleSunatCombinationComposer.ComposedResult result) {

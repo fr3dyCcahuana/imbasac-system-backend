@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.product.application;
 
+import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatProductCodeValidator;
 import com.paulfernandosr.possystembackend.product.domain.Product;
 import com.paulfernandosr.possystembackend.product.domain.ProductExistenceType;
 import com.paulfernandosr.possystembackend.product.domain.ProductVehicleSpecs;
@@ -28,6 +29,7 @@ public class CreateNewProductService implements CreateNewProductUseCase {
     @Transactional
     public Product createNewProduct(Product product) {
         normalizeAndValidateExistenceType(product);
+        normalizeAndValidateSunatProductCode(product);
 
         // Reglas: si manageBySerial=true y category=MOTOR|MOTOCICLETAS, la ficha técnica es obligatoria.
         boolean requiresSpecs = Boolean.TRUE.equals(product.getManageBySerial())
@@ -65,5 +67,16 @@ public class CreateNewProductService implements CreateNewProductUseCase {
             throw new InvalidProductException("Tipo de existencia no permitido: " + code);
         }
         product.setExistenceTypeCode(code);
+    }
+
+    private void normalizeAndValidateSunatProductCode(Product product) {
+        try {
+            product.setSunatProductCode(SunatProductCodeValidator.normalizeOptional(
+                    product.getSunatProductCode(),
+                    "Codigo Producto SUNAT del producto"
+            ));
+        } catch (IllegalArgumentException ex) {
+            throw new InvalidProductException(ex.getMessage());
+        }
     }
 }

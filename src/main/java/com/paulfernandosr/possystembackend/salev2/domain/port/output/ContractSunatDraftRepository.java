@@ -106,6 +106,7 @@ public interface ContractSunatDraftRepository {
         private String presentation;
         private BigDecimal factor;
         private String productCategory;
+        private String sunatProductCode;
         private BigDecimal quantity;
         private BigDecimal unitPrice;
         private BigDecimal revenueTotal;

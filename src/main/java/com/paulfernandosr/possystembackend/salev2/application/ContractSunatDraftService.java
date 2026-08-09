@@ -359,6 +359,7 @@ public class ContractSunatDraftService implements
                 .sku(item.getSku())
                 .description(item.getDescription())
                 .productCategory(item.getProductCategory())
+                .sunatProductCode(item.getSunatProductCode())
                 .quantity(item.getQuantity())
                 .revenueTotal(item.getRevenueTotal())
                 .lineKind("VENDIDO")

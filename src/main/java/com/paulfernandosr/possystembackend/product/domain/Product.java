@@ -24,6 +24,7 @@ public class Product {
     private String model;             // Modelo
     private String productType;       // BIEN / SERVICIO
     private String existenceTypeCode; // Tabla 5 SUNAT: Tipo de existencia
+    private String sunatProductCode;  // Catalogo 25 SUNAT / UNSPSC
     private String category;          // Categoría / familia
     private String presentation;      // UNIDAD / PAR / SET / KIT
     private BigDecimal factor;        // Contenido (2 si es par, etc.)

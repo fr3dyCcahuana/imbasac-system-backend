@@ -4,8 +4,13 @@ import com.paulfernandosr.possystembackend.common.domain.Page;
 import com.paulfernandosr.possystembackend.common.domain.Pageable;
 import com.paulfernandosr.possystembackend.common.infrastructure.mapper.PageMapper;
 import com.paulfernandosr.possystembackend.common.infrastructure.response.SuccessResponse;
+import com.paulfernandosr.possystembackend.customer.application.CustomerCommercialService;
 import com.paulfernandosr.possystembackend.customer.domain.Customer;
 import com.paulfernandosr.possystembackend.customer.domain.CustomerAddress;
+import com.paulfernandosr.possystembackend.customer.infrastructure.adapter.input.dto.CustomerAssignmentRequest;
+import com.paulfernandosr.possystembackend.customer.infrastructure.adapter.input.dto.CustomerAssignmentResponse;
+import com.paulfernandosr.possystembackend.customer.infrastructure.adapter.input.dto.CustomerCommercialInfoResponse;
+import com.paulfernandosr.possystembackend.customer.infrastructure.adapter.input.dto.CustomerContactUpdateResponse;
 import com.paulfernandosr.possystembackend.customer.domain.port.input.CreateCustomerAddressUseCase;
 import com.paulfernandosr.possystembackend.customer.domain.port.input.CreateNewCustomerUseCase;
 import com.paulfernandosr.possystembackend.customer.domain.port.input.GetCustomerInfoUseCase;
@@ -17,7 +22,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
@@ -29,6 +37,7 @@ public class CustomerRestController {
     private final GetCustomerInfoUseCase getCustomerInfoUseCase;
     private final GetPageOfCustomersUseCase getPageOfCustomersUseCase;
     private final UpdateCustomerUseCase updateCustomerUseCase;
+    private final CustomerCommercialService customerCommercialService;
 
     @PostMapping
     public ResponseEntity<SuccessResponse<Customer>> createNewCustomer(@RequestBody Customer customer) {
@@ -58,6 +67,50 @@ public class CustomerRestController {
     @GetMapping("/{customerId}")
     public ResponseEntity<SuccessResponse<Customer>> getCustomerInfoById(@PathVariable Long customerId) {
         return ResponseEntity.ok(SuccessResponse.ok(getCustomerInfoUseCase.getCustomerInfoById(customerId)));
+    }
+
+    @GetMapping("/{customerId}/commercial-info")
+    public ResponseEntity<SuccessResponse<CustomerCommercialInfoResponse>> getCommercialInfo(@PathVariable Long customerId) {
+        return ResponseEntity.ok(SuccessResponse.ok(customerCommercialService.getCommercialInfo(customerId)));
+    }
+
+    @PatchMapping("/{customerId}/contact")
+    public ResponseEntity<SuccessResponse<CustomerContactUpdateResponse>> updateContact(@PathVariable Long customerId,
+                                                                                        @RequestBody Map<String, Object> patch) {
+        return ResponseEntity.ok(SuccessResponse.ok(customerCommercialService.updateContact(customerId, patch)));
+    }
+
+    @GetMapping("/{customerId}/assignment")
+    public ResponseEntity<SuccessResponse<CustomerAssignmentResponse>> getActiveAssignment(@PathVariable Long customerId) {
+        return ResponseEntity.ok(SuccessResponse.ok(customerCommercialService.getActiveAssignment(customerId)));
+    }
+
+    @GetMapping("/{customerId}/assignments")
+    public ResponseEntity<SuccessResponse<List<CustomerAssignmentResponse>>> getAssignments(@PathVariable Long customerId) {
+        return ResponseEntity.ok(SuccessResponse.ok(customerCommercialService.getAssignments(customerId)));
+    }
+
+    @PostMapping("/{customerId}/assignments")
+    public ResponseEntity<SuccessResponse<CustomerAssignmentResponse>> assign(@PathVariable Long customerId,
+                                                                              @RequestBody CustomerAssignmentRequest request,
+                                                                              Principal principal) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(SuccessResponse.ok(customerCommercialService.assign(customerId, request, principal)));
+    }
+
+    @PostMapping("/{customerId}/assignments/reassign")
+    public ResponseEntity<SuccessResponse<CustomerAssignmentResponse>> reassign(@PathVariable Long customerId,
+                                                                                @RequestBody CustomerAssignmentRequest request,
+                                                                                Principal principal) {
+        return ResponseEntity.ok(SuccessResponse.ok(customerCommercialService.reassign(customerId, request, principal)));
+    }
+
+    @DeleteMapping("/{customerId}/assignment")
+    public ResponseEntity<Void> unassign(@PathVariable Long customerId,
+                                         @RequestBody(required = false) CustomerAssignmentRequest request,
+                                         Principal principal) {
+        customerCommercialService.unassign(customerId, request, principal);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping

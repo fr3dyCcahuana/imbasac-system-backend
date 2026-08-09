@@ -1,8 +1,12 @@
 package com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat;
 
+import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatProductCodeValidator;
 import com.paulfernandosr.possystembackend.customer.domain.Customer;
+import com.paulfernandosr.possystembackend.product.domain.Product;
 import com.paulfernandosr.possystembackend.sale.domain.Sale;
+import com.paulfernandosr.possystembackend.sale.domain.exception.InvalidSaleException;
 import com.paulfernandosr.possystembackend.sale.domain.SaleItem;
+import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.sunat.SunatCodeInferer;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -14,6 +18,7 @@ public class DocumentMapper {
     public static final String ONE_SPACE = " ";
     public static final BigDecimal IGV_FACTOR = new BigDecimal("1.18");
     public static final BigDecimal IGV_RATE = new BigDecimal("0.18");
+    private static final String MOTORCYCLE_SUNAT_CODE = "25101801";
     public static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     public static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
@@ -80,11 +85,38 @@ public class DocumentMapper {
                 .product(saleItem.getProduct().getName())
                 .quantity(String.valueOf(saleItem.getQuantity()))
                 .basePrice(calculateBasePrice(saleItem.getPrice()).toString())
-                .sunatCode("-")
-                .productCode("getProductCode(saleItem)")
+                .sunatCode(resolveSunatProductCode(saleItem))
+                .productCode(blankIfNull(saleItem.getProduct().getSku()))
                 .unitCode(UnitOfMeasureType.PRODUCT_UNIT.getCode())
                 .igvTypeCode(IgvType.TAXABLE_ONEROUS.getCode())
                 .build();
+    }
+
+    private static String resolveSunatProductCode(SaleItem saleItem) {
+        Product product = saleItem.getProduct();
+        String context = "Codigo Producto SUNAT producto=" + blankIfNull(product.getName());
+        String configured = blankIfNull(product.getSunatProductCode()).trim();
+        String category = blankIfNull(product.getCategory()).trim().toUpperCase();
+
+        try {
+            if (!configured.isBlank()) {
+                return SunatProductCodeValidator.requireValid(configured, context);
+            }
+            if (category.contains("MOTOCIC") || "MOTO".equals(category) || "MOTOCICLETA".equals(category)) {
+                return SunatProductCodeValidator.requireValid(MOTORCYCLE_SUNAT_CODE, context);
+            }
+            return SunatCodeInferer.infer(product.getName(), product.getCategory());
+        } catch (Exception ex) {
+            throw new InvalidSaleException(
+                    "No se pudo resolver Codigo Producto SUNAT valido para producto="
+                            + blankIfNull(product.getName())
+                            + ". Detalle: " + ex.getMessage()
+            );
+        }
+    }
+
+    private static String blankIfNull(String value) {
+        return value == null ? "" : value;
     }
 
 /*    private static String getProductCode(SaleItem saleItem) {

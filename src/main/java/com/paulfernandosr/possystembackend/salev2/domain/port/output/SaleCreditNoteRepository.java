@@ -135,6 +135,7 @@ public interface SaleCreditNoteRepository {
         private BigDecimal totalCostSnapshot;
         private BigDecimal revenueTotal;
         private String productCategory;
+        private String sunatProductCode;
         private Long serialUnitId;
         private Long counterSaleItemId;
         private Boolean counterSaleItemAffectsStock;

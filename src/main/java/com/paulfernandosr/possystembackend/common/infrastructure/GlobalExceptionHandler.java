@@ -3,6 +3,7 @@ package com.paulfernandosr.possystembackend.common.infrastructure;
 import com.paulfernandosr.possystembackend.common.domain.exception.DomainException;
 import com.paulfernandosr.possystembackend.common.infrastructure.response.ErrorResponse;
 import com.paulfernandosr.possystembackend.countersale.domain.exception.InvalidCounterSaleException;
+import com.paulfernandosr.possystembackend.customer.domain.exception.InvalidCustomerException;
 import com.paulfernandosr.possystembackend.proformav2.domain.exception.InvalidProformaV2Exception;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
 import com.paulfernandosr.possystembackend.security.domain.exception.InvalidCredentialsException;
@@ -82,6 +83,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({
             InvalidSaleV2Exception.class,
             InvalidCounterSaleException.class,
+            InvalidCustomerException.class,
             StockReservationException.class
     })
     public ResponseEntity<ErrorResponse> handleBusinessBadRequest(RuntimeException exception) {

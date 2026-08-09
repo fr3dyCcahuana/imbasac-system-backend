@@ -16,6 +16,8 @@ public class Customer {
     private String legalName;
     private DocumentType documentType;
     private String documentNumber;
+    private String phone;
+    private String email;
 
     @JsonProperty("nombres")
     @JsonAlias("givenNames")

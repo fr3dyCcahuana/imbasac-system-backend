@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.product.application;
 
+import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatProductCodeValidator;
 import com.paulfernandosr.possystembackend.product.domain.Product;
 import com.paulfernandosr.possystembackend.product.domain.ProductExistenceType;
 import com.paulfernandosr.possystembackend.product.domain.ProductVehicleSpecs;
@@ -28,6 +29,7 @@ public class UpdateProductInfoService implements UpdateProductInfoUseCase {
     @Transactional
     public void updateProductInfoById(Long productId, Product product) {
         normalizeAndValidateExistenceType(product);
+        normalizeAndValidateSunatProductCode(product);
 
         boolean requiresSpecs = Boolean.TRUE.equals(product.getManageBySerial())
                 && ProductVehicleSpecsRules.isVehicleCategory(product.getCategory());
@@ -67,5 +69,16 @@ public class UpdateProductInfoService implements UpdateProductInfoUseCase {
             throw new InvalidProductException("Tipo de existencia no permitido: " + code);
         }
         product.setExistenceTypeCode(code);
+    }
+
+    private void normalizeAndValidateSunatProductCode(Product product) {
+        try {
+            product.setSunatProductCode(SunatProductCodeValidator.normalizeOptional(
+                    product.getSunatProductCode(),
+                    "Codigo Producto SUNAT del producto"
+            ));
+        } catch (IllegalArgumentException ex) {
+            throw new InvalidProductException(ex.getMessage());
+        }
     }
 }

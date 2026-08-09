@@ -364,6 +364,7 @@ public class PostgresContractSunatDraftRepository implements ContractSunatDraftR
                 p.presentation,
                 p.factor,
                 p.category AS product_category,
+                p.sunat_product_code AS sunat_product_code,
                 di.quantity,
                 di.sunat_unit_price AS unit_price,
                 di.sunat_revenue_total AS revenue_total,
@@ -423,6 +424,7 @@ public class PostgresContractSunatDraftRepository implements ContractSunatDraftR
                         .presentation(rs.getString("presentation"))
                         .factor(rs.getBigDecimal("factor"))
                         .productCategory(rs.getString("product_category"))
+                        .sunatProductCode(rs.getString("sunat_product_code"))
                         .quantity(rs.getBigDecimal("quantity"))
                         .unitPrice(rs.getBigDecimal("unit_price"))
                         .revenueTotal(rs.getBigDecimal("revenue_total"))

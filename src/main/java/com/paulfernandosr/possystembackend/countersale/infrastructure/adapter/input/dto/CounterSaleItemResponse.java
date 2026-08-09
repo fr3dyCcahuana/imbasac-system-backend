@@ -31,6 +31,7 @@ public class CounterSaleItemResponse {
     private BigDecimal totalCostSnapshot;
     private BigDecimal revenueTotal;
     private String productCategory;
+    private String sunatProductCode;
     private LocalDateTime createdAt;
     private VehicleDetailsResponse vehicleDetails;
     private List<CounterSaleSerialUnitResponse> serialUnits;

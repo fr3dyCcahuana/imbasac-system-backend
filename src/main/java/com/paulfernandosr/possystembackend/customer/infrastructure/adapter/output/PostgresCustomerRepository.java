@@ -34,6 +34,8 @@ public class PostgresCustomerRepository implements CustomerRepository {
                         legal_name,
                         document_type,
                         document_number,
+                        phone,
+                        email,
                         given_names,
                         last_name,
                         second_last_name,
@@ -63,13 +65,15 @@ public class PostgresCustomerRepository implements CustomerRepository {
                         accounting_type,
                         foreign_trade,
                         enabled)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
 
         jdbcClient.sql(insertCustomerSql)
                 .params(customer.getLegalName(),
                         customer.getDocumentType().toString(),
                         customer.getDocumentNumber(),
+                        customer.getPhone(),
+                        customer.getEmail(),
                         customer.getGivenNames(),
                         customer.getLastName(),
                         customer.getSecondLastName(),
@@ -118,6 +122,8 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 SET legal_name = ?,
                     document_type = ?,
                     document_number = ?,
+                    phone = ?,
+                    email = ?,
                     given_names = ?,
                     last_name = ?,
                     second_last_name = ?,
@@ -153,6 +159,8 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 .params(customer.getLegalName(),
                         customer.getDocumentType().toString(),
                         customer.getDocumentNumber(),
+                        customer.getPhone(),
+                        customer.getEmail(),
                         customer.getGivenNames(),
                         customer.getLastName(),
                         customer.getSecondLastName(),
@@ -247,6 +255,8 @@ public class PostgresCustomerRepository implements CustomerRepository {
                         legal_name,
                         document_number,
                         document_type,
+                        phone,
+                        email,
                         given_names,
                         last_name,
                         second_last_name,
@@ -299,6 +309,8 @@ public class PostgresCustomerRepository implements CustomerRepository {
                         legal_name,
                         document_type,
                         document_number,
+                        phone,
+                        email,
                         given_names,
                         last_name,
                         second_last_name,
@@ -386,6 +398,8 @@ public class PostgresCustomerRepository implements CustomerRepository {
                         legal_name,
                         document_type,
                         document_number,
+                        phone,
+                        email,
                         given_names,
                         last_name,
                         second_last_name,
@@ -645,4 +659,19 @@ public class PostgresCustomerRepository implements CustomerRepository {
                         customerId)
                 .update();
     }
+
+    @Override
+    public void updateContact(Long customerId, String phone, String email) {
+        String updateContactSql = """
+                UPDATE customers
+                SET phone = ?,
+                    email = ?
+                WHERE id = ?
+                """;
+
+        jdbcClient.sql(updateContactSql)
+                .params(phone, email, customerId)
+                .update();
+    }
 }
+

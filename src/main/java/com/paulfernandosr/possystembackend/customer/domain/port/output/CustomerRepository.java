@@ -35,4 +35,6 @@ public interface CustomerRepository {
     void replaceAddresses(Long customerId, List<CustomerAddress> addresses);
 
     void updateResolvedData(Long customerId, Customer customer);
+
+    void updateContact(Long customerId, String phone, String email);
 }

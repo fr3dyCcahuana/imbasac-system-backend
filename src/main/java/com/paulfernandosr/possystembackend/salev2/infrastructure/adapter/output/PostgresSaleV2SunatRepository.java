@@ -108,6 +108,7 @@ public class PostgresSaleV2SunatRepository implements SaleV2SunatRepository {
                 si.sku,
                 si.description,
                 p.category AS product_category,
+                p.sunat_product_code AS sunat_product_code,
                 si.quantity,
                 si.revenue_total,
                 si.line_kind,
@@ -166,6 +167,7 @@ public class PostgresSaleV2SunatRepository implements SaleV2SunatRepository {
                         .sku(rs.getString("sku"))
                         .description(rs.getString("description"))
                         .productCategory(rs.getString("product_category"))
+                        .sunatProductCode(rs.getString("sunat_product_code"))
                         .quantity(rs.getBigDecimal("quantity"))
                         .revenueTotal(rs.getBigDecimal("revenue_total"))
                         .lineKind(rs.getString("line_kind"))

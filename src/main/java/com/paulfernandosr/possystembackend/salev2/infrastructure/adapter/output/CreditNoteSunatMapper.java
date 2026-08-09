@@ -94,7 +94,7 @@ public final class CreditNoteSunatMapper {
                 .product(required(line.getDescription(), "description"))
                 .quantity(qty.stripTrailingZeros().toPlainString())
                 .basePrice(basePrice.toPlainString())
-                .sunatCode(blankIfNull(line.getSunatCode()).isBlank() ? "01010101" : line.getSunatCode())
+                .sunatCode(required(line.getSunatCode(), "sunatCode"))
                 .productCode(blankIfNull(line.getSku()))
                 .unitCode(UnitOfMeasureType.PRODUCT_UNIT.getCode())
                 .igvTypeCode(resolveIgvTypeCode(sale))

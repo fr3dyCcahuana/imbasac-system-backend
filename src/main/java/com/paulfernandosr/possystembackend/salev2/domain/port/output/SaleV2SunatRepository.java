@@ -75,6 +75,7 @@ public interface SaleV2SunatRepository {
         private String sku;
         private String description;
         private String productCategory;
+        private String sunatProductCode;
         private BigDecimal quantity;
         private BigDecimal revenueTotal;
         private String lineKind;

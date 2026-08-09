@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.salev2.application;
 
 import com.paulfernandosr.possystembackend.common.infrastructure.documentseries.DocumentSeriesPolicy;
+import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatProductCodeValidator;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.DocumentRequest;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.SunatProps;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
@@ -519,13 +520,23 @@ public class CreateCreditNoteService implements CreateCreditNoteUseCase {
 
     private String resolveSunatCode(SaleCreditNoteRepository.SaleItemForCreditNote item) {
         String category = blankIfNull(item.getProductCategory()).trim().toUpperCase(Locale.ROOT);
-        if (category.contains("MOTOCIC") || "MOTO".equals(category) || "MOTOCICLETA".equals(category)) {
-            return MOTORCYCLE_SUNAT_CODE;
-        }
         try {
+            String configured = blankIfNull(item.getSunatProductCode()).trim();
+            if (!configured.isBlank()) {
+                return SunatProductCodeValidator.requireValid(configured, "Codigo Producto SUNAT nota de credito item " + item.getSaleItemId());
+            }
+            if (category.contains("MOTOCIC") || "MOTO".equals(category) || "MOTOCICLETA".equals(category)) {
+                return SunatProductCodeValidator.requireValid(MOTORCYCLE_SUNAT_CODE, "Codigo Producto SUNAT nota de credito item " + item.getSaleItemId());
+            }
             return SunatCodeInferer.infer(item.getDescription(), item.getProductCategory());
         } catch (Exception ex) {
-            return "01010101";
+            throw new InvalidSaleV2Exception(
+                    "No se pudo resolver Codigo Producto SUNAT valido para nota de credito. saleItemId="
+                            + item.getSaleItemId()
+                            + " producto=" + item.getDescription()
+                            + " categoria=" + item.getProductCategory()
+                            + ". Detalle: " + ex.getMessage()
+            );
         }
     }
 

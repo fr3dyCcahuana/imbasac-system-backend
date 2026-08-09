@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.sunat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatProductCodeValidator;
 import java.text.Normalizer;
 import java.util.HashSet;
 import java.util.List;
@@ -25,21 +26,21 @@ public final class SunatCodeInferer {
 
         String exactProductCode = findExactProductCode(normalizedProduct, normalizedCategory);
         if (exactProductCode != null) {
-            return exactProductCode;
+            return SunatProductCodeValidator.requireValid(exactProductCode, "Codigo SUNAT inferido por producto exacto");
         }
 
         ScoredCandidate bestRule = rankRules(normalizedProduct, normalizedCategory, CATALOG.rules());
         if (bestRule != null && bestRule.score() >= ACCEPTANCE_THRESHOLD) {
-            return bestRule.code();
+            return SunatProductCodeValidator.requireValid(bestRule.code(), "Codigo SUNAT inferido por regla");
         }
 
         String categoryDefault = findCategoryDefault(normalizedCategory);
         if (categoryDefault != null) {
-            return categoryDefault;
+            return SunatProductCodeValidator.requireValid(categoryDefault, "Codigo SUNAT inferido por categoria");
         }
 
         if (bestRule != null) {
-            return bestRule.code();
+            return SunatProductCodeValidator.requireValid(bestRule.code(), "Codigo SUNAT inferido por mejor regla disponible");
         }
 
         throw new IllegalStateException("No se pudo inferir código SUNAT para producto=" + productName);

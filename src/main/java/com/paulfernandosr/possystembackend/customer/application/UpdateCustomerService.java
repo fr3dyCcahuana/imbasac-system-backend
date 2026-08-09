@@ -37,6 +37,7 @@ public class UpdateCustomerService implements UpdateCustomerUseCase {
         boolean preserveExistingAddresses = isBlank(customer.getAddress()) && customer.getAddresses() == null;
 
         normalizeCustomer(customer);
+        preserveContactIfMissing(customer, existingCustomer);
         validateManualCustomerData(customer);
 
         if (preserveExistingAddresses) {
@@ -82,6 +83,8 @@ public class UpdateCustomerService implements UpdateCustomerUseCase {
 
     private void normalizeCustomer(Customer customer) {
         customer.setDocumentNumber(trim(customer.getDocumentNumber()));
+        customer.setPhone(normalizePhone(customer.getPhone()));
+        customer.setEmail(normalizeEmail(customer.getEmail()));
         customer.setGivenNames(upper(customer.getGivenNames()));
         customer.setLastName(upper(customer.getLastName()));
         customer.setSecondLastName(upper(customer.getSecondLastName()));
@@ -299,6 +302,35 @@ public class UpdateCustomerService implements UpdateCustomerUseCase {
 
     private String nullSafe(String value) {
         return value == null ? "" : value;
+    }
+
+    private void preserveContactIfMissing(Customer customer, Customer existingCustomer) {
+        if (isBlank(customer.getPhone())) {
+            customer.setPhone(existingCustomer.getPhone());
+        }
+        if (isBlank(customer.getEmail())) {
+            customer.setEmail(existingCustomer.getEmail());
+        }
+    }
+
+    private String normalizePhone(String value) {
+        String trimmed = trim(value);
+        if (isBlank(trimmed)) return null;
+        String normalized = trimmed.replaceAll("[\\s()-]", "");
+        if (!normalized.matches("\\+?\\d{6,15}")) {
+            throw new InvalidCustomerException("Customer phone must have between 6 and 15 digits");
+        }
+        return normalized;
+    }
+
+    private String normalizeEmail(String value) {
+        String trimmed = trim(value);
+        if (isBlank(trimmed)) return null;
+        String normalized = trimmed.toLowerCase(Locale.ROOT);
+        if (!normalized.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            throw new InvalidCustomerException("Customer email has invalid format");
+        }
+        return normalized;
     }
 
     private boolean isBlank(String value) {

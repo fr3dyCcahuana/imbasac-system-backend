@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output;
 
+import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatProductCodeValidator;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.CurrencyType;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.DocumentRequest;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.IgvType;
@@ -98,21 +99,7 @@ public final class SaleV2SunatMapper {
                     ? buildMotorSunatDescription(item)
                     : required(item.getDescription(), "description");
 
-        String sunatCode;
-        if (motorcycle) {
-            sunatCode = MOTORCYCLE_SUNAT_CODE;
-        } else {
-            try {
-                sunatCode = SunatCodeInferer.infer(productDescription, productCategory);
-            } catch (Exception ex) {
-                throw new InvalidSaleV2Exception(
-                        "No se pudo inferir código SUNAT para la línea " + item.getLineNumber()
-                                + " producto=" + productDescription
-                                + " categoría=" + productCategory
-                                + ". Detalle: " + ex.getMessage()
-                );
-            }
-        }
+        String sunatCode = resolveSunatProductCode(item, productDescription, productCategory, motorcycle);
 
         return DocumentRequest.Item.builder()
                 .product(productDescription)
@@ -123,6 +110,33 @@ public final class SaleV2SunatMapper {
                 .unitCode(UnitOfMeasureType.PRODUCT_UNIT.getCode())
                 .igvTypeCode(resolveIgvTypeCode(sale))
                 .build();
+    }
+
+    private static String resolveSunatProductCode(SaleV2SunatRepository.SaleItemForSunat item,
+                                                  String productDescription,
+                                                  String productCategory,
+                                                  boolean motorcycle) {
+        String context = "Codigo Producto SUNAT linea " + item.getLineNumber();
+        String configured = blankIfNull(item.getSunatProductCode()).trim();
+
+        try {
+            if (!configured.isBlank()) {
+                return SunatProductCodeValidator.requireValid(configured, context);
+            }
+
+            if (motorcycle) {
+                return SunatProductCodeValidator.requireValid(MOTORCYCLE_SUNAT_CODE, context);
+            }
+
+            return SunatCodeInferer.infer(productDescription, productCategory);
+        } catch (Exception ex) {
+            throw new InvalidSaleV2Exception(
+                    "No se pudo resolver Codigo Producto SUNAT valido para la linea " + item.getLineNumber()
+                            + " producto=" + productDescription
+                            + " categoria=" + productCategory
+                            + ". Detalle: " + ex.getMessage()
+            );
+        }
     }
 
     private static String buildMotorcycleCommercialDescription(SaleV2SunatRepository.SaleItemForSunat item) {

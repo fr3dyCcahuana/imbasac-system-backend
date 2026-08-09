@@ -460,6 +460,7 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                    csi.revenue_total AS revenue_total,
                    csi.created_at AS created_at,
                    p.category AS product_category,
+                   p.sunat_product_code AS sunat_product_code,
                    p.brand AS v_marca,
                    p.model AS v_modelo,
                    vs.engine_capacity AS v_engine_capacity,
@@ -514,6 +515,7 @@ public class CounterSalePostgresQueryRepository implements CounterSaleQueryRepos
                     .totalCostSnapshot(rs.getBigDecimal("total_cost_snapshot"))
                     .revenueTotal(rs.getBigDecimal("revenue_total"))
                     .productCategory(category)
+                    .sunatProductCode(rs.getString("sunat_product_code"))
                     .createdAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null)
                     .vehicleDetails(vehicleDetails)
                     .build();
