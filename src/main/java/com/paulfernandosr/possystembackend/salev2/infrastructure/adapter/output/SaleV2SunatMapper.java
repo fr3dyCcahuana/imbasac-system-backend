@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output;
 
 import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatProductCodeValidator;
+import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatCodeInferer;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.CurrencyType;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.DocumentRequest;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.IgvType;
@@ -9,7 +10,6 @@ import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.su
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.UnitOfMeasureType;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
 import com.paulfernandosr.possystembackend.salev2.domain.port.output.SaleV2SunatRepository;
-import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.sunat.SunatCodeInferer;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;

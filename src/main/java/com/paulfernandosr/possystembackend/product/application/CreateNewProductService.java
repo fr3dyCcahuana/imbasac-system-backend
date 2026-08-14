@@ -1,6 +1,5 @@
 package com.paulfernandosr.possystembackend.product.application;
 
-import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatProductCodeValidator;
 import com.paulfernandosr.possystembackend.product.domain.Product;
 import com.paulfernandosr.possystembackend.product.domain.ProductExistenceType;
 import com.paulfernandosr.possystembackend.product.domain.ProductVehicleSpecs;
@@ -29,7 +28,7 @@ public class CreateNewProductService implements CreateNewProductUseCase {
     @Transactional
     public Product createNewProduct(Product product) {
         normalizeAndValidateExistenceType(product);
-        normalizeAndValidateSunatProductCode(product);
+        resolveSunatProductCode(product);
 
         // Reglas: si manageBySerial=true y category=MOTOR|MOTOCICLETAS, la ficha técnica es obligatoria.
         boolean requiresSpecs = Boolean.TRUE.equals(product.getManageBySerial())
@@ -61,6 +60,15 @@ public class CreateNewProductService implements CreateNewProductUseCase {
 
         return created;
     }
+
+    private void resolveSunatProductCode(Product product) {
+        try {
+            product.setSunatProductCode(ProductSunatProductCodeResolver.resolveForCreate(product));
+        } catch (IllegalArgumentException ex) {
+            throw new InvalidProductException(ex.getMessage());
+        }
+    }
+
     private void normalizeAndValidateExistenceType(Product product) {
         String code = ProductExistenceType.normalize(product.getExistenceTypeCode());
         if (!ProductExistenceType.isAllowed(code)) {
@@ -69,14 +77,4 @@ public class CreateNewProductService implements CreateNewProductUseCase {
         product.setExistenceTypeCode(code);
     }
 
-    private void normalizeAndValidateSunatProductCode(Product product) {
-        try {
-            product.setSunatProductCode(SunatProductCodeValidator.normalizeOptional(
-                    product.getSunatProductCode(),
-                    "Codigo Producto SUNAT del producto"
-            ));
-        } catch (IllegalArgumentException ex) {
-            throw new InvalidProductException(ex.getMessage());
-        }
-    }
 }

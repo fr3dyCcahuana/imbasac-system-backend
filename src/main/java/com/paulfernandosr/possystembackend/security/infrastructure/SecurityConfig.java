@@ -51,6 +51,8 @@ public class SecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/catalog/districts").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/product-offers/**")
                         .hasAnyAuthority("MANAGE_PRODUCT_OFFERS", "MANAGE_PRODUCT_OFFERS_EDIT")
+                        .requestMatchers("/my-customers/**")
+                        .hasAuthority("MANAGE_MY_CUSTOMERS")
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/product-offers/**")
                         .hasAuthority("MANAGE_PRODUCT_OFFERS_EDIT")
                         .requestMatchers(org.springframework.http.HttpMethod.PUT, "/product-offers/**")

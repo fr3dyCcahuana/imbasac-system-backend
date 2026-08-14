@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.product.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -24,6 +25,7 @@ public class Product {
     private String model;             // Modelo
     private String productType;       // BIEN / SERVICIO
     private String existenceTypeCode; // Tabla 5 SUNAT: Tipo de existencia
+    @JsonIgnore
     private String sunatProductCode;  // Catalogo 25 SUNAT / UNSPSC
     private String category;          // Categoría / familia
     private String presentation;      // UNIDAD / PAR / SET / KIT

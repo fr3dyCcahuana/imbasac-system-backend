@@ -8,6 +8,7 @@ import com.paulfernandosr.possystembackend.product.domain.ProductKardexEntry;
 import com.paulfernandosr.possystembackend.product.domain.port.input.ExportInventoryReportUseCase;
 import com.paulfernandosr.possystembackend.product.domain.port.output.ProductKardexRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
@@ -19,7 +20,7 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.VerticalAlignment;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellRangeAddress;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -36,6 +37,7 @@ import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ExportInventoryReportService implements ExportInventoryReportUseCase {
 
     private static final int MAX_PRODUCTS_PER_EXPORT = 5000;
@@ -50,11 +52,62 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
     public byte[] export(InventoryReportExportRequest request) {
         validate(request);
 
-        boolean includeAllProductsWithMovements = Boolean.TRUE.equals(request.includeAllProductsWithMovements());
-        List<Long> productIds = includeAllProductsWithMovements ? List.of() : normalizeIds(request.productIds());
-        List<ProductKardexEntry> products = includeAllProductsWithMovements
-                ? productKardexRepository.findInventoryReportProductsWithMovements(request.dateFrom(), request.dateTo())
-                : productKardexRepository.findInventoryReportProducts(productIds);
+        long startNanos = System.nanoTime();
+        InventoryReportData reportData = loadReportData(request);
+        long dataLoadedNanos = System.nanoTime();
+
+        SXSSFWorkbook workbook = new SXSSFWorkbook(200);
+        try (workbook; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            workbook.setCompressTempFiles(true);
+            Sheet sheet = workbook.createSheet(request.format() == InventoryReportFormat.VALUED ? "Formato 13.1" : "Formato 12.1");
+            ReportStyles styles = createStyles(workbook);
+            configureColumns(sheet, request.format());
+
+            int rowIndex = 0;
+            for (ProductKardexEntry product : reportData.products()) {
+                rowIndex = appendProductBlock(
+                        sheet,
+                        rowIndex,
+                        request,
+                        product,
+                        reportData.movementsByProduct().getOrDefault(product.getProductId(), List.of()),
+                        styles
+                );
+                rowIndex += 5;
+            }
+
+            workbook.write(out);
+            log.info(
+                    "[kardex-inventory-export] format={}, from={}, to={}, includeAll={}, products={}, movements={}, loadMs={}, xlsxMs={}, totalMs={}",
+                    request.format(),
+                    request.dateFrom(),
+                    request.dateTo(),
+                    request.includeAllProductsWithMovements(),
+                    reportData.products().size(),
+                    reportData.movementCount(),
+                    millisBetween(startNanos, dataLoadedNanos),
+                    millisBetween(dataLoadedNanos, System.nanoTime()),
+                    millisBetween(startNanos, System.nanoTime())
+            );
+            return out.toByteArray();
+        } catch (IOException ex) {
+            throw new IllegalStateException("No se pudo generar el registro de inventario permanente.", ex);
+        } finally {
+            workbook.dispose();
+        }
+    }
+
+    private InventoryReportData loadReportData(InventoryReportExportRequest request) {
+        if (Boolean.TRUE.equals(request.includeAllProductsWithMovements())) {
+            List<ProductKardexEntry> movements = productKardexRepository.findInventoryReportMovementsForAllProducts(
+                    request.dateFrom(),
+                    request.dateTo()
+            );
+            return new InventoryReportData(productsFromMovements(movements), groupMovements(movements), movements.size());
+        }
+
+        List<Long> productIds = normalizeIds(request.productIds());
+        List<ProductKardexEntry> products = productKardexRepository.findInventoryReportProducts(productIds);
         List<Long> movementProductIds = products.stream()
                 .map(ProductKardexEntry::getProductId)
                 .filter(Objects::nonNull)
@@ -65,32 +118,7 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
                 request.dateFrom(),
                 request.dateTo()
         );
-
-        Map<Long, List<ProductKardexEntry>> movementsByProduct = groupMovements(movements);
-
-        try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            Sheet sheet = workbook.createSheet(request.format() == InventoryReportFormat.VALUED ? "Formato 13.1" : "Formato 12.1");
-            ReportStyles styles = createStyles(workbook);
-            configureColumns(sheet, request.format());
-
-            int rowIndex = 0;
-            for (ProductKardexEntry product : products) {
-                rowIndex = appendProductBlock(
-                        sheet,
-                        rowIndex,
-                        request,
-                        product,
-                        movementsByProduct.getOrDefault(product.getProductId(), List.of()),
-                        styles
-                );
-                rowIndex += 5;
-            }
-
-            workbook.write(out);
-            return out.toByteArray();
-        } catch (IOException ex) {
-            throw new IllegalStateException("No se pudo generar el registro de inventario permanente.", ex);
-        }
+        return new InventoryReportData(products, groupMovements(movements), movements.size());
     }
 
     private void validate(InventoryReportExportRequest request) {
@@ -131,6 +159,29 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
             grouped.computeIfAbsent(movement.getProductId(), ignored -> new ArrayList<>()).add(movement);
         }
         return grouped;
+    }
+
+    private List<ProductKardexEntry> productsFromMovements(List<ProductKardexEntry> movements) {
+        Map<Long, ProductKardexEntry> products = new LinkedHashMap<>();
+        for (ProductKardexEntry movement : movements) {
+            Long productId = movement.getProductId();
+            if (productId == null || products.containsKey(productId)) {
+                continue;
+            }
+            products.put(productId, ProductKardexEntry.builder()
+                    .id(productId)
+                    .productId(productId)
+                    .sku(movement.getSku())
+                    .productName(movement.getProductName())
+                    .category(movement.getCategory())
+                    .brand(movement.getBrand())
+                    .model(movement.getModel())
+                    .presentation(movement.getPresentation())
+                    .manageBySerial(movement.getManageBySerial())
+                    .existenceTypeCode(movement.getExistenceTypeCode())
+                    .build());
+        }
+        return new ArrayList<>(products.values());
     }
 
     private int appendProductBlock(
@@ -551,7 +602,7 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
     private void mergeAndSet(Row row, int firstColumn, int lastColumn, String value, CellStyle style) {
         Sheet sheet = row.getSheet();
         if (lastColumn > firstColumn) {
-            sheet.addMergedRegion(new CellRangeAddress(row.getRowNum(), row.getRowNum(), firstColumn, lastColumn));
+            sheet.addMergedRegionUnsafe(new CellRangeAddress(row.getRowNum(), row.getRowNum(), firstColumn, lastColumn));
         }
         setCell(row, firstColumn, value, style);
         for (int column = firstColumn + 1; column <= lastColumn; column++) {
@@ -583,6 +634,10 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
         return value == null ? "" : value.trim();
     }
 
+    private long millisBetween(long startNanos, long endNanos) {
+        return (endNanos - startNanos) / 1_000_000L;
+    }
+
     private record ReportStyles(
             CellStyle title,
             CellStyle bold,
@@ -596,6 +651,13 @@ public class ExportInventoryReportService implements ExportInventoryReportUseCas
             CellStyle totalLabel,
             CellStyle totalQuantity,
             CellStyle totalMoney
+    ) {
+    }
+
+    private record InventoryReportData(
+            List<ProductKardexEntry> products,
+            Map<Long, List<ProductKardexEntry>> movementsByProduct,
+            int movementCount
     ) {
     }
 }

@@ -2,6 +2,7 @@ package com.paulfernandosr.possystembackend.countersale.application;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatCodeInferer;
 import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatProductCodeValidator;
 import com.paulfernandosr.possystembackend.countersale.domain.exception.InvalidCounterSaleException;
 import com.paulfernandosr.possystembackend.countersale.domain.port.input.EmitCounterSaleSunatCombinationUseCase;
@@ -12,7 +13,6 @@ import com.paulfernandosr.possystembackend.salev2.domain.port.input.EmitSaleV2To
 import com.paulfernandosr.possystembackend.salev2.domain.port.output.SalePaymentRepository;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.SaleV2SunatEmissionResponse;
 import com.paulfernandosr.possystembackend.salev2.domain.port.output.SaleV2Repository;
-import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.sunat.SunatCodeInferer;
 import com.paulfernandosr.possystembackend.user.domain.User;
 import com.paulfernandosr.possystembackend.user.domain.port.output.UserRepository;
 import lombok.RequiredArgsConstructor;

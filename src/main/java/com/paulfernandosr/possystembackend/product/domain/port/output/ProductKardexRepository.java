@@ -33,6 +33,11 @@ public interface ProductKardexRepository {
             LocalDate dateTo
     );
 
+    List<ProductKardexEntry> findInventoryReportMovementsForAllProducts(
+            LocalDate dateFrom,
+            LocalDate dateTo
+    );
+
     List<ProductKardexEntry> findInventoryReportMovements(
             List<Long> productIds,
             LocalDate dateFrom,

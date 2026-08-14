@@ -1,12 +1,12 @@
 package com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat;
 
 import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatProductCodeValidator;
+import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatCodeInferer;
 import com.paulfernandosr.possystembackend.customer.domain.Customer;
 import com.paulfernandosr.possystembackend.product.domain.Product;
 import com.paulfernandosr.possystembackend.sale.domain.Sale;
 import com.paulfernandosr.possystembackend.sale.domain.exception.InvalidSaleException;
 import com.paulfernandosr.possystembackend.sale.domain.SaleItem;
-import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.sunat.SunatCodeInferer;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;

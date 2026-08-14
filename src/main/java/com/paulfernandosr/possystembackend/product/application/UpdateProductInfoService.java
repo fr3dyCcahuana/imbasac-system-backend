@@ -1,10 +1,10 @@
 package com.paulfernandosr.possystembackend.product.application;
 
-import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatProductCodeValidator;
 import com.paulfernandosr.possystembackend.product.domain.Product;
 import com.paulfernandosr.possystembackend.product.domain.ProductExistenceType;
 import com.paulfernandosr.possystembackend.product.domain.ProductVehicleSpecs;
 import com.paulfernandosr.possystembackend.product.domain.exception.InvalidProductException;
+import com.paulfernandosr.possystembackend.product.domain.exception.ProductNotFoundException;
 import com.paulfernandosr.possystembackend.product.domain.port.input.UpdateProductInfoUseCase;
 import com.paulfernandosr.possystembackend.product.domain.port.output.ProductRepository;
 import com.paulfernandosr.possystembackend.product.domain.port.output.ProductVehicleSpecsRepository;
@@ -28,8 +28,11 @@ public class UpdateProductInfoService implements UpdateProductInfoUseCase {
     @Override
     @Transactional
     public void updateProductInfoById(Long productId, Product product) {
+        Product existing = productRepository.findById(productId)
+                .orElseThrow(() -> new ProductNotFoundException("Producto no encontrado: " + productId));
+
         normalizeAndValidateExistenceType(product);
-        normalizeAndValidateSunatProductCode(product);
+        resolveSunatProductCode(product, existing);
 
         boolean requiresSpecs = Boolean.TRUE.equals(product.getManageBySerial())
                 && ProductVehicleSpecsRules.isVehicleCategory(product.getCategory());
@@ -63,6 +66,15 @@ public class UpdateProductInfoService implements UpdateProductInfoUseCase {
             }
         }
     }
+
+    private void resolveSunatProductCode(Product product, Product existing) {
+        try {
+            product.setSunatProductCode(ProductSunatProductCodeResolver.resolveForUpdate(product, existing));
+        } catch (IllegalArgumentException ex) {
+            throw new InvalidProductException(ex.getMessage());
+        }
+    }
+
     private void normalizeAndValidateExistenceType(Product product) {
         String code = ProductExistenceType.normalize(product.getExistenceTypeCode());
         if (!ProductExistenceType.isAllowed(code)) {
@@ -71,14 +83,4 @@ public class UpdateProductInfoService implements UpdateProductInfoUseCase {
         product.setExistenceTypeCode(code);
     }
 
-    private void normalizeAndValidateSunatProductCode(Product product) {
-        try {
-            product.setSunatProductCode(SunatProductCodeValidator.normalizeOptional(
-                    product.getSunatProductCode(),
-                    "Codigo Producto SUNAT del producto"
-            ));
-        } catch (IllegalArgumentException ex) {
-            throw new InvalidProductException(ex.getMessage());
-        }
-    }
 }

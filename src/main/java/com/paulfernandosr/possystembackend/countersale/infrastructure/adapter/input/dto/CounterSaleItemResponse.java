@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.countersale.infrastructure.adapter.input.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -31,6 +32,7 @@ public class CounterSaleItemResponse {
     private BigDecimal totalCostSnapshot;
     private BigDecimal revenueTotal;
     private String productCategory;
+    @JsonIgnore
     private String sunatProductCode;
     private LocalDateTime createdAt;
     private VehicleDetailsResponse vehicleDetails;

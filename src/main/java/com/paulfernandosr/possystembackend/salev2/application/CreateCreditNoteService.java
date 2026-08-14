@@ -2,6 +2,7 @@ package com.paulfernandosr.possystembackend.salev2.application;
 
 import com.paulfernandosr.possystembackend.common.infrastructure.documentseries.DocumentSeriesPolicy;
 import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatProductCodeValidator;
+import com.paulfernandosr.possystembackend.common.infrastructure.sunat.SunatCodeInferer;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.DocumentRequest;
 import com.paulfernandosr.possystembackend.sale.infrastructure.adapter.output.sunat.SunatProps;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
@@ -17,7 +18,6 @@ import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.d
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.CreditNoteItemResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto.CreditNoteResponse;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.CreditNoteSunatMapper;
-import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.sunat.SunatCodeInferer;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.sunat.SunatEmissionResult;
 import com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.output.sunat.SunatEmissionResultParser;
 import com.paulfernandosr.possystembackend.user.domain.User;

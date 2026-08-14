@@ -40,33 +40,36 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
             LocalDate dateTo,
             Pageable pageable
     ) {
-        String baseSql = baseSql();
+        SqlWhere movementWhere = buildMovementWhere(productId, movementType, direction, source, dateFrom, dateTo);
+        String baseSql = baseSql(movementWhere.sql());
         SqlWhere where = buildWhere(
                 query,
-                productId,
+                null,
                 category,
                 brand,
                 model,
-                movementType,
-                direction,
-                source,
+                null,
+                "ALL",
+                "ALL",
                 docType,
                 series,
                 number,
-                dateFrom,
-                dateTo
+                null,
+                null
         );
+        List<Object> filteredParams = new ArrayList<>(movementWhere.params());
+        filteredParams.addAll(where.params());
 
         String countSql = baseSql + "\nSELECT COUNT(1) FROM enriched\n" + where.sql();
         long totalElements = jdbcClient.sql(countSql)
-                .params(where.params().toArray())
+                .params(filteredParams.toArray())
                 .query(Long.class)
                 .single();
 
         int size = pageable.getSize();
         int page = pageable.getNumber();
 
-        List<Object> selectParams = new ArrayList<>(where.params());
+        List<Object> selectParams = new ArrayList<>(filteredParams);
         selectParams.add(size);
         selectParams.add(page * size);
 
@@ -194,7 +197,7 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
 
     @Override
     public List<ProductKardexEntry> findInventoryReportProductsWithMovements(LocalDate dateFrom, LocalDate dateTo) {
-        String baseSql = baseSql();
+        String baseSql = baseSql("WHERE m.created_at >= ? AND m.created_at < ?");
         String sql = baseSql + """
                 , product_rows AS (
                     SELECT DISTINCT
@@ -208,9 +211,7 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                       manage_by_serial,
                       existence_type_code
                     FROM enriched
-                    WHERE movement_date >= ?
-                      AND movement_date < ?
-                      AND tax_export_eligible = TRUE
+                    WHERE tax_export_eligible = TRUE
                 )
                 SELECT
                   product_id AS id,
@@ -264,6 +265,20 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
     }
 
     @Override
+    public List<ProductKardexEntry> findInventoryReportMovementsForAllProducts(
+            LocalDate dateFrom,
+            LocalDate dateTo
+    ) {
+        LocalDate safeFrom = dateFrom != null ? dateFrom : LocalDate.of(1900, 1, 1);
+        LocalDate safeTo = dateTo != null ? dateTo : LocalDate.now();
+
+        return jdbcClient.sql(inventoryReportMovementsSql("", "sku ASC, product_id ASC, movement_date ASC, id ASC"))
+                .params(safeFrom.atStartOfDay(), safeTo.plusDays(1).atStartOfDay())
+                .query(new ProductKardexEntryRowMapper())
+                .list();
+    }
+
+    @Override
     public List<ProductKardexEntry> findInventoryReportMovements(
             List<Long> productIds,
             LocalDate dateFrom,
@@ -273,9 +288,329 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
             return List.of();
         }
 
-        String baseSql = baseSql();
         String placeholders = placeholders(productIds.size());
-        String sql = baseSql + """
+        LocalDate safeFrom = dateFrom != null ? dateFrom : LocalDate.of(1900, 1, 1);
+        LocalDate safeTo = dateTo != null ? dateTo : LocalDate.now();
+        List<Object> params = new ArrayList<>();
+        params.add(safeFrom.atStartOfDay());
+        params.add(safeTo.plusDays(1).atStartOfDay());
+        params.addAll(productIds);
+
+        return jdbcClient.sql(inventoryReportMovementsSql(
+                        "AND m.product_id IN (%s)".formatted(placeholders),
+                        "product_id ASC, movement_date ASC, id ASC"
+                ))
+                .params(params.toArray())
+                .query(new ProductKardexEntryRowMapper())
+                .list();
+    }
+
+    private String inventoryReportMovementsSql(String productFilterSql, String orderBySql) {
+        String safeProductFilterSql = productFilterSql == null || productFilterSql.isBlank() ? "" : "\n      " + productFilterSql;
+        String safeOrderBySql = orderBySql == null || orderBySql.isBlank()
+                ? "product_id ASC, movement_date ASC, id ASC"
+                : orderBySql;
+
+        return """
+                WITH filtered_movements AS (
+                  SELECT
+                    m.id,
+                    m.created_at AS movement_date,
+                    m.product_id,
+                    p.sku,
+                    p.name AS product_name,
+                    p.category,
+                    p.brand,
+                    p.model,
+                    p.presentation,
+                    p.manage_by_serial,
+                    p.existence_type_code,
+                    m.movement_type,
+                    CASE
+                      WHEN COALESCE(m.quantity_in, 0) > 0 THEN 'ENTRADA'
+                      WHEN COALESCE(m.quantity_out, 0) > 0 THEN 'SALIDA'
+                      ELSE 'NEUTRO'
+                    END AS direction,
+                    m.source_table,
+                    m.source_id,
+                    COALESCE(m.quantity_in, 0) AS quantity_in,
+                    COALESCE(m.quantity_out, 0) AS quantity_out,
+                    CASE
+                      WHEN COALESCE(m.quantity_in, 0) > 0 THEN COALESCE(m.quantity_in, 0)
+                      WHEN COALESCE(m.quantity_out, 0) > 0 THEN COALESCE(m.quantity_out, 0)
+                      ELSE 0
+                    END AS movement_quantity,
+                    CASE
+                      WHEN m.balance_qty IS NULL THEN NULL
+                      ELSE m.balance_qty - COALESCE(m.quantity_in, 0) + COALESCE(m.quantity_out, 0)
+                    END AS stock_before,
+                    m.balance_qty AS stock_after,
+                    m.unit_cost,
+                    m.total_cost,
+                    m.balance_cost AS average_cost_after
+                  FROM product_stock_movement m
+                  INNER JOIN product p
+                          ON p.id = m.product_id
+                 WHERE m.created_at >= ?
+                   AND m.created_at < ?
+                   AND m.source_table IN ('purchase_item', 'sale_item', 'counter_sale_item', 'credit_note_item')%s
+                ),
+                counter_movements AS (
+                  SELECT DISTINCT source_id
+                    FROM filtered_movements
+                   WHERE source_table = 'counter_sale_item'
+                     AND source_id IS NOT NULL
+                ),
+                latest_link AS (
+                  SELECT DISTINCT ON (li.counter_sale_item_id)
+                         li.counter_sale_item_id,
+                         li.emitted_unit_price,
+                         li.emitted_revenue_total,
+                         l.emitted_doc_type,
+                         l.emitted_series,
+                         l.emitted_number,
+                         COALESCE(sl.issue_date, l.associated_at::date) AS issue_date
+                    FROM sale_counter_sale_sunat_link_item li
+                    JOIN counter_movements cm
+                      ON cm.source_id = li.counter_sale_item_id
+                    JOIN sale_counter_sale_sunat_link l
+                      ON l.sale_id = li.sale_id
+                     AND l.counter_sale_id = li.counter_sale_id
+                    LEFT JOIN sale sl
+                      ON sl.id = l.sale_id
+                   WHERE l.reservation_status = 'ACEPTADO'
+                   ORDER BY li.counter_sale_item_id,
+                            COALESCE(l.associated_at, l.updated_at, l.reserved_at) DESC NULLS LAST,
+                            li.id DESC
+                ),
+                latest_combo AS (
+                  SELECT DISTINCT ON (cl.counter_sale_item_id)
+                         cl.counter_sale_item_id,
+                         cl.emitted_unit_price,
+                         cl.emitted_revenue_total,
+                         c.emitted_doc_type,
+                         c.emitted_series,
+                         c.emitted_number,
+                         COALESCE(sg.issue_date, c.issue_date, c.associated_at::date) AS issue_date
+                    FROM counter_sale_sunat_combo_line cl
+                    JOIN counter_movements cm
+                      ON cm.source_id = cl.counter_sale_item_id
+                    JOIN counter_sale_sunat_combo c
+                      ON c.id = cl.combo_id
+                    LEFT JOIN sale sg
+                      ON sg.id = c.generated_sale_id
+                   WHERE c.combo_status = 'ACEPTADO'
+                   ORDER BY cl.counter_sale_item_id,
+                            COALESCE(c.associated_at, c.updated_at, c.created_at) DESC NULLS LAST,
+                            cl.id DESC
+                ),
+                enriched AS (
+                  SELECT
+                    fm.id,
+                    fm.movement_date,
+                    fm.product_id,
+                    fm.sku,
+                    fm.product_name,
+                    fm.category,
+                    fm.brand,
+                    fm.model,
+                    fm.presentation,
+                    fm.manage_by_serial,
+                    fm.existence_type_code,
+                    fm.movement_type,
+                    'COMPRA'::varchar AS movement_label,
+                    fm.direction,
+                    fm.source_table,
+                    fm.source_id,
+                    pu.document_type AS source_document_type,
+                    pu.document_series AS source_series,
+                    pu.document_number AS source_number,
+                    COALESCE(pu.entry_date, pu.issue_date) AS source_issue_date,
+                    pu.status AS source_status,
+                    pi.line_number AS source_line_number,
+                    'PROVEEDOR'::varchar AS counterpart_type,
+                    pu.supplier_ruc AS counterpart_document_number,
+                    pu.supplier_business_name AS counterpart_name,
+                    fm.quantity_in,
+                    fm.quantity_out,
+                    fm.movement_quantity,
+                    fm.stock_before,
+                    fm.stock_after,
+                    fm.unit_cost,
+                    fm.total_cost,
+                    fm.average_cost_after,
+                    pi.unit_cost AS source_unit_price,
+                    pi.total_cost AS source_line_total,
+                    NULL::varchar AS adjustment_reason,
+                    pu.notes AS note
+                  FROM filtered_movements fm
+                  JOIN purchase_item pi
+                    ON pi.id = fm.source_id
+                  JOIN purchase pu
+                    ON pu.id = pi.purchase_id
+                 WHERE fm.source_table = 'purchase_item'
+                   AND UPPER(COALESCE(pu.document_type, '')) IN ('FACTURA', 'BOLETA')
+
+                 UNION ALL
+
+                  SELECT
+                    fm.id,
+                    fm.movement_date,
+                    fm.product_id,
+                    fm.sku,
+                    fm.product_name,
+                    fm.category,
+                    fm.brand,
+                    fm.model,
+                    fm.presentation,
+                    fm.manage_by_serial,
+                    fm.existence_type_code,
+                    fm.movement_type,
+                    'VENTA'::varchar AS movement_label,
+                    fm.direction,
+                    fm.source_table,
+                    fm.source_id,
+                    s.doc_type AS source_document_type,
+                    s.series AS source_series,
+                    s.number::text AS source_number,
+                    s.issue_date AS source_issue_date,
+                    s.status AS source_status,
+                    si.line_number AS source_line_number,
+                    'CLIENTE'::varchar AS counterpart_type,
+                    s.customer_doc_number AS counterpart_document_number,
+                    s.customer_name AS counterpart_name,
+                    fm.quantity_in,
+                    fm.quantity_out,
+                    fm.movement_quantity,
+                    fm.stock_before,
+                    fm.stock_after,
+                    fm.unit_cost,
+                    fm.total_cost,
+                    fm.average_cost_after,
+                    si.unit_price AS source_unit_price,
+                    si.revenue_total AS source_line_total,
+                    NULL::varchar AS adjustment_reason,
+                    s.notes AS note
+                  FROM filtered_movements fm
+                  JOIN sale_item si
+                    ON si.id = fm.source_id
+                  JOIN sale s
+                    ON s.id = si.sale_id
+                 WHERE fm.source_table = 'sale_item'
+                   AND fm.quantity_out > 0
+                   AND UPPER(COALESCE(s.doc_type, '')) IN ('FACTURA', 'BOLETA')
+                   AND UPPER(COALESCE(s.status, '')) = 'EMITIDA'
+
+                 UNION ALL
+
+                  SELECT
+                    fm.id,
+                    fm.movement_date,
+                    fm.product_id,
+                    fm.sku,
+                    fm.product_name,
+                    fm.category,
+                    fm.brand,
+                    fm.model,
+                    fm.presentation,
+                    fm.manage_by_serial,
+                    fm.existence_type_code,
+                    fm.movement_type,
+                    'VENTANILLA'::varchar AS movement_label,
+                    fm.direction,
+                    fm.source_table,
+                    fm.source_id,
+                    COALESCE(NULLIF(cs.associated_doc_type, ''), ll.emitted_doc_type, lc.emitted_doc_type, cs_sunat.doc_type, 'VENTANILLA') AS source_document_type,
+                    COALESCE(NULLIF(cs.associated_series, ''), ll.emitted_series, lc.emitted_series, cs_sunat.series, cs.series) AS source_series,
+                    COALESCE(cs.associated_number::text, ll.emitted_number::text, lc.emitted_number::text, cs_sunat.number::text, cs.number::text) AS source_number,
+                    COALESCE(cs_sunat.issue_date, ll.issue_date, lc.issue_date, cs.associated_at::date, cs.issue_date) AS source_issue_date,
+                    cs.status AS source_status,
+                    csi.line_number AS source_line_number,
+                    'CLIENTE'::varchar AS counterpart_type,
+                    cs.customer_doc_number AS counterpart_document_number,
+                    cs.customer_name AS counterpart_name,
+                    fm.quantity_in,
+                    fm.quantity_out,
+                    fm.movement_quantity,
+                    fm.stock_before,
+                    fm.stock_after,
+                    fm.unit_cost,
+                    fm.total_cost,
+                    fm.average_cost_after,
+                    COALESCE(ll.emitted_unit_price, lc.emitted_unit_price, csi.unit_price) AS source_unit_price,
+                    COALESCE(ll.emitted_revenue_total, lc.emitted_revenue_total, csi.revenue_total) AS source_line_total,
+                    NULL::varchar AS adjustment_reason,
+                    cs.notes AS note
+                  FROM filtered_movements fm
+                  JOIN counter_sale_item csi
+                    ON csi.id = fm.source_id
+                  JOIN counter_sale cs
+                    ON cs.id = csi.counter_sale_id
+                  LEFT JOIN sale cs_sunat
+                    ON cs_sunat.id = cs.associated_sale_id
+                  LEFT JOIN latest_link ll
+                    ON ll.counter_sale_item_id = csi.id
+                  LEFT JOIN latest_combo lc
+                    ON lc.counter_sale_item_id = csi.id
+                 WHERE fm.source_table = 'counter_sale_item'
+                   AND fm.movement_type = 'OUT_COUNTER_SALE'
+                   AND UPPER(COALESCE(cs.associated_doc_type, ll.emitted_doc_type, lc.emitted_doc_type, cs_sunat.doc_type, '')) IN ('FACTURA', 'BOLETA')
+                   AND (
+                        COALESCE(cs.associated_to_sunat, FALSE) = TRUE
+                     OR ll.counter_sale_item_id IS NOT NULL
+                     OR lc.counter_sale_item_id IS NOT NULL
+                     OR UPPER(COALESCE(cs_sunat.status, '')) = 'EMITIDA'
+                   )
+
+                 UNION ALL
+
+                  SELECT
+                    fm.id,
+                    fm.movement_date,
+                    fm.product_id,
+                    fm.sku,
+                    fm.product_name,
+                    fm.category,
+                    fm.brand,
+                    fm.model,
+                    fm.presentation,
+                    fm.manage_by_serial,
+                    fm.existence_type_code,
+                    fm.movement_type,
+                    'NOTA DE CREDITO'::varchar AS movement_label,
+                    fm.direction,
+                    fm.source_table,
+                    fm.source_id,
+                    'NOTA_CREDITO'::varchar AS source_document_type,
+                    cn.series AS source_series,
+                    cn.number::text AS source_number,
+                    cn.issue_date AS source_issue_date,
+                    cn.sunat_status AS source_status,
+                    cni.line_number AS source_line_number,
+                    'CLIENTE'::varchar AS counterpart_type,
+                    cn.customer_doc_number AS counterpart_document_number,
+                    cn.customer_name AS counterpart_name,
+                    fm.quantity_in,
+                    fm.quantity_out,
+                    fm.movement_quantity,
+                    fm.stock_before,
+                    fm.stock_after,
+                    fm.unit_cost,
+                    fm.total_cost,
+                    fm.average_cost_after,
+                    cni.unit_price AS source_unit_price,
+                    cni.revenue_total AS source_line_total,
+                    NULL::varchar AS adjustment_reason,
+                    cn.reason AS note
+                  FROM filtered_movements fm
+                  JOIN credit_note_item cni
+                    ON cni.id = fm.source_id
+                  JOIN credit_note cn
+                    ON cn.id = cni.credit_note_id
+                 WHERE fm.source_table = 'credit_note_item'
+                   AND fm.movement_type = 'IN_RETURN'
+                   AND UPPER(COALESCE(cn.status, '')) = 'EMITIDA'
+                )
                 SELECT
                   id,
                   movement_date,
@@ -315,23 +650,8 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                   adjustment_reason,
                   note
                 FROM enriched
-                WHERE product_id IN (%s)
-                  AND movement_date >= ?
-                  AND movement_date < ?
-                  AND tax_export_eligible = TRUE
-                ORDER BY product_id ASC, movement_date ASC, id ASC
-                """.formatted(placeholders);
-
-        LocalDate safeFrom = dateFrom != null ? dateFrom : LocalDate.of(1900, 1, 1);
-        LocalDate safeTo = dateTo != null ? dateTo : LocalDate.now();
-        List<Object> params = new ArrayList<>(productIds);
-        params.add(safeFrom.atStartOfDay());
-        params.add(safeTo.plusDays(1).atStartOfDay());
-
-        return jdbcClient.sql(sql)
-                .params(params.toArray())
-                .query(new ProductKardexEntryRowMapper())
-                .list();
+                ORDER BY %s
+                """.formatted(safeProductFilterSql, safeOrderBySql);
     }
 
     private String placeholders(int size) {
@@ -345,6 +665,62 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
         }
         sql.append("ELSE ").append(productIds.size()).append(" END");
         return sql.toString();
+    }
+
+    private SqlWhere buildMovementWhere(
+            Long productId,
+            String movementType,
+            String direction,
+            String source,
+            LocalDate dateFrom,
+            LocalDate dateTo
+    ) {
+        StringBuilder sql = new StringBuilder("WHERE 1=1\n");
+        List<Object> params = new ArrayList<>();
+
+        if (productId != null) {
+            sql.append("AND m.product_id = ?\n");
+            params.add(productId);
+        }
+
+        if (movementType != null && !movementType.trim().isEmpty()) {
+            sql.append("AND m.movement_type = ?\n");
+            params.add(movementType.trim());
+        }
+
+        String normalizedDirection = direction == null ? "ALL" : direction.trim().toUpperCase();
+        if (!"ALL".equals(normalizedDirection)) {
+            switch (normalizedDirection) {
+                case "ENTRADA" -> sql.append("AND COALESCE(m.quantity_in, 0) > 0\n");
+                case "SALIDA" -> sql.append("AND COALESCE(m.quantity_out, 0) > 0\n");
+                case "NEUTRO" -> sql.append("AND COALESCE(m.quantity_in, 0) <= 0 AND COALESCE(m.quantity_out, 0) <= 0\n");
+                default -> sql.append("AND 1=0\n");
+            }
+        }
+
+        String normalizedSource = source == null ? "ALL" : source.trim().toUpperCase();
+        if (!"ALL".equals(normalizedSource)) {
+            switch (normalizedSource) {
+                case "PURCHASE" -> sql.append("AND m.source_table = 'purchase_item'\n");
+                case "SALE" -> sql.append("AND m.source_table IN ('sale_item', 'credit_note_item')\n");
+                case "COUNTER_SALE" -> sql.append("AND m.source_table = 'counter_sale_item'\n");
+                case "ADJUSTMENT" -> sql.append("AND m.source_table = 'product_stock_adjustment'\n");
+                case "OTHER" -> sql.append("AND m.source_table NOT IN ('purchase_item', 'sale_item', 'counter_sale_item', 'credit_note_item', 'product_stock_adjustment')\n");
+                default -> sql.append("AND 1=0\n");
+            }
+        }
+
+        if (dateFrom != null) {
+            sql.append("AND m.created_at >= ?\n");
+            params.add(dateFrom.atStartOfDay());
+        }
+
+        if (dateTo != null) {
+            sql.append("AND m.created_at < ?\n");
+            params.add(dateTo.plusDays(1).atStartOfDay());
+        }
+
+        return new SqlWhere(sql.toString(), params);
     }
 
     private SqlWhere buildWhere(
@@ -451,6 +827,12 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
     }
 
     private String baseSql() {
+        return baseSql("");
+    }
+
+    private String baseSql(String movementWhereSql) {
+        String safeMovementWhereSql = movementWhereSql == null ? "" : movementWhereSql;
+
         return """
                 WITH enriched AS (
                   SELECT
@@ -704,6 +1086,9 @@ public class PostgresProductKardexRepository implements ProductKardexRepository 
                   LEFT JOIN product_stock_adjustment psa
                          ON m.source_table = 'product_stock_adjustment'
                         AND m.source_id = psa.id
+                  """
+                + safeMovementWhereSql
+                + """
                 )
                 """;
     }
