@@ -55,7 +55,7 @@ public class PostgresProductRepository implements ProductRepository {
                 affects_stock,
                 gift_allowed
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, FALSE), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), COALESCE(?, TRUE), COALESCE(?, FALSE))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, FALSE), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, TRUE), COALESCE(?, TRUE), COALESCE(?, FALSE))
             RETURNING
                 id          AS product_id,
                 sku,

@@ -84,6 +84,7 @@ public class ImportCompetitiveProductsService implements ImportCompetitiveProduc
         int inserted = 0;
         int updated = 0;
         for (Product p : products) {
+            resolveSunatProductCode(p);
             bulkRepo.upsertBySku(p);
             if (existing.contains(p.getSku())) updated++;
             else inserted++;
@@ -112,6 +113,7 @@ public class ImportCompetitiveProductsService implements ImportCompetitiveProduc
         int inserted = 0;
         int updated = 0;
         for (Product p : products) {
+            resolveSunatProductCode(p);
             bulkRepo.upsertBySku(p);
             if (existing.contains(p.getSku())) updated++;
             else inserted++;
@@ -119,5 +121,13 @@ public class ImportCompetitiveProductsService implements ImportCompetitiveProduc
 
         result.getSummary().setInserted(inserted);
         result.getSummary().setUpdated(updated);
+    }
+
+    private void resolveSunatProductCode(Product product) {
+        try {
+            product.setSunatProductCode(ProductSunatProductCodeResolver.resolveForCreate(product));
+        } catch (IllegalArgumentException ignored) {
+            product.setSunatProductCode(null);
+        }
     }
 }

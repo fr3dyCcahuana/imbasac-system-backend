@@ -24,6 +24,7 @@ public class PostgresProductBulkUpsertRepository implements ProductBulkUpsertRep
                     sku,
                     name,
                     product_type,
+                    sunat_product_code,
                     category,
                     brand,
                     model,
@@ -45,12 +46,13 @@ public class PostgresProductBulkUpsertRepository implements ProductBulkUpsertRep
                     affects_stock,
                     gift_allowed
                 ) VALUES (
-                    ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+                    ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
                 )
                 ON CONFLICT (sku) DO UPDATE
                 SET
                     name = EXCLUDED.name,
                     product_type = EXCLUDED.product_type,
+                    sunat_product_code = COALESCE(product.sunat_product_code, EXCLUDED.sunat_product_code),
                     category = EXCLUDED.category,
                     brand = EXCLUDED.brand,
                     model = EXCLUDED.model,
@@ -80,6 +82,7 @@ public class PostgresProductBulkUpsertRepository implements ProductBulkUpsertRep
             ps.setString(i++, p.getSku());
             ps.setString(i++, p.getName());
             ps.setString(i++, p.getProductType());
+            ps.setString(i++, p.getSunatProductCode());
             ps.setString(i++, p.getCategory());
             ps.setString(i++, p.getBrand());
             ps.setString(i++, p.getModel());
