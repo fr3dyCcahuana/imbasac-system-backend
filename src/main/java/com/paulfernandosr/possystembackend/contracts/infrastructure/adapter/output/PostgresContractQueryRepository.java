@@ -127,6 +127,7 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
                    c.exchange_rate AS exchangeRate,
                    c.price_list AS priceList,
                    c.customer_id AS customerId,
+                   c.customer_address_id AS customerAddressId,
                    c.customer_doc_type AS customerDocType,
                    c.customer_doc_number AS customerDocNumber,
                    c.customer_name AS customerName,
@@ -169,14 +170,24 @@ public class PostgresContractQueryRepository implements ContractQueryRepository 
                        ca1.province,
                        ca1.district
                   FROM customer_address ca1
-                 WHERE ca1.customer_id = cust.id
-                   AND ca1.enabled = TRUE
-                   AND c.customer_address IS NOT NULL
-                   AND BTRIM(c.customer_address) <> ''
-                   AND UPPER(BTRIM(ca1.address)) = UPPER(BTRIM(c.customer_address))
-                 ORDER BY ca1.fiscal DESC, ca1.position ASC, ca1.id ASC
-                 LIMIT 1
-              ) ca ON TRUE
+                  WHERE ca1.customer_id = cust.id
+                    AND ca1.enabled = TRUE
+                    AND (
+                        (c.customer_address_id IS NOT NULL AND ca1.id = c.customer_address_id)
+                        OR (
+                            c.customer_address_id IS NULL
+                            AND c.customer_address IS NOT NULL
+                            AND BTRIM(c.customer_address) <> ''
+                            AND UPPER(BTRIM(ca1.address)) = UPPER(BTRIM(c.customer_address))
+                        )
+                    )
+                  ORDER BY
+                    CASE WHEN c.customer_address_id IS NOT NULL AND ca1.id = c.customer_address_id THEN 0 ELSE 1 END,
+                    ca1.fiscal DESC,
+                    ca1.position ASC,
+                    ca1.id ASC
+                  LIMIT 1
+               ) ca ON TRUE
              WHERE c.id = ?
         """;
 

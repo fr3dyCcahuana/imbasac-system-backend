@@ -35,6 +35,7 @@ public class PostgresContractSunatDraftRepository implements ContractSunatDraftR
                 c.exchange_rate,
                 c.price_list,
                 c.customer_id,
+                c.customer_address_id,
                 c.customer_doc_type,
                 c.customer_doc_number,
                 c.customer_name,
@@ -51,6 +52,10 @@ public class PostgresContractSunatDraftRepository implements ContractSunatDraftR
                 FROM customer_address
                 WHERE customer_id = c.customer_id
                   AND enabled = TRUE
+                  AND (
+                      (c.customer_address_id IS NOT NULL AND id = c.customer_address_id)
+                      OR c.customer_address_id IS NULL
+                  )
                 ORDER BY fiscal DESC, position ASC, id ASC
                 LIMIT 1
             ) ca ON TRUE

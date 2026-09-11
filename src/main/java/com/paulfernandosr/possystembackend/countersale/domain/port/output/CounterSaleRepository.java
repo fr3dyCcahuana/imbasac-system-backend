@@ -20,6 +20,7 @@ public interface CounterSaleRepository {
                            String customerDocType,
                            String customerDocNumber,
                            String customerName,
+                           Long customerAddressId,
                            String customerAddress,
                            String taxStatus,
                            BigDecimal igvRate,

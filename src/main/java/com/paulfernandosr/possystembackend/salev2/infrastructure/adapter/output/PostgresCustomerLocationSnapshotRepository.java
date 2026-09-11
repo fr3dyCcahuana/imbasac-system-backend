@@ -25,9 +25,17 @@ public class PostgresCustomerLocationSnapshotRepository implements CustomerLocat
 
     @Override
     public Optional<CustomerLocationSnapshot> resolveCustomerLocation(Long customerId,
+                                                                      Long customerAddressId,
                                                                       String customerDocType,
                                                                       String customerDocNumber,
                                                                       String customerAddress) {
+        if (customerId != null && customerAddressId != null) {
+            Optional<CustomerLocationSnapshot> byAddressId = findByCustomerAddressId(customerId, customerAddressId);
+            if (byAddressId.isPresent()) {
+                return byAddressId;
+            }
+        }
+
         if (customerId != null) {
             Optional<CustomerLocationSnapshot> byId = findByCustomerId(customerId, customerAddress);
             if (byId.isPresent()) {
@@ -40,6 +48,26 @@ public class PostgresCustomerLocationSnapshotRepository implements CustomerLocat
         }
 
         return findByDocument(customerDocType, customerDocNumber, customerAddress);
+    }
+
+    private Optional<CustomerLocationSnapshot> findByCustomerAddressId(Long customerId, Long customerAddressId) {
+        String sql = """
+            SELECT
+                ubigeo,
+                department,
+                province,
+                district
+              FROM customer_address
+             WHERE customer_id = ?
+               AND id = ?
+               AND enabled = TRUE
+             LIMIT 1
+            """;
+
+        return jdbcClient.sql(sql)
+                .params(customerId, customerAddressId)
+                .query(ROW_MAPPER)
+                .optional();
     }
 
     private Optional<CustomerLocationSnapshot> findByCustomerId(Long customerId, String customerAddress) {

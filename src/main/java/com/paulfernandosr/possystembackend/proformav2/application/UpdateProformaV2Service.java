@@ -158,6 +158,7 @@ public class UpdateProformaV2Service implements UpdateProformaV2UseCase {
     ) {
         CustomerLocationSnapshot fromDb = proformaRepository.resolveCustomerLocation(
                         customerId,
+                        null,
                         customerDocType,
                         customerDocNumber,
                         customerAddress

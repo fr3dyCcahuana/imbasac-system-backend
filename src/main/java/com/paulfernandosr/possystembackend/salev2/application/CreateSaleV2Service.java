@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.salev2.application;
 
 import com.paulfernandosr.possystembackend.common.infrastructure.documentseries.DocumentSeriesPolicy;
+import com.paulfernandosr.possystembackend.customer.application.CustomerAddressContactGuard;
 import com.paulfernandosr.possystembackend.proformav2.domain.Proforma;
 import com.paulfernandosr.possystembackend.proformav2.domain.ProformaItem;
 import com.paulfernandosr.possystembackend.proformav2.domain.model.ProformaStatus;
@@ -48,6 +49,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
 
     private final SaleSessionControlRepository saleSessionControlRepository;
     private final SaleSessionAccumulatorRepository saleSessionAccumulatorRepository;
+    private final CustomerAddressContactGuard customerAddressContactGuard;
 
     // Crédito / CxC
     private final AccountsReceivableRepository accountsReceivableRepository;
@@ -298,6 +300,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
 
         // 3.1) Validaciones por documento (Regla #11)
         validateDocumentRules(request, totals, computedLines);
+        validateCustomerAddressContact(request);
 
         // 3.2) Preparar crédito (Regla #10)
         Integer creditDays = request.getCreditDays();
@@ -489,6 +492,7 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
 
         CustomerLocationSnapshot fromDb = customerLocationSnapshotRepository.resolveCustomerLocation(
                         request.getCustomerId(),
+                        request.getCustomerAddressId(),
                         request.getCustomerDocType(),
                         request.getCustomerDocNumber(),
                         request.getCustomerAddress()
@@ -637,6 +641,20 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                                 + line.getProduct().getId());
                     });
         }
+    }
+
+    private void validateCustomerAddressContact(SaleV2CreateRequest request) {
+        customerAddressContactGuard
+                .validateAddressPhoneForOperation(
+                        request.getCustomerId(),
+                        request.getCustomerAddressId(),
+                        request.getCustomerDocType(),
+                        request.getCustomerDocNumber(),
+                        request.getCustomerAddress()
+                )
+                .ifPresent(message -> {
+                    throw new InvalidSaleV2Exception(message);
+                });
     }
 
 

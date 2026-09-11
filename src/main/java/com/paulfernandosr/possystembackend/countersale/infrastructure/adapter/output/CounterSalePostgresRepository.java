@@ -19,14 +19,14 @@ public class CounterSalePostgresRepository implements CounterSaleRepository {
     public Long insertCounterSale(Long stationId, Long saleSessionId, Long createdBy, String series, Long number,
                                   LocalDate issueDate, String currency, BigDecimal exchangeRate, String priceList,
                                   Long customerId, String customerDocType, String customerDocNumber,
-                                  String customerName, String customerAddress, String taxStatus,
+                                  String customerName, Long customerAddressId, String customerAddress, String taxStatus,
                                   BigDecimal igvRate, Boolean igvIncluded, String notes) {
         String sql = """
             INSERT INTO counter_sale(
               station_id, sale_session_id, created_by,
               series, number, issue_date,
               currency, exchange_rate, price_list,
-              customer_id, customer_doc_type, customer_doc_number, customer_name, customer_address,
+              customer_id, customer_doc_type, customer_doc_number, customer_name, customer_address_id, customer_address,
               tax_status, igv_rate, igv_included,
               subtotal, discount_total, igv_amount, total, gift_cost_total,
               notes, status
@@ -34,7 +34,7 @@ public class CounterSalePostgresRepository implements CounterSaleRepository {
               ?, ?, ?,
               ?, ?, ?,
               ?, ?, ?,
-              ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?, ?,
               ?, ?, ?,
               0, 0, 0, 0, 0,
               ?, 'EMITIDA'
@@ -46,7 +46,7 @@ public class CounterSalePostgresRepository implements CounterSaleRepository {
                         stationId, saleSessionId, createdBy,
                         series, number, issueDate,
                         currency, exchangeRate, priceList,
-                        customerId, customerDocType, customerDocNumber, customerName, customerAddress,
+                        customerId, customerDocType, customerDocNumber, customerName, customerAddressId, customerAddress,
                         taxStatus, igvRate, igvIncluded != null ? igvIncluded : Boolean.FALSE,
                         notes
                 )

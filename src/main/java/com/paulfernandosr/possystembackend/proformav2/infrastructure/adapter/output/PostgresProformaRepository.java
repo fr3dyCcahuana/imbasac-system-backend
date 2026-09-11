@@ -171,10 +171,18 @@ public class PostgresProformaRepository implements ProformaRepository {
     @Override
     public Optional<CustomerLocationSnapshot> resolveCustomerLocation(
             Long customerId,
+            Long customerAddressId,
             String customerDocType,
             String customerDocNumber,
             String customerAddress
     ) {
+        if (customerId != null && customerAddressId != null) {
+            Optional<CustomerLocationSnapshot> byAddressId = findCustomerLocationByAddressId(customerId, customerAddressId);
+            if (byAddressId.isPresent()) {
+                return byAddressId;
+            }
+        }
+
         if (customerId != null) {
             Optional<CustomerLocationSnapshot> byId = findCustomerLocationById(customerId, customerAddress);
             if (byId.isPresent()) {
@@ -187,6 +195,27 @@ public class PostgresProformaRepository implements ProformaRepository {
         }
 
         return findCustomerLocationByDocument(customerDocType, customerDocNumber, customerAddress);
+    }
+
+    private Optional<CustomerLocationSnapshot> findCustomerLocationByAddressId(Long customerId, Long customerAddressId) {
+        String sql = """
+            SELECT
+                COALESCE(ca.ubigeo, c.ubigeo)         AS ubigeo,
+                COALESCE(ca.department, c.department) AS department,
+                COALESCE(ca.province, c.province)     AS province,
+                COALESCE(ca.district, c.district)     AS district
+              FROM customers c
+              INNER JOIN customer_address ca ON ca.customer_id = c.id
+             WHERE c.id = ?
+               AND ca.id = ?
+               AND ca.enabled = TRUE
+             LIMIT 1
+            """;
+
+        return jdbcClient.sql(sql)
+                .params(customerId, customerAddressId)
+                .query(CUSTOMER_LOCATION_ROW_MAPPER)
+                .optional();
     }
 
     private Optional<CustomerLocationSnapshot> findCustomerLocationById(Long customerId, String customerAddress) {

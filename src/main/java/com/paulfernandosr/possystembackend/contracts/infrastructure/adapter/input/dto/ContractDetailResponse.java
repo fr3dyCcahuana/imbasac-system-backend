@@ -30,6 +30,7 @@ public class ContractDetailResponse {
     private String priceList;
 
     private Long customerId;
+    private Long customerAddressId;
     private String customerDocType;
     private String customerDocNumber;
     private String customerName;

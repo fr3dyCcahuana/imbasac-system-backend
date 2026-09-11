@@ -18,13 +18,18 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class CreateNewCustomerService implements CreateNewCustomerUseCase {
     private final CustomerRepository customerRepository;
+    private final CustomerAddressContactValidator contactValidator;
 
     @Override
     public Customer createNewCustomer(Customer customer) {
         validateRequiredCustomerData(customer);
+        String legacyPhone = customer.getPhone();
+        String legacyEmail = customer.getEmail();
         normalizeCustomer(customer);
         validateManualCustomerData(customer);
-        normalizeOptionalAddress(customer);
+        normalizeOptionalAddress(customer, legacyPhone, legacyEmail);
+        customer.setPhone(null);
+        customer.setEmail(null);
 
         boolean doesCustomerExists = customerRepository.existsByDocument(
                 customer.getDocumentType(),
@@ -58,8 +63,6 @@ public class CreateNewCustomerService implements CreateNewCustomerUseCase {
 
     private void normalizeCustomer(Customer customer) {
         customer.setDocumentNumber(trim(customer.getDocumentNumber()));
-        customer.setPhone(normalizePhone(customer.getPhone()));
-        customer.setEmail(normalizeEmail(customer.getEmail()));
         customer.setGivenNames(upper(customer.getGivenNames()));
         customer.setLastName(upper(customer.getLastName()));
         customer.setSecondLastName(upper(customer.getSecondLastName()));
@@ -97,7 +100,7 @@ public class CreateNewCustomerService implements CreateNewCustomerUseCase {
         }
     }
 
-    private void normalizeOptionalAddress(Customer customer) {
+    private void normalizeOptionalAddress(Customer customer, String legacyPhone, String legacyEmail) {
         boolean hasMainAddress = !isBlank(customer.getAddress());
         List<CustomerAddress> addresses = customer.getAddresses();
 
@@ -122,13 +125,21 @@ public class CreateNewCustomerService implements CreateNewCustomerUseCase {
                         .department(customer.getDepartment())
                         .province(customer.getProvince())
                         .district(customer.getDistrict())
+                        .phone(legacyPhone)
+                        .email(legacyEmail)
                         .fiscal(true)
                         .enabled(true)
                         .position(0)
                         .build());
                 customer.setAddresses(addresses);
-                return;
             }
+        }
+
+        if (addresses != null && addresses.stream().noneMatch(address -> address != null && address.isFiscal()) && hasMainAddress) {
+            addresses.stream()
+                    .filter(address -> address != null && !isBlank(address.getAddress()))
+                    .findFirst()
+                    .ifPresent(address -> address.setFiscal(true));
         }
 
         boolean hasFiscal = false;
@@ -144,6 +155,17 @@ public class CreateNewCustomerService implements CreateNewCustomerUseCase {
             address.setDepartment(upper(address.getDepartment()));
             address.setProvince(upper(address.getProvince()));
             address.setDistrict(upper(address.getDistrict()));
+
+            if (address.isFiscal()) {
+                if (isBlank(address.getPhone())) {
+                    address.setPhone(legacyPhone);
+                }
+                if (isBlank(address.getEmail())) {
+                    address.setEmail(legacyEmail);
+                }
+            }
+
+            normalizeAddressContact(address);
 
             validateUbigeoData(
                     address.getAddress(),
@@ -168,6 +190,11 @@ public class CreateNewCustomerService implements CreateNewCustomerUseCase {
                 break;
             }
         }
+    }
+
+    private void normalizeAddressContact(CustomerAddress address) {
+        address.setPhone(contactValidator.normalizeOptionalPeruvianMobile(address.getPhone()));
+        address.setEmail(contactValidator.normalizeOptionalEmail(address.getEmail()));
     }
 
     private void validateUbigeoData(String address, String ubigeo, String department, String province, String district) {
@@ -214,26 +241,6 @@ public class CreateNewCustomerService implements CreateNewCustomerUseCase {
     private String upper(String value) {
         String trimmed = trim(value);
         return isBlank(trimmed) ? null : trimmed.toUpperCase(Locale.ROOT);
-    }
-
-    private String normalizePhone(String value) {
-        String trimmed = trim(value);
-        if (isBlank(trimmed)) return null;
-        String normalized = trimmed.replaceAll("[\\s()-]", "");
-        if (!normalized.matches("\\+?\\d{6,15}")) {
-            throw new InvalidCustomerException("Customer phone must have between 6 and 15 digits");
-        }
-        return normalized;
-    }
-
-    private String normalizeEmail(String value) {
-        String trimmed = trim(value);
-        if (isBlank(trimmed)) return null;
-        String normalized = trimmed.toLowerCase(Locale.ROOT);
-        if (!normalized.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
-            throw new InvalidCustomerException("Customer email has invalid format");
-        }
-        return normalized;
     }
 
     private boolean isBlank(String value) {

@@ -214,9 +214,17 @@ public class MyCustomersService {
         MapSqlParameterSource params = new MapSqlParameterSource("customerId", customerId);
         return jdbc.query("""
                 WITH selected_customer AS (
-                    SELECT regexp_replace(coalesce(phone,''), '\\D', '', 'g') AS phone_digits
-                    FROM customers
-                    WHERE id = :customerId
+                    SELECT regexp_replace(coalesce(address_main.phone,''), '\\D', '', 'g') AS phone_digits
+                    FROM customers c
+                    LEFT JOIN LATERAL (
+                        SELECT phone
+                        FROM customer_address
+                        WHERE customer_id = c.id
+                          AND enabled = TRUE
+                        ORDER BY fiscal DESC, position ASC, id ASC
+                        LIMIT 1
+                    ) address_main ON TRUE
+                    WHERE c.id = :customerId
                 ),
                 selected_conversation AS (
                     SELECT conversation_id
@@ -522,7 +530,7 @@ public class MyCustomersService {
                     AND (
                         c.legal_name ILIKE :search
                         OR c.document_number ILIKE :search
-                        OR c.phone ILIKE :search
+                        OR address_main.phone ILIKE :search
                     )
                     """);
             params.addValue("search", "%" + cleanSearch + "%");
@@ -560,8 +568,8 @@ public class MyCustomersService {
                 LEFT JOIN LATERAL (
                     SELECT max(COALESCE(w.last_message_at, w.last_event_at, w.conversation_created_at))::timestamp AS last_message_at
                     FROM whatsapp.conversation_current_v w
-                    WHERE regexp_replace(coalesce(w.phone_number,''), '\\D', '', 'g') = regexp_replace(coalesce(c.phone,''), '\\D', '', 'g')
-                      AND coalesce(c.phone, '') <> ''
+                    WHERE regexp_replace(coalesce(w.phone_number,''), '\\D', '', 'g') = regexp_replace(coalesce(address_main.phone,''), '\\D', '', 'g')
+                      AND coalesce(address_main.phone, '') <> ''
                 ) wa_contact ON TRUE
                 """
                 : """
@@ -576,7 +584,7 @@ public class MyCustomersService {
                 INNER JOIN users responsible ON responsible.id = ca.user_id
                 LEFT JOIN customer_commercial_profile cp ON cp.customer_id = c.id
                 LEFT JOIN LATERAL (
-                    SELECT address, district
+                    SELECT id, address, district, phone, email
                     FROM customer_address
                     WHERE customer_id = c.id
                       AND enabled = TRUE
@@ -648,8 +656,8 @@ public class MyCustomersService {
                         c.legal_name,
                         c.document_type,
                         c.document_number,
-                        c.phone,
-                        c.email,
+                        address_main.phone,
+                        address_main.email,
                         COALESCE(address_main.address, c.address) AS address,
                         COALESCE(address_main.district, c.district) AS district,
                         ca.user_id AS responsible_user_id,
@@ -673,7 +681,7 @@ public class MyCustomersService {
                         next_followup.next_followup_type,
                         next_followup.next_followup_status,
                         CASE
-                            WHEN c.phone IS NULL OR btrim(c.phone) = '' THEN 'SIN_TELEFONO'
+                            WHEN address_main.phone IS NULL OR btrim(address_main.phone) = '' THEN 'SIN_TELEFONO'
                             WHEN wa_contact.last_message_at IS NULL THEN 'LISTO_PARA_CONTACTAR'
                             WHEN wa_contact.last_message_at >= CURRENT_TIMESTAMP - interval '7 days' THEN 'CONVERSACION_ACTIVA'
                             ELSE 'SIN_CONTACTO_RECIENTE'
@@ -804,9 +812,17 @@ public class MyCustomersService {
 
     private CustomerContact customerContact(Long customerId) {
         return jdbc.queryForObject("""
-                SELECT legal_name, phone
-                FROM customers
-                WHERE id = :customerId
+                SELECT c.legal_name, address_main.phone
+                FROM customers c
+                LEFT JOIN LATERAL (
+                    SELECT phone
+                    FROM customer_address
+                    WHERE customer_id = c.id
+                      AND enabled = TRUE
+                    ORDER BY fiscal DESC, position ASC, id ASC
+                    LIMIT 1
+                ) address_main ON TRUE
+                WHERE c.id = :customerId
                 """, new MapSqlParameterSource("customerId", customerId),
                 (rs, rowNum) -> new CustomerContact(rs.getString("legal_name"), rs.getString("phone")));
     }

@@ -24,6 +24,7 @@ public class ContractUpdateRequest {
     private PriceList priceList;
 
     private Long customerId;
+    private Long customerAddressId;
     private String customerDocType;
     private String customerDocNumber;
     private String customerName;

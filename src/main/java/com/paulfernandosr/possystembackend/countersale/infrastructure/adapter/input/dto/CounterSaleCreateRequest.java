@@ -29,6 +29,7 @@ public class CounterSaleCreateRequest {
     private String customerDocType;
     private String customerDocNumber;
     private String customerName;
+    private Long customerAddressId;
     private String customerAddress;
 
     private CounterSaleTaxStatus taxStatus;

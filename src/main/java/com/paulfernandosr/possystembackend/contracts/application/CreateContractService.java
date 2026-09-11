@@ -94,6 +94,7 @@ public class CreateContractService implements CreateContractUseCase {
                 .exchangeRate(request.getExchangeRate())
                 .priceList(request.getPriceList())
                 .customerId(request.getCustomerId())
+                .customerAddressId(request.getCustomerAddressId())
                 .customerDocType(request.getCustomerDocType())
                 .customerDocNumber(request.getCustomerDocNumber())
                 .customerName(request.getCustomerName())

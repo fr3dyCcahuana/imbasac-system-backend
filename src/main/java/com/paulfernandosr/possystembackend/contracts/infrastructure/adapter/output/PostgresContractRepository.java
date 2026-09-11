@@ -27,6 +27,7 @@ public class PostgresContractRepository implements ContractRepository {
             .exchangeRate(rs.getBigDecimal("exchangeRate"))
             .priceList(rs.getString("priceList") != null ? PriceList.valueOf(rs.getString("priceList")) : null)
             .customerId((Long) rs.getObject("customerId"))
+            .customerAddressId((Long) rs.getObject("customerAddressId"))
             .customerDocType(rs.getString("customerDocType"))
             .customerDocNumber(rs.getString("customerDocNumber"))
             .customerName(rs.getString("customerName"))
@@ -55,6 +56,7 @@ public class PostgresContractRepository implements ContractRepository {
                    exchange_rate AS exchangeRate,
                    price_list AS priceList,
                    customer_id AS customerId,
+                   customer_address_id AS customerAddressId,
                    customer_doc_type AS customerDocType,
                    customer_doc_number AS customerDocNumber,
                    customer_name AS customerName,
@@ -82,7 +84,7 @@ public class PostgresContractRepository implements ContractRepository {
               series, number, issue_date,
               currency, exchange_rate,
               price_list,
-              customer_id, customer_doc_type, customer_doc_number, customer_name, customer_address,
+              customer_id, customer_address_id, customer_doc_type, customer_doc_number, customer_name, customer_address,
               payment_type,
               cash_price, interest_rate_monthly, installments, initial_amount,
               financed_amount, interest_amount, total_amount,
@@ -92,7 +94,7 @@ public class PostgresContractRepository implements ContractRepository {
               ?, ?, ?,
               ?, ?,
               ?,
-              ?, ?, ?, ?, ?,
+              ?, ?, ?, ?, ?, ?,
               ?,
               ?, ?, ?, ?,
               ?, ?, ?,
@@ -107,7 +109,7 @@ public class PostgresContractRepository implements ContractRepository {
                         c.getSeries(), c.getNumber(), c.getIssueDate(),
                         c.getCurrency(), c.getExchangeRate(),
                         c.getPriceList() != null ? c.getPriceList().name() : null,
-                        c.getCustomerId(), c.getCustomerDocType(), c.getCustomerDocNumber(), c.getCustomerName(), c.getCustomerAddress(),
+                        c.getCustomerId(), c.getCustomerAddressId(), c.getCustomerDocType(), c.getCustomerDocNumber(), c.getCustomerName(), c.getCustomerAddress(),
                         c.getPaymentType() != null ? c.getPaymentType().name() : null,
                         c.getCashPrice(), c.getInterestRateMonthly(), c.getInstallments(), c.getInitialAmount(),
                         c.getFinancedAmount(), c.getInterestAmount(), c.getTotalAmount(),
@@ -146,6 +148,7 @@ public class PostgresContractRepository implements ContractRepository {
                    exchange_rate = ?,
                    price_list = ?,
                    customer_id = ?,
+                   customer_address_id = ?,
                    customer_doc_type = ?,
                    customer_doc_number = ?,
                    customer_name = ?,
@@ -178,6 +181,7 @@ public class PostgresContractRepository implements ContractRepository {
                         c.getExchangeRate(),
                         c.getPriceList() != null ? c.getPriceList().name() : null,
                         c.getCustomerId(),
+                        c.getCustomerAddressId(),
                         c.getCustomerDocType(),
                         c.getCustomerDocNumber(),
                         c.getCustomerName(),

@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.proformav2.application;
 
+import com.paulfernandosr.possystembackend.customer.application.CustomerAddressContactGuard;
 import com.paulfernandosr.possystembackend.proformav2.domain.CustomerLocationSnapshot;
 import com.paulfernandosr.possystembackend.proformav2.domain.Proforma;
 import com.paulfernandosr.possystembackend.proformav2.domain.ProformaItem;
@@ -44,6 +45,7 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
     private final UserRepository userRepository;
     private final ProductStockReservationRepository productStockReservationRepository;
     private final ProductBasicOfferPriceResolver productBasicOfferPriceResolver;
+    private final CustomerAddressContactGuard customerAddressContactGuard;
 
     @Override
     @Transactional
@@ -223,6 +225,7 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
         }
 
         validatePriceCMinimumTotal(request.getPriceList(), total, isClientRole(actor));
+        validateCustomerAddressContact(request);
 
         PaymentType paymentType = request.getPaymentType() != null ? request.getPaymentType() : PaymentType.CONTADO;
         Integer creditDays = paymentType == PaymentType.CREDITO ? request.getCreditDays() : null;
@@ -280,6 +283,7 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
     private CustomerLocationSnapshot resolveCustomerLocation(CreateProformaV2Request request) {
         CustomerLocationSnapshot fromDb = proformaRepository.resolveCustomerLocation(
                         request.getCustomerId(),
+                        request.getCustomerAddressId(),
                         request.getCustomerDocType(),
                         request.getCustomerDocNumber(),
                         request.getCustomerAddress()
@@ -370,6 +374,20 @@ public class CreateProformaV2Service implements CreateProformaV2UseCase {
             if (it.getProductId() == null) throw new InvalidProformaV2Exception("productId requerido en items");
             if (it.getQuantity() == null || it.getQuantity().isBlank()) throw new InvalidProformaV2Exception("quantity requerido en items");
         }
+    }
+
+    private void validateCustomerAddressContact(CreateProformaV2Request request) {
+        customerAddressContactGuard
+                .validateAddressPhoneForOperation(
+                        request.getCustomerId(),
+                        request.getCustomerAddressId(),
+                        request.getCustomerDocType(),
+                        request.getCustomerDocNumber(),
+                        request.getCustomerAddress()
+                )
+                .ifPresent(message -> {
+                    throw new InvalidProformaV2Exception(message);
+                });
     }
 
     private BigDecimal resolveUnitPrice(

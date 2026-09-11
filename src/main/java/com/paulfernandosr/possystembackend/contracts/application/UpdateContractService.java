@@ -117,6 +117,7 @@ public class UpdateContractService implements UpdateContractUseCase {
                 .exchangeRate(request.getExchangeRate() != null ? request.getExchangeRate() : beforeContract.getExchangeRate())
                 .priceList(request.getPriceList())
                 .customerId(request.getCustomerId())
+                .customerAddressId(request.getCustomerAddressId())
                 .customerDocType(request.getCustomerDocType())
                 .customerDocNumber(request.getCustomerDocNumber())
                 .customerName(request.getCustomerName())

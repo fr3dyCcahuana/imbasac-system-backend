@@ -548,6 +548,7 @@ public class AdminEditSaleV2BeforeSunatService implements AdminEditSaleV2BeforeS
 
         CustomerLocationSnapshot fromDb = customerLocationSnapshotRepository.resolveCustomerLocation(
                         customerId,
+                        null,
                         customerDocType,
                         customerDocNumber,
                         customerAddress

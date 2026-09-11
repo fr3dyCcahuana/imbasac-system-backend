@@ -7,7 +7,7 @@ import java.util.Optional;
 
 public interface ProformaRepository {
     Proforma create(Proforma proforma);
-    Optional<CustomerLocationSnapshot> resolveCustomerLocation(Long customerId, String customerDocType, String customerDocNumber, String customerAddress);
+    Optional<CustomerLocationSnapshot> resolveCustomerLocation(Long customerId, Long customerAddressId, String customerDocType, String customerDocNumber, String customerAddress);
     Optional<Proforma> lockById(Long proformaId); // FOR UPDATE por ID interno
     Optional<Proforma> lockByNumber(Long number); // FOR UPDATE por número visible de proforma
     Optional<Proforma> findById(Long proformaId);

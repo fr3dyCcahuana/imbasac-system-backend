@@ -16,6 +16,7 @@ import com.paulfernandosr.possystembackend.customer.domain.port.input.CreateNewC
 import com.paulfernandosr.possystembackend.customer.domain.port.input.GetCustomerInfoUseCase;
 import com.paulfernandosr.possystembackend.customer.domain.port.input.GetPageOfCustomersUseCase;
 import com.paulfernandosr.possystembackend.customer.domain.port.input.ResolveCustomerUseCase;
+import com.paulfernandosr.possystembackend.customer.domain.port.input.UpdateCustomerAddressUseCase;
 import com.paulfernandosr.possystembackend.customer.domain.port.input.UpdateCustomerUseCase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -37,6 +38,7 @@ public class CustomerRestController {
     private final GetCustomerInfoUseCase getCustomerInfoUseCase;
     private final GetPageOfCustomersUseCase getPageOfCustomersUseCase;
     private final UpdateCustomerUseCase updateCustomerUseCase;
+    private final UpdateCustomerAddressUseCase updateCustomerAddressUseCase;
     private final CustomerCommercialService customerCommercialService;
 
     @PostMapping
@@ -50,6 +52,14 @@ public class CustomerRestController {
                                                                                   @RequestBody CustomerAddress customerAddress) {
         CustomerAddress createdAddress = createCustomerAddressUseCase.createCustomerAddress(customerId, customerAddress);
         return ResponseEntity.status(HttpStatus.CREATED).body(SuccessResponse.ok(createdAddress));
+    }
+
+    @PutMapping("/{customerId}/addresses/{addressId}")
+    public ResponseEntity<SuccessResponse<CustomerAddress>> updateCustomerAddress(@PathVariable Long customerId,
+                                                                                  @PathVariable Long addressId,
+                                                                                  @RequestBody CustomerAddress customerAddress) {
+        CustomerAddress updatedAddress = updateCustomerAddressUseCase.updateCustomerAddress(customerId, addressId, customerAddress);
+        return ResponseEntity.ok(SuccessResponse.ok(updatedAddress));
     }
 
     @PutMapping("/{customerId}")
@@ -74,10 +84,31 @@ public class CustomerRestController {
         return ResponseEntity.ok(SuccessResponse.ok(customerCommercialService.getCommercialInfo(customerId)));
     }
 
+    @GetMapping("/{customerId}/addresses/{addressId}/commercial-info")
+    public ResponseEntity<SuccessResponse<CustomerCommercialInfoResponse>> getCommercialInfoByAddress(@PathVariable Long customerId,
+                                                                                                      @PathVariable Long addressId) {
+        return ResponseEntity.ok(SuccessResponse.ok(customerCommercialService.getCommercialInfo(customerId, addressId)));
+    }
+
     @PatchMapping("/{customerId}/contact")
     public ResponseEntity<SuccessResponse<CustomerContactUpdateResponse>> updateContact(@PathVariable Long customerId,
                                                                                         @RequestBody Map<String, Object> patch) {
         return ResponseEntity.ok(SuccessResponse.ok(customerCommercialService.updateContact(customerId, patch)));
+    }
+
+    @PatchMapping("/{customerId}/addresses/{addressId}/contact")
+    public ResponseEntity<SuccessResponse<CustomerContactUpdateResponse>> updateAddressContact(@PathVariable Long customerId,
+                                                                                               @PathVariable Long addressId,
+                                                                                               @RequestBody Map<String, Object> patch) {
+        return ResponseEntity.ok(SuccessResponse.ok(customerCommercialService.updateAddressContact(customerId, addressId, patch)));
+    }
+
+    @PatchMapping("/{customerId}/addresses/{addressId}/commercial-info/missing")
+    public ResponseEntity<SuccessResponse<CustomerCommercialInfoResponse>> completeMissingCommercialInfo(@PathVariable Long customerId,
+                                                                                                        @PathVariable Long addressId,
+                                                                                                        @RequestBody Map<String, Object> patch,
+                                                                                                        Principal principal) {
+        return ResponseEntity.ok(SuccessResponse.ok(customerCommercialService.completeMissingCommercialInfo(customerId, addressId, patch, principal)));
     }
 
     @GetMapping("/{customerId}/assignment")

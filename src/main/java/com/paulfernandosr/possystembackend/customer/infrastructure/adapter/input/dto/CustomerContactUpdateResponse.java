@@ -9,6 +9,7 @@ import lombok.*;
 @Builder
 public class CustomerContactUpdateResponse {
     private Long customerId;
+    private Long addressId;
     private String phone;
     private String email;
 }

@@ -1,13 +1,14 @@
 package com.paulfernandosr.possystembackend;
 
 import com.paulfernandosr.possystembackend.driverlicense.infrastructure.config.MtcLicenseProperties;
+import com.paulfernandosr.possystembackend.customer.infrastructure.config.CustomerMapProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
-@EnableConfigurationProperties(MtcLicenseProperties.class)
+@EnableConfigurationProperties({MtcLicenseProperties.class, CustomerMapProperties.class})
 @EnableScheduling
 public class PosSystemBackendApplication {
 

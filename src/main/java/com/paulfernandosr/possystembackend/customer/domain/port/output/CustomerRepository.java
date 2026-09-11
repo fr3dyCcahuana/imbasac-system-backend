@@ -32,6 +32,8 @@ public interface CustomerRepository {
 
     CustomerAddress createAddress(Long customerId, CustomerAddress customerAddress);
 
+    CustomerAddress updateAddress(Long customerId, Long addressId, CustomerAddress customerAddress);
+
     void replaceAddresses(Long customerId, List<CustomerAddress> addresses);
 
     void updateResolvedData(Long customerId, Customer customer);

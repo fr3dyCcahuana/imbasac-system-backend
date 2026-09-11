@@ -29,6 +29,7 @@ public class CreateProformaV2Request {
     private String customerDocType;
     private String customerDocNumber;
     private String customerName;
+    private Long customerAddressId;
     private String customerAddress;
     private String customerUbigeo;
     private String customerDepartment;

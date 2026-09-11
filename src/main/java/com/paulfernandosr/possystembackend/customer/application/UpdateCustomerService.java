@@ -22,6 +22,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class UpdateCustomerService implements UpdateCustomerUseCase {
     private final CustomerRepository customerRepository;
+    private final CustomerAddressContactValidator contactValidator;
 
     @Override
     @Transactional
@@ -34,17 +35,18 @@ public class UpdateCustomerService implements UpdateCustomerUseCase {
                 .orElseThrow(() -> new CustomerNotFoundException("Customer not found with identification: " + customerId));
 
         validateRequiredCustomerData(customer);
+        String legacyPhone = customer.getPhone();
+        String legacyEmail = customer.getEmail();
         boolean preserveExistingAddresses = isBlank(customer.getAddress()) && customer.getAddresses() == null;
 
         normalizeCustomer(customer);
-        preserveContactIfMissing(customer, existingCustomer);
         validateManualCustomerData(customer);
 
         if (preserveExistingAddresses) {
             copyMainAddressFromExistingCustomer(customer, existingCustomer);
             customer.setAddresses(existingCustomer.getAddresses());
         } else {
-            normalizeAddressesAndSyncMainAddress(customer);
+            normalizeAddressesAndSyncMainAddress(customer, legacyPhone, legacyEmail);
         }
 
         if (customerRepository.existsByDocumentExcludingId(
@@ -83,8 +85,6 @@ public class UpdateCustomerService implements UpdateCustomerUseCase {
 
     private void normalizeCustomer(Customer customer) {
         customer.setDocumentNumber(trim(customer.getDocumentNumber()));
-        customer.setPhone(normalizePhone(customer.getPhone()));
-        customer.setEmail(normalizeEmail(customer.getEmail()));
         customer.setGivenNames(upper(customer.getGivenNames()));
         customer.setLastName(upper(customer.getLastName()));
         customer.setSecondLastName(upper(customer.getSecondLastName()));
@@ -148,7 +148,7 @@ public class UpdateCustomerService implements UpdateCustomerUseCase {
         customer.setDistrict(existingCustomer.getDistrict());
     }
 
-    private void normalizeAddressesAndSyncMainAddress(Customer customer) {
+    private void normalizeAddressesAndSyncMainAddress(Customer customer, String legacyPhone, String legacyEmail) {
         List<CustomerAddress> addresses = customer.getAddresses();
 
         if ((addresses == null || addresses.isEmpty()) && !isBlank(customer.getAddress())) {
@@ -167,16 +167,24 @@ public class UpdateCustomerService implements UpdateCustomerUseCase {
                     .department(customer.getDepartment())
                     .province(customer.getProvince())
                     .district(customer.getDistrict())
+                    .phone(legacyPhone)
+                    .email(legacyEmail)
                     .fiscal(true)
                     .enabled(true)
                     .position(0)
                     .build());
             customer.setAddresses(addresses);
-            return;
         }
 
         if (addresses == null) {
             return;
+        }
+
+        if (addresses.stream().noneMatch(address -> address != null && address.isFiscal())) {
+            addresses.stream()
+                    .filter(address -> address != null && !isBlank(address.getAddress()))
+                    .findFirst()
+                    .ifPresent(address -> address.setFiscal(true));
         }
 
         List<CustomerAddress> normalizedAddresses = new ArrayList<>();
@@ -194,6 +202,17 @@ public class UpdateCustomerService implements UpdateCustomerUseCase {
             address.setDepartment(upper(address.getDepartment()));
             address.setProvince(upper(address.getProvince()));
             address.setDistrict(upper(address.getDistrict()));
+
+            if (address.isFiscal()) {
+                if (isBlank(address.getPhone())) {
+                    address.setPhone(legacyPhone);
+                }
+                if (isBlank(address.getEmail())) {
+                    address.setEmail(legacyEmail);
+                }
+            }
+
+            normalizeAddressContact(address);
 
             validateUbigeoData(
                     address.getAddress(),
@@ -304,33 +323,9 @@ public class UpdateCustomerService implements UpdateCustomerUseCase {
         return value == null ? "" : value;
     }
 
-    private void preserveContactIfMissing(Customer customer, Customer existingCustomer) {
-        if (isBlank(customer.getPhone())) {
-            customer.setPhone(existingCustomer.getPhone());
-        }
-        if (isBlank(customer.getEmail())) {
-            customer.setEmail(existingCustomer.getEmail());
-        }
-    }
-
-    private String normalizePhone(String value) {
-        String trimmed = trim(value);
-        if (isBlank(trimmed)) return null;
-        String normalized = trimmed.replaceAll("[\\s()-]", "");
-        if (!normalized.matches("\\+?\\d{6,15}")) {
-            throw new InvalidCustomerException("Customer phone must have between 6 and 15 digits");
-        }
-        return normalized;
-    }
-
-    private String normalizeEmail(String value) {
-        String trimmed = trim(value);
-        if (isBlank(trimmed)) return null;
-        String normalized = trimmed.toLowerCase(Locale.ROOT);
-        if (!normalized.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
-            throw new InvalidCustomerException("Customer email has invalid format");
-        }
-        return normalized;
+    private void normalizeAddressContact(CustomerAddress address) {
+        address.setPhone(contactValidator.normalizeOptionalPeruvianMobile(address.getPhone()));
+        address.setEmail(contactValidator.normalizeOptionalEmail(address.getEmail()));
     }
 
     private boolean isBlank(String value) {

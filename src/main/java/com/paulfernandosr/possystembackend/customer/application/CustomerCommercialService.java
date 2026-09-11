@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.customer.application;
 
 import com.paulfernandosr.possystembackend.customer.domain.Customer;
+import com.paulfernandosr.possystembackend.customer.domain.CustomerAddress;
 import com.paulfernandosr.possystembackend.customer.domain.exception.CustomerNotFoundException;
 import com.paulfernandosr.possystembackend.customer.domain.exception.InvalidCustomerException;
 import com.paulfernandosr.possystembackend.customer.domain.port.output.CustomerRepository;
@@ -22,7 +23,6 @@ import java.security.Principal;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -32,33 +32,48 @@ public class CustomerCommercialService {
     private final JdbcClient jdbcClient;
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;
+    private final CustomerAddressContactValidator contactValidator;
 
     public CustomerCommercialInfoResponse getCommercialInfo(Long customerId) {
         Customer customer = getCustomer(customerId);
-        return buildCommercialInfo(customer);
+        return buildCommercialInfo(customer, findMainAddress(customer).orElse(null));
+    }
+
+    public CustomerCommercialInfoResponse getCommercialInfo(Long customerId, Long addressId) {
+        Customer customer = getCustomer(customerId);
+        return buildCommercialInfo(customer, findAddress(customer, addressId).orElse(null));
     }
 
     @Transactional
     public CustomerContactUpdateResponse updateContact(Long customerId, Map<String, Object> patch) {
+        Customer customer = getCustomer(customerId);
+        CustomerAddress address = findMainAddress(customer)
+                .orElseThrow(() -> new InvalidCustomerException("Customer does not have a main address"));
+        return updateAddressContact(customerId, address.getId(), patch);
+    }
+
+    @Transactional
+    public CustomerContactUpdateResponse updateAddressContact(Long customerId, Long addressId, Map<String, Object> patch) {
         if (patch == null || patch.isEmpty()) {
             throw new InvalidCustomerException("Contact patch is required");
         }
 
-        Customer customer = getCustomer(customerId);
-        String phone = customer.getPhone();
-        String email = customer.getEmail();
+        CustomerAddress address = lockAddress(customerId, addressId);
+        String phone = address.getPhone();
+        String email = address.getEmail();
 
         if (patch.containsKey("phone")) {
-            phone = normalizePhone(asString(patch.get("phone")));
+            phone = contactValidator.normalizeOptionalPeruvianMobile(asString(patch.get("phone")));
         }
 
         if (patch.containsKey("email")) {
-            email = normalizeEmail(asString(patch.get("email")));
+            email = contactValidator.normalizeOptionalEmail(asString(patch.get("email")));
         }
 
-        customerRepository.updateContact(customerId, phone, email);
+        updateAddressContactRow(customerId, addressId, phone, email);
         return CustomerContactUpdateResponse.builder()
                 .customerId(customerId)
+                .addressId(addressId)
                 .phone(phone)
                 .email(email)
                 .build();
@@ -128,16 +143,165 @@ public class CustomerCommercialService {
         closeAssignment(current.getId(), actorUserId, reason(request));
     }
 
-    private CustomerCommercialInfoResponse buildCommercialInfo(Customer customer) {
+    @Transactional
+    public CustomerCommercialInfoResponse completeMissingCommercialInfo(
+            Long customerId,
+            Long addressId,
+            Map<String, Object> patch,
+            Principal principal
+    ) {
+        Long actorUserId = currentUser(principal).getId();
+        lockCustomer(customerId);
+        CustomerAddress address = lockAddress(customerId, addressId);
+        CustomerAssignmentResponse currentAssignment = findActiveAssignment(customerId).orElse(null);
+
+        String nextPhone = address.getPhone();
+        String nextEmail = address.getEmail();
+
+        boolean phoneMissing = isBlank(nextPhone);
+        boolean emailMissing = isBlank(nextEmail);
+
+        if (phoneMissing && patch != null && patch.containsKey("phone")) {
+            nextPhone = contactValidator.normalizeOptionalPeruvianMobile(asString(patch.get("phone")));
+        } else if (patch != null && patch.containsKey("phone")) {
+            String requestedPhone = contactValidator.normalizeOptionalPeruvianMobile(asString(patch.get("phone")));
+            if (requestedPhone != null && !requestedPhone.equals(nextPhone)) {
+                throw new InvalidCustomerException("El telefono de la direccion ya esta registrado y no puede modificarse desde este modal");
+            }
+        }
+
+        if (emailMissing && patch != null && patch.containsKey("email")) {
+            nextEmail = contactValidator.normalizeOptionalEmail(asString(patch.get("email")));
+        } else if (!emailMissing && patch != null && patch.containsKey("email")) {
+            String requestedEmail = contactValidator.normalizeOptionalEmail(asString(patch.get("email")));
+            if (requestedEmail != null && !requestedEmail.equals(nextEmail)) {
+                throw new InvalidCustomerException("El correo de la direccion ya esta registrado y no puede modificarse desde este modal");
+            }
+        }
+
+        if (phoneMissing || (emailMissing && nextEmail != null)) {
+            updateAddressContactRow(customerId, addressId, nextPhone, nextEmail);
+        }
+
+        Long responsibleUserId = patch == null ? null : asLong(patch.get("responsibleUserId"));
+        if (currentAssignment == null && responsibleUserId != null) {
+            User responsible = userRepository.findById(responsibleUserId)
+                    .orElseThrow(() -> new InvalidCustomerException("Commercial responsible user does not exist"));
+            if (!responsible.isEnabled()) {
+                throw new InvalidCustomerException("Commercial responsible user is disabled");
+            }
+            insertAssignment(customerId, responsible.getId(), actorUserId, reasonFromPatch(patch));
+        } else if (currentAssignment != null && responsibleUserId != null && !responsibleUserId.equals(currentAssignment.getUserId())) {
+            throw new InvalidCustomerException("El responsable comercial ya esta registrado y no puede modificarse desde este modal");
+        }
+
+        Customer customer = getCustomer(customerId);
+        return buildCommercialInfo(customer, findAddress(customer, addressId).orElse(null));
+    }
+
+    private CustomerCommercialInfoResponse buildCommercialInfo(Customer customer, CustomerAddress selectedAddress) {
         return CustomerCommercialInfoResponse.builder()
                 .customerId(customer.getId())
                 .legalName(customer.getLegalName())
                 .documentType(customer.getDocumentType() == null ? null : customer.getDocumentType().name())
                 .documentNumber(customer.getDocumentNumber())
-                .phone(customer.getPhone())
-                .email(customer.getEmail())
+                .selectedAddress(mapSelectedAddress(selectedAddress))
                 .activeAssignment(findActiveAssignment(customer.getId()).orElse(null))
+                .genericCustomer(false)
                 .build();
+    }
+
+    private CustomerCommercialInfoResponse.SelectedAddress mapSelectedAddress(CustomerAddress address) {
+        if (address == null) {
+            return null;
+        }
+
+        return CustomerCommercialInfoResponse.SelectedAddress.builder()
+                .addressId(address.getId())
+                .addressText(address.getAddress())
+                .ubigeo(address.getUbigeo())
+                .department(address.getDepartment())
+                .province(address.getProvince())
+                .district(address.getDistrict())
+                .main(address.isFiscal())
+                .phone(address.getPhone())
+                .email(address.getEmail())
+                .build();
+    }
+
+    private Optional<CustomerAddress> findMainAddress(Customer customer) {
+        if (customer == null || customer.getAddresses() == null) {
+            return Optional.empty();
+        }
+
+        return customer.getAddresses().stream()
+                .filter(address -> address != null && address.isEnabled())
+                .sorted((a, b) -> {
+                    int fiscalSort = Boolean.compare(b.isFiscal(), a.isFiscal());
+                    if (fiscalSort != 0) {
+                        return fiscalSort;
+                    }
+                    int positionSort = Integer.compare(a.getPosition(), b.getPosition());
+                    if (positionSort != 0) {
+                        return positionSort;
+                    }
+                    return Long.compare(a.getId() == null ? Long.MAX_VALUE : a.getId(), b.getId() == null ? Long.MAX_VALUE : b.getId());
+                })
+                .findFirst();
+    }
+
+    private Optional<CustomerAddress> findAddress(Customer customer, Long addressId) {
+        if (customer == null || customer.getAddresses() == null || addressId == null) {
+            return Optional.empty();
+        }
+
+        return customer.getAddresses().stream()
+                .filter(address -> address != null && address.isEnabled())
+                .filter(address -> addressId.equals(address.getId()))
+                .findFirst();
+    }
+
+    private CustomerAddress lockAddress(Long customerId, Long addressId) {
+        if (customerId == null) {
+            throw new InvalidCustomerException("Customer id is required");
+        }
+        if (addressId == null) {
+            throw new InvalidCustomerException("Customer address id is required");
+        }
+
+        String sql = """
+                SELECT id, customer_id, address, ubigeo, department, province, district,
+                       phone, email, fiscal, enabled, position
+                FROM customer_address
+                WHERE id = ?
+                  AND customer_id = ?
+                  AND enabled = TRUE
+                FOR UPDATE
+                """;
+
+        return jdbcClient.sql(sql)
+                .params(addressId, customerId)
+                .query(CustomerAddress.class)
+                .optional()
+                .orElseThrow(() -> new InvalidCustomerException("La direccion no pertenece al cliente"));
+    }
+
+    private void updateAddressContactRow(Long customerId, Long addressId, String phone, String email) {
+        int updated = jdbcClient.sql("""
+                UPDATE customer_address
+                SET phone = ?,
+                    email = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND customer_id = ?
+                  AND enabled = TRUE
+                """)
+                .params(phone, email, addressId, customerId)
+                .update();
+
+        if (updated != 1) {
+            throw new InvalidCustomerException("La direccion no pertenece al cliente");
+        }
     }
 
     private Customer getCustomer(Long customerId) {
@@ -295,33 +459,32 @@ public class CustomerCommercialService {
         return request == null ? null : nullIfBlank(request.getReason());
     }
 
-    private String normalizePhone(String value) {
-        String trimmed = nullIfBlank(value);
-        if (trimmed == null) return null;
-        String normalized = trimmed.replaceAll("[\\s()-]", "");
-        if (!normalized.matches("\\+?\\d{6,15}")) {
-            throw new InvalidCustomerException("Customer phone must have between 6 and 15 digits");
-        }
-        return normalized;
-    }
-
-    private String normalizeEmail(String value) {
-        String trimmed = nullIfBlank(value);
-        if (trimmed == null) return null;
-        String normalized = trimmed.toLowerCase(Locale.ROOT);
-        if (!normalized.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
-            throw new InvalidCustomerException("Customer email has invalid format");
-        }
-        return normalized;
-    }
-
     private String asString(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private Long asLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        String text = nullIfBlank(String.valueOf(value));
+        return text == null ? null : Long.valueOf(text);
+    }
+
+    private String reasonFromPatch(Map<String, Object> patch) {
+        return patch == null ? null : nullIfBlank(asString(patch.get("reason")));
     }
 
     private String nullIfBlank(String value) {
         if (value == null) return null;
         String trimmed = value.trim();
         return trimmed.isBlank() ? null : trimmed;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 }

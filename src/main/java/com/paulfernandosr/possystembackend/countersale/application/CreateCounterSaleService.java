@@ -218,6 +218,7 @@ public class CreateCounterSaleService implements CreateCounterSaleUseCase {
                 trimToNull(request.getCustomerDocType()),
                 trimToNull(request.getCustomerDocNumber()),
                 trimToNull(request.getCustomerName()),
+                request.getCustomerAddressId(),
                 trimToNull(request.getCustomerAddress()),
                 taxStatus.name(),
                 igvRate,

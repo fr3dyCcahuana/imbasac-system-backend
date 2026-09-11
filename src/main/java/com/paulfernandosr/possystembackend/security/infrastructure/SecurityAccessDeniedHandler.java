@@ -22,7 +22,11 @@ public class SecurityAccessDeniedHandler implements AccessDeniedHandler {
 
     @Override
     public void handle(HttpServletRequest request, HttpServletResponse response, AccessDeniedException accessDeniedException) throws IOException, ServletException {
-        log.error("SecurityAccessDeniedHandler:handle {}", accessDeniedException.getMessage());
+        log.warn("Access denied {} {}: {}", request.getMethod(), request.getRequestURI(), accessDeniedException.getMessage());
+
+        if (response.isCommitted()) {
+            return;
+        }
 
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setStatus(HttpServletResponse.SC_FORBIDDEN);

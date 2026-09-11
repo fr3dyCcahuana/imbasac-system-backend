@@ -15,10 +15,7 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 @Repository
 @RequiredArgsConstructor
@@ -72,8 +69,8 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 .params(customer.getLegalName(),
                         customer.getDocumentType().toString(),
                         customer.getDocumentNumber(),
-                        customer.getPhone(),
-                        customer.getEmail(),
+                        null,
+                        null,
                         customer.getGivenNames(),
                         customer.getLastName(),
                         customer.getSecondLastName(),
@@ -122,8 +119,6 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 SET legal_name = ?,
                     document_type = ?,
                     document_number = ?,
-                    phone = ?,
-                    email = ?,
                     given_names = ?,
                     last_name = ?,
                     second_last_name = ?,
@@ -159,8 +154,6 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 .params(customer.getLegalName(),
                         customer.getDocumentType().toString(),
                         customer.getDocumentNumber(),
-                        customer.getPhone(),
-                        customer.getEmail(),
                         customer.getGivenNames(),
                         customer.getLastName(),
                         customer.getSecondLastName(),
@@ -223,10 +216,13 @@ public class PostgresCustomerRepository implements CustomerRepository {
                     department,
                     province,
                     district,
+                    phone,
+                    email,
                     fiscal,
                     enabled,
-                    position
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    position,
+                    geolocation_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
 
         for (CustomerAddress address : addresses) {
@@ -240,9 +236,12 @@ public class PostgresCustomerRepository implements CustomerRepository {
                             address.getDepartment(),
                             address.getProvince(),
                             address.getDistrict(),
+                            address.getPhone(),
+                            address.getEmail(),
                             address.isFiscal(),
                             address.isEnabled(),
-                            address.getPosition())
+                            address.getPosition(),
+                            defaultGeolocationStatus(address))
                     .update();
         }
     }
@@ -368,9 +367,21 @@ public class PostgresCustomerRepository implements CustomerRepository {
                     department,
                     province,
                     district,
+                    phone,
+                    email,
                     fiscal,
                     enabled,
-                    position
+                    position,
+                    latitude,
+                    longitude,
+                    geolocation_status,
+                    geolocation_source,
+                    geolocation_accuracy_meters,
+                    geolocated_at,
+                    geolocated_by,
+                    geolocation_verified_at,
+                    geolocation_verified_by,
+                    geolocation_address_hash
                 FROM customer_address
                 WHERE customer_id = ?
                 ORDER BY fiscal DESC, position ASC, id ASC
@@ -423,13 +434,15 @@ public class PostgresCustomerRepository implements CustomerRepository {
         int pageSize = pageable.getSize();
         int pageNumber = pageable.getNumber();
 
-        Collection<Customer> customers = jdbcClient.sql(selectPageOfCustomersSql)
+        List<Customer> customers = jdbcClient.sql(selectPageOfCustomersSql)
                 .params(QueryMapper.formatAsLikeParam(query),
                         QueryMapper.formatAsLikeParam(query),
                         pageSize,
                         pageNumber * pageSize)
                 .query(Customer.class)
                 .list();
+
+        loadCustomerAddresses(customers);
 
         BigDecimal totalPages = BigDecimal.valueOf(totalElements)
                 .divide(BigDecimal.valueOf(pageSize), 0, RoundingMode.CEILING);
@@ -442,6 +455,66 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 .totalPages(totalPages.intValue())
                 .totalElements(totalElements)
                 .build();
+    }
+
+    private void loadCustomerAddresses(Collection<Customer> customers) {
+        if (customers == null || customers.isEmpty()) {
+            return;
+        }
+
+        List<Long> customerIds = customers.stream()
+                .map(Customer::getId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        if (customerIds.isEmpty()) {
+            return;
+        }
+
+        String selectAddressesSql = """
+                SELECT
+                    id,
+                    customer_id,
+                    address,
+                    ubigeo,
+                    department,
+                    province,
+                    district,
+                    phone,
+                    email,
+                    fiscal,
+                    enabled,
+                    position,
+                    latitude,
+                    longitude,
+                    geolocation_status,
+                    geolocation_source,
+                    geolocation_accuracy_meters,
+                    geolocated_at,
+                    geolocated_by,
+                    geolocation_verified_at,
+                    geolocation_verified_by,
+                    geolocation_address_hash
+                FROM customer_address
+                WHERE customer_id IN (:customerIds)
+                ORDER BY fiscal DESC, position ASC, id ASC
+                """;
+
+        List<CustomerAddress> addresses = jdbcClient.sql(selectAddressesSql)
+                .param("customerIds", customerIds)
+                .query(CustomerAddress.class)
+                .list();
+
+        Map<Long, List<CustomerAddress>> addressesByCustomerId = new HashMap<>();
+        for (CustomerAddress address : addresses) {
+            addressesByCustomerId
+                    .computeIfAbsent(address.getCustomerId(), ignored -> new ArrayList<>())
+                    .add(address);
+        }
+
+        for (Customer customer : customers) {
+            customer.setAddresses(addressesByCustomerId.getOrDefault(customer.getId(), List.of()));
+        }
     }
 
     @Override
@@ -542,10 +615,13 @@ public class PostgresCustomerRepository implements CustomerRepository {
                     department,
                     province,
                     district,
+                    phone,
+                    email,
                     fiscal,
                     enabled,
-                    position
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    position,
+                    geolocation_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
 
         jdbcClient.sql(insertAddressSql)
@@ -555,9 +631,12 @@ public class PostgresCustomerRepository implements CustomerRepository {
                         customerAddress.getDepartment(),
                         customerAddress.getProvince(),
                         customerAddress.getDistrict(),
+                        customerAddress.getPhone(),
+                        customerAddress.getEmail(),
                         customerAddress.isFiscal(),
                         customerAddress.isEnabled(),
-                        customerAddress.getPosition())
+                        customerAddress.getPosition(),
+                        defaultGeolocationStatus(customerAddress))
                 .update(keyHolder, "id");
 
         long addressId = Optional.ofNullable(keyHolder.getKey())
@@ -568,6 +647,99 @@ public class PostgresCustomerRepository implements CustomerRepository {
         customerAddress.setCustomerId(customerId);
 
         return customerAddress;
+    }
+
+    @Override
+    public CustomerAddress updateAddress(Long customerId, Long addressId, CustomerAddress customerAddress) {
+        CustomerAddress current = jdbcClient.sql("""
+                    SELECT id, customer_id, address, ubigeo, department, province, district,
+                           phone, email, fiscal, enabled, position, latitude, longitude,
+                           geolocation_status, geolocation_source, geolocation_accuracy_meters,
+                           geolocated_at, geolocated_by, geolocation_verified_at,
+                           geolocation_verified_by, geolocation_address_hash
+                    FROM customer_address
+                    WHERE id = ?
+                      AND customer_id = ?
+                    FOR UPDATE
+                """)
+                .params(addressId, customerId)
+                .query(CustomerAddress.class)
+                .optional()
+                .orElseThrow(() -> new IllegalArgumentException("Customer address not found"));
+
+        if (customerAddress.isFiscal()) {
+            jdbcClient.sql("""
+                            UPDATE customer_address
+                            SET fiscal = FALSE
+                            WHERE customer_id = ?
+                              AND id <> ?
+                            """)
+                    .params(customerId, addressId)
+                    .update();
+        }
+
+        String updateAddressSql = """
+                UPDATE customer_address
+                SET address = ?,
+                    ubigeo = ?,
+                    department = ?,
+                    province = ?,
+                    district = ?,
+                    phone = ?,
+                    email = ?,
+                    fiscal = ?,
+                    enabled = TRUE,
+                    geolocation_status = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND customer_id = ?
+                RETURNING
+                    id,
+                    customer_id,
+                    address,
+                    ubigeo,
+                    department,
+                    province,
+                    district,
+                    phone,
+                    email,
+                    fiscal,
+                    enabled,
+                    position,
+                    latitude,
+                    longitude,
+                    geolocation_status,
+                    geolocation_source,
+                    geolocation_accuracy_meters,
+                    geolocated_at,
+                    geolocated_by,
+                    geolocation_verified_at,
+                    geolocation_verified_by,
+                    geolocation_address_hash
+                """;
+
+        String nextHash = addressHash(customerAddress);
+        boolean geolocatedAddressChanged = current.getGeolocationAddressHash() != null
+                && !current.getGeolocationAddressHash().equals(nextHash);
+        String status = geolocatedAddressChanged
+                ? "NEEDS_REVIEW"
+                : (current.getGeolocationStatus() == null ? "PENDING" : current.getGeolocationStatus().name());
+
+        return jdbcClient.sql(updateAddressSql)
+                .params(customerAddress.getAddress(),
+                        customerAddress.getUbigeo(),
+                        customerAddress.getDepartment(),
+                        customerAddress.getProvince(),
+                        customerAddress.getDistrict(),
+                        customerAddress.getPhone(),
+                        customerAddress.getEmail(),
+                        customerAddress.isFiscal(),
+                        status,
+                        addressId,
+                        customerId)
+                .query(CustomerAddress.class)
+                .optional()
+                .orElseThrow(() -> new IllegalArgumentException("Customer address not found"));
     }
 
     private int nextAddressPosition(Long customerId) {
@@ -587,21 +759,101 @@ public class PostgresCustomerRepository implements CustomerRepository {
     public void replaceAddresses(Long customerId, List<CustomerAddress> addresses) {
         if (addresses == null) return;
 
-        String deleteAddressesSql = """
-                    DELETE FROM customer_address
-                    WHERE customer_id = ?
-                """;
-
-        jdbcClient.sql(deleteAddressesSql)
-                .param(customerId)
-                .update();
+        Set<Long> retainedIds = new HashSet<>();
 
         for (CustomerAddress address : addresses) {
             if (address == null) continue;
             if (address.getAddress() == null || address.getAddress().isBlank()) continue;
 
-            insertCustomerAddress(customerId, address);
+            if (address.getId() != null && addressExistsForCustomer(customerId, address.getId())) {
+                updateExistingAddress(customerId, address);
+                retainedIds.add(address.getId());
+            } else {
+                insertCustomerAddress(customerId, address);
+                if (address.getId() != null) {
+                    retainedIds.add(address.getId());
+                }
+            }
         }
+
+        if (retainedIds.isEmpty()) {
+            jdbcClient.sql("DELETE FROM customer_address WHERE customer_id = ?")
+                    .param(customerId)
+                    .update();
+            return;
+        }
+
+        jdbcClient.sql("DELETE FROM customer_address WHERE customer_id = :customerId AND id NOT IN (:retainedIds)")
+                .param("customerId", customerId)
+                .param("retainedIds", retainedIds)
+                .update();
+    }
+
+    private boolean addressExistsForCustomer(Long customerId, Long addressId) {
+        return jdbcClient.sql("""
+                    SELECT EXISTS(
+                        SELECT 1 FROM customer_address
+                        WHERE customer_id = ? AND id = ?
+                    )
+                """)
+                .params(customerId, addressId)
+                .query(Boolean.class)
+                .single();
+    }
+
+    private void updateExistingAddress(Long customerId, CustomerAddress address) {
+        CustomerAddress current = jdbcClient.sql("""
+                    SELECT id, customer_id, address, ubigeo, department, province, district,
+                           phone, email, fiscal, enabled, position, latitude, longitude,
+                           geolocation_status, geolocation_source, geolocation_accuracy_meters,
+                           geolocated_at, geolocated_by, geolocation_verified_at,
+                           geolocation_verified_by, geolocation_address_hash
+                    FROM customer_address
+                    WHERE customer_id = ? AND id = ?
+                    FOR UPDATE
+                """)
+                .params(customerId, address.getId())
+                .query(CustomerAddress.class)
+                .single();
+
+        String nextHash = addressHash(address);
+        boolean geolocatedAddressChanged = current.getGeolocationAddressHash() != null
+                && !current.getGeolocationAddressHash().equals(nextHash);
+
+        String status = geolocatedAddressChanged
+                ? "NEEDS_REVIEW"
+                : (current.getGeolocationStatus() == null ? "PENDING" : current.getGeolocationStatus().name());
+
+        jdbcClient.sql("""
+                UPDATE customer_address
+                SET address = ?,
+                    ubigeo = ?,
+                    department = ?,
+                    province = ?,
+                    district = ?,
+                    phone = ?,
+                    email = ?,
+                    fiscal = ?,
+                    enabled = TRUE,
+                    position = ?,
+                    geolocation_status = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                  AND customer_id = ?
+                """)
+                .params(address.getAddress(),
+                        address.getUbigeo(),
+                        address.getDepartment(),
+                        address.getProvince(),
+                        address.getDistrict(),
+                        address.getPhone(),
+                        address.getEmail(),
+                        address.isFiscal(),
+                        address.getPosition(),
+                        status,
+                        address.getId(),
+                        customerId)
+                .update();
     }
 
     private void insertCustomerAddress(Long customerId, CustomerAddress address) {
@@ -615,10 +867,13 @@ public class PostgresCustomerRepository implements CustomerRepository {
                     department,
                     province,
                     district,
+                    phone,
+                    email,
                     fiscal,
                     enabled,
-                    position
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    position,
+                    geolocation_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
 
         jdbcClient.sql(insertAddressSql)
@@ -628,9 +883,12 @@ public class PostgresCustomerRepository implements CustomerRepository {
                         address.getDepartment(),
                         address.getProvince(),
                         address.getDistrict(),
+                        address.getPhone(),
+                        address.getEmail(),
                         address.isFiscal(),
                         address.isEnabled(),
-                        address.getPosition())
+                        address.getPosition(),
+                        defaultGeolocationStatus(address))
                 .update(keyHolder, "id");
 
         Optional.ofNullable(keyHolder.getKey())
@@ -638,6 +896,37 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 .ifPresent(address::setId);
 
         address.setCustomerId(customerId);
+    }
+
+    private String addressHash(CustomerAddress address) {
+        String raw = String.join("|",
+                normalizeHashPart(address.getAddress()),
+                "",
+                "PE",
+                normalizeHashPart(address.getDepartment()),
+                normalizeHashPart(address.getProvince()),
+                normalizeHashPart(address.getDistrict()),
+                normalizeHashPart(address.getUbigeo()));
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            return java.util.HexFormat.of().formatHex(digest.digest(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is not available", exception);
+        }
+    }
+
+    private String defaultGeolocationStatus(CustomerAddress address) {
+        return address != null && address.getGeolocationStatus() != null
+                ? address.getGeolocationStatus().name()
+                : "PENDING";
+    }
+
+    private String normalizeHashPart(String value) {
+        if (value == null) return "";
+        return java.text.Normalizer.normalize(value.trim(), java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .replaceAll("\\s+", " ")
+                .toUpperCase(Locale.ROOT);
     }
 
     @Override

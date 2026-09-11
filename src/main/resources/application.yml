@@ -108,6 +108,30 @@ common:
 #    products-images-base-url: http://localhost:8091
 
 app:
+  customer-map:
+    map:
+      google-maps-api-key: ${GOOGLE_MAPS_API_KEY:AIzaSyASi87XpHhYaZl0EABY89gzM-fCPMdUNLU}
+      google-maps-map-id: ${GOOGLE_MAPS_MAP_ID:81d711e1d002638abc802d69}
+      bounds: [-81.5, -18.5, -68.5, 0.5]
+      center: [-75.0152, -9.19]
+      min-zoom: 4
+      max-zoom: 14
+      urban-zoom: 14
+    geocoder:
+      enabled: true
+      provider: NOMINATIM
+      base-url: https://nominatim.openstreetmap.org
+      timeout-ms: 8000
+      rate-limit-per-minute: 4
+      max-retries: 1
+      country: PE
+      language: es
+      user-agent: IMBASAC customer map geocoder
+      batch-enabled: true
+      auto-job:
+        enabled: true
+        cron: "0 */5 * * * *"
+        batch-size: 20
   whatsapp-agent:
     base-url: http://127.0.0.1:8092
   files:

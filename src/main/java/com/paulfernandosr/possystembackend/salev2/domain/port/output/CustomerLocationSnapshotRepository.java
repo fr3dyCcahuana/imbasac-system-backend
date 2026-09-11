@@ -7,6 +7,7 @@ import java.util.Optional;
 public interface CustomerLocationSnapshotRepository {
 
     Optional<CustomerLocationSnapshot> resolveCustomerLocation(Long customerId,
+                                                               Long customerAddressId,
                                                                String customerDocType,
                                                                String customerDocNumber,
                                                                String customerAddress);

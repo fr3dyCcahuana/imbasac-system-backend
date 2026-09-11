@@ -27,6 +27,7 @@ public class SaleV2CreateRequest {
     private PriceList priceList;      // A/B/C/D
 
     private Long customerId;
+    private Long customerAddressId;
     private String customerDocType;
     private String customerDocNumber;
     private String customerName;
