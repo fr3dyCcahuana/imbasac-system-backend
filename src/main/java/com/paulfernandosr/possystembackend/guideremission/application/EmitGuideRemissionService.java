@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -25,6 +26,7 @@ public class EmitGuideRemissionService implements EmitGuideRemissionUseCase {
     private final GuideRemissionProperties properties;
     private final GuideRemissionTokenManager tokenManager;
     private final GuideRemissionPhpResponseEvaluator responseEvaluator;
+    private final GuideRemissionEmissionTimestampAdjuster timestampAdjuster;
 
     @Override
     @Transactional
@@ -138,38 +140,42 @@ public class EmitGuideRemissionService implements EmitGuideRemissionUseCase {
     }
 
     private GuideRemissionSubmission toSubmission(GuideRemissionDocument document, String token) {
+        GuideRemissionData guia = GuideRemissionData.builder()
+                .serie(document.getSerie())
+                .numero(document.getNumero())
+                .fechaEmision(format(document.getIssueDate()))
+                .horaEmision(format(document.getIssueTime()))
+                .fechaTraslado(format(document.getTransferDate()))
+                .fechaEntregaTransportista(format(document.getCarrierDeliveryDate()))
+                .guiaMotivoTraslado(document.getTransferReasonCode())
+                .guiaModalidadTraslado(document.getTransferModeCode())
+                .entidadIdTransporte(document.getLegacyTransportEntityId())
+                .numeroMtcTransporte(document.getLegacyTransportMtcNumber())
+                .numeroDocumentoTransporte(document.getTransporterDocumentNumber())
+                .entidadTransporte(document.getTransporterName())
+                .conductorDni(document.getDriverDni())
+                .conductorNombres(document.getDriverFullName())
+                .conductorApellidos("-")
+                .conductorLicencia(document.getDriverLicense())
+                .vehiculoPlaca(document.getVehiclePlate())
+                .destinatarioTipo(document.getRecipientDocumentType())
+                .destinatarioNumeroDocumento(document.getRecipientDocumentNumber())
+                .destinatarioNombresRazon(document.getRecipientName())
+                .partidaUbigeo(document.getDepartureUbigeo())
+                .partidaDireccion(document.getDepartureAddress())
+                .partidaCodigoEstablecimiento(document.getDepartureEstablishmentCode())
+                .llegadaUbigeo(document.getArrivalUbigeo())
+                .llegadaDireccion(document.getArrivalAddress())
+                .llegadaCodigoEstablecimiento(document.getArrivalEstablishmentCode())
+                .pesoTotal(toPlainString(document.getTotalWeight()))
+                .numeroBultos(document.getNumberOfPackages())
+                .notas(document.getNotes())
+                .build();
+
+        timestampAdjuster.applySafeEmissionTimestamp(guia);
+
         return GuideRemissionSubmission.builder()
-                .guia(GuideRemissionData.builder()
-                        .serie(document.getSerie())
-                        .numero(document.getNumero())
-                        .fechaEmision(format(document.getIssueDate()))
-                        .horaEmision(document.getIssueTime() != null ? document.getIssueTime().format(DateTimeFormatter.ISO_LOCAL_TIME) : null)
-                        .fechaTraslado(format(document.getTransferDate()))
-                        .fechaEntregaTransportista(format(document.getCarrierDeliveryDate()))
-                        .guiaMotivoTraslado(document.getTransferReasonCode())
-                        .guiaModalidadTraslado(document.getTransferModeCode())
-                        .entidadIdTransporte(document.getLegacyTransportEntityId())
-                        .numeroMtcTransporte(document.getLegacyTransportMtcNumber())
-                        .numeroDocumentoTransporte(document.getTransporterDocumentNumber())
-                        .entidadTransporte(document.getTransporterName())
-                        .conductorDni(document.getDriverDni())
-                        .conductorNombres(document.getDriverFullName())
-                        .conductorApellidos("-")
-                        .conductorLicencia(document.getDriverLicense())
-                        .vehiculoPlaca(document.getVehiclePlate())
-                        .destinatarioTipo(document.getRecipientDocumentType())
-                        .destinatarioNumeroDocumento(document.getRecipientDocumentNumber())
-                        .destinatarioNombresRazon(document.getRecipientName())
-                        .partidaUbigeo(document.getDepartureUbigeo())
-                        .partidaDireccion(document.getDepartureAddress())
-                        .partidaCodigoEstablecimiento(document.getDepartureEstablishmentCode())
-                        .llegadaUbigeo(document.getArrivalUbigeo())
-                        .llegadaDireccion(document.getArrivalAddress())
-                        .llegadaCodigoEstablecimiento(document.getArrivalEstablishmentCode())
-                        .pesoTotal(toPlainString(document.getTotalWeight()))
-                        .numeroBultos(document.getNumberOfPackages())
-                        .notas(document.getNotes())
-                        .build())
+                .guia(guia)
                 .items(toItems(document.getItems()))
                 .token(token)
                 .relatedDocumentTypeCode(document.getRelatedDocumentTypeCode())
@@ -267,6 +273,10 @@ public class EmitGuideRemissionService implements EmitGuideRemissionUseCase {
 
     private String format(java.time.LocalDate date) {
         return date != null ? date.format(DateTimeFormatter.ISO_LOCAL_DATE) : null;
+    }
+
+    private String format(LocalTime time) {
+        return time != null ? time.format(DateTimeFormatter.ISO_LOCAL_TIME) : null;
     }
 
     private String toPlainString(BigDecimal value) {

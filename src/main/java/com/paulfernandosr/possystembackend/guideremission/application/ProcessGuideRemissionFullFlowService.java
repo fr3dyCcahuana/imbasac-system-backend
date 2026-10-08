@@ -22,13 +22,15 @@ public class ProcessGuideRemissionFullFlowService implements ProcessGuideRemissi
     private final GuideRemissionTokenManager tokenManager;
     private final GuideRemissionPhpResponseEvaluator responseEvaluator;
     private final GuideRemissionSeriesGeneratorService seriesGeneratorService;
+    private final GuideRemissionEmissionTimestampAdjuster timestampAdjuster;
 
     @Override
     @Transactional
     public GuideRemissionFullFlowResponse process(GuideRemissionFullFlowRequest request) {
         normalizer.normalize(request);
-        validator.validate(request);
         seriesGeneratorService.assignNextSeriesAndNumber(request.getGuia());
+        timestampAdjuster.applySafeEmissionTimestamp(request.getGuia());
+        validator.validate(request);
         log.info("[guide-remission][full-flow] Inicio de flujo completo. ruc={}, serie={}, numero={}",
                 properties.getCompany().getRuc(), request.getGuia().getSerie(), request.getGuia().getNumero());
 

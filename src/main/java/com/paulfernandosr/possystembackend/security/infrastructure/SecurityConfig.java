@@ -62,7 +62,7 @@ public class SecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/customers/*/addresses/*/geolocation")
                         .hasAnyAuthority("MANAGE_CUSTOMERS", "MANAGE_CUSTOMERS_MAP_VIEW")
                         .requestMatchers(org.springframework.http.HttpMethod.PATCH, "/customers/*/addresses/*/geolocation")
-                        .hasAnyAuthority("MANAGE_CUSTOMERS", "MANAGE_CUSTOMERS_MAP_VIEW")
+                        .hasAnyAuthority(" ", "MANAGE_CUSTOMERS_MAP_VIEW")
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/customers/*/addresses/*/geolocation/**")
                         .hasAnyAuthority("MANAGE_CUSTOMERS", "MANAGE_CUSTOMERS_MAP_VIEW")
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/product-offers/**")

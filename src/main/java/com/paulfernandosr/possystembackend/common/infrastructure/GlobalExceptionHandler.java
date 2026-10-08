@@ -40,7 +40,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleDomainException(DomainException exception, Locale locale) {
         log.error("GlobalExceptionHandler:handleDomainException", exception);
 
-        String message = messageSource.getMessage(exception.getErrorMessage(), null, locale);
+        String message = messageSource.getMessage(
+                exception.getErrorMessage(),
+                null,
+                exception.getMessage(),
+                locale
+        );
         return new ResponseEntity<>(ErrorResponse.conflict(message), HttpStatus.CONFLICT);
     }
 

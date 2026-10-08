@@ -20,13 +20,15 @@ public class SubmitGuideRemissionService implements SubmitGuideRemissionUseCase 
     private final GuideRemissionProperties properties;
     private final GuideRemissionPhpResponseEvaluator responseEvaluator;
     private final GuideRemissionSeriesGeneratorService seriesGeneratorService;
+    private final GuideRemissionEmissionTimestampAdjuster timestampAdjuster;
 
     @Override
     @Transactional
     public GuideRemissionSubmissionResponse submit(GuideRemissionSubmission request) {
         normalizer.normalize(request);
-        validator.validate(request);
         seriesGeneratorService.assignNextSeriesAndNumber(request.getGuia());
+        timestampAdjuster.applySafeEmissionTimestamp(request.getGuia());
+        validator.validate(request);
 
         GuideRemissionSubmissionResponse response = guideRemissionProvider.submit(request);
         responseEvaluator.assertSuccessfulSubmission(response);
