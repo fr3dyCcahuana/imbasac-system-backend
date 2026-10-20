@@ -27,6 +27,31 @@ public class ProductBasicOfferService {
 
     private static final Set<String> STATUSES = Set.of("DRAFT", "ACTIVE", "PAUSED", "EXPIRED");
 
+    // Use the same available stock as the product search, including active reservations.
+    private static final String AVAILABLE_STOCK = """
+            CASE
+                WHEN p.manage_by_serial = TRUE THEN COALESCE(su.serial_qty, 0)
+                ELSE GREATEST(COALESCE(ps.quantity_on_hand, 0) - COALESCE(res.reserved_qty, 0), 0)
+            END
+            """;
+
+    private static final String STOCK_JOINS = """
+            LEFT JOIN product_stock ps ON ps.product_id = p.id
+            LEFT JOIN (
+                SELECT product_id, COUNT(*)::numeric(14,3) AS serial_qty
+                FROM product_serial_unit
+                WHERE status = 'EN_ALMACEN'
+                GROUP BY product_id
+            ) su ON su.product_id = p.id
+            LEFT JOIN (
+                SELECT product_id, SUM(quantity) AS reserved_qty
+                FROM product_stock_reservation
+                WHERE status = 'ACTIVE'
+                  AND reserved_date = CURRENT_DATE
+                GROUP BY product_id
+            ) res ON res.product_id = p.id
+            """;
+
     private final JdbcClient jdbcClient;
     private final ProductImagePublicUrlService imageUrlService;
 
@@ -172,8 +197,10 @@ public class ProductBasicOfferService {
                     )
                     SELECT ?, p.id, ?, ?, COALESCE(p.price_a, 0), ?
                     FROM product p
+                    %s
                     WHERE p.id = ?
-                    """)
+                      AND (%s) > 0
+                    """.formatted(STOCK_JOINS, AVAILABLE_STOCK))
                     .params(
                             offerId,
                             item.minQuantity(),
@@ -184,7 +211,8 @@ public class ProductBasicOfferService {
                     .update();
 
             if (inserted == 0) {
-                throw new IllegalArgumentException("Producto no encontrado: " + item.productId());
+                throw new IllegalArgumentException("El producto " + item.productId()
+                        + " no existe o no tiene stock disponible. Actualiza los productos de la oferta.");
             }
             index++;
         }
@@ -207,20 +235,11 @@ public class ProductBasicOfferService {
                     pboi.offer_price,
                     pboi.min_quantity,
                     pboi.sort_order,
-                    CASE
-                        WHEN p.manage_by_serial = TRUE THEN COALESCE(su.serial_qty, 0)
-                        ELSE COALESCE(ps.quantity_on_hand, 0)
-                    END AS stock_on_hand,
+                    (%s) AS stock_on_hand,
                     img.image_url
                 FROM product_basic_offer_item pboi
                 JOIN product p ON p.id = pboi.product_id
-                LEFT JOIN product_stock ps ON ps.product_id = p.id
-                LEFT JOIN (
-                    SELECT product_id, COUNT(*)::numeric(14,3) AS serial_qty
-                    FROM product_serial_unit
-                    WHERE status = 'EN_ALMACEN'
-                    GROUP BY product_id
-                ) su ON su.product_id = p.id
+                %s
                 LEFT JOIN LATERAL (
                     SELECT image_url
                     FROM product_image
@@ -229,8 +248,9 @@ public class ProductBasicOfferService {
                     LIMIT 1
                 ) img ON TRUE
                 WHERE pboi.offer_id = ?
+                  AND (%s) > 0
                 ORDER BY pboi.sort_order ASC, pboi.id ASC
-                """)
+                """.formatted(AVAILABLE_STOCK, STOCK_JOINS, AVAILABLE_STOCK))
                 .param(offerId)
                 .query((rs, rowNum) -> new ProductBasicOfferItem(
                         rs.getLong("id"),
