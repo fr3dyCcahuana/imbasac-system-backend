@@ -5,6 +5,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "integration.mtc-license.legacy-enabled", havingValue = "true")
 public class MtcSessionCleanupJob {
 
     private final MtcSessionManager sessionManager;

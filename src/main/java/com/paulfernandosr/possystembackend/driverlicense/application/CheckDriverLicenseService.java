@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "integration.mtc-license.legacy-enabled", havingValue = "true")
 public class CheckDriverLicenseService implements CheckDriverLicenseUseCase {
 
     private final DriverLicenseGateway gateway;

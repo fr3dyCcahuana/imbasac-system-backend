@@ -47,6 +47,10 @@ security:
 
 integration:
   mtc-license:
+    assisted:
+      enabled: ${MTC_ASSISTED_ENABLED:true}
+      search-url: https://licencias.mtc.gob.pe/#/index
+      session-ttl-seconds: 180
     search-url: https://slcp.mtc.gob.pe/
     headless: false
     timeout-ms: 30000

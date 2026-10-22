@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "integration.mtc-license.legacy-enabled", havingValue = "true")
 public class MtcDebugSupport {
 
     private static final Logger log = LoggerFactory.getLogger(MtcDebugSupport.class);

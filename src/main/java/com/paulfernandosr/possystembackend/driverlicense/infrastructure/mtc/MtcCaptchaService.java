@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.util.Base64;
 
 @Service
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "integration.mtc-license.legacy-enabled", havingValue = "true")
 public class MtcCaptchaService {
 
     private static final Logger log = LoggerFactory.getLogger(MtcCaptchaService.class);

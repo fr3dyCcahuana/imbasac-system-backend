@@ -18,6 +18,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "integration.mtc-license.legacy-enabled", havingValue = "true")
 public class MtcPlaywrightDriverLicenseGateway implements DriverLicenseGateway {
 
     private static final Logger log = LoggerFactory.getLogger(MtcPlaywrightDriverLicenseGateway.class);
