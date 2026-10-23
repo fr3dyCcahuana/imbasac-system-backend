@@ -45,8 +45,7 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
         String pl = priceList == null ? "A" : priceList.trim().toUpperCase();
         String ctx = context == null ? "PROFORMA" : context.trim().toUpperCase();
 
-        String countSql = """
-                WITH base AS (
+        String countSql = ProductStockAvailabilitySql.CTE + """
                   SELECT
                     p.id,
                     p.affects_stock,
@@ -55,32 +54,9 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                        AND UPPER(COALESCE(p.category, '')) IN ('MOTOR','MOTOCICLETAS')
                       THEN TRUE ELSE FALSE
                     END AS manage_by_serial,
-                    CASE
-                      WHEN (p.manage_by_serial = TRUE
-                       AND UPPER(COALESCE(p.category, '')) IN ('MOTOR','MOTOCICLETAS')) THEN (
-                        SELECT COUNT(1)
-                          FROM product_serial_unit psu
-                         WHERE psu.product_id = p.id
-                           AND psu.status = 'EN_ALMACEN'
-                      )
-                      ELSE GREATEST(COALESCE(ps.quantity_on_hand, 0) - COALESCE(res.reserved_qty, 0), 0)
-                    END AS stock_available
+                """ + ProductStockAvailabilitySql.STOCK_COLUMNS + """
                   FROM product p
-                  LEFT JOIN product_stock ps ON ps.product_id = p.id
-                LEFT JOIN (
-                    SELECT product_id, SUM(quantity) AS reserved_qty
-                    FROM product_stock_reservation
-                    WHERE status = 'ACTIVE'
-                      AND reserved_date = CURRENT_DATE
-                      AND (CAST(? AS BIGINT) IS NULL OR proforma_id <> COALESCE((
-                        SELECT id
-                          FROM proforma
-                         WHERE number = CAST(? AS BIGINT)
-                         ORDER BY id DESC
-                         LIMIT 1
-                      ), -1))
-                    GROUP BY product_id
-                  ) res ON res.product_id = p.id
+                """ + ProductStockAvailabilitySql.JOINS + """
                   WHERE (p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ?)
                     AND (? = '' OR p.sku ILIKE ? OR p.barcode ILIKE ? OR p.name ILIKE ? OR p.brand ILIKE ? OR p.model ILIKE ?)
                     AND (? = '' OR LOWER(TRIM(COALESCE(p.brand, ''))) = LOWER(TRIM(?)))
@@ -89,24 +65,22 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                 )
                 SELECT COUNT(1)
                   FROM base
-                 WHERE (? = FALSE OR affects_stock = FALSE OR stock_available > 0)
-                """;
+                """ + "WHERE " + ProductStockAvailabilitySql.STOCK_FILTER;
 
         long totalElements = jdbcClient.sql(countSql)
                 .params(
-                        sourceProformaNumber, sourceProformaNumber,
+                        sourceProformaNumber,
                         like, like, like,
                         sub, subLike, subLike, subLike, subLike, subLike,
                         brandFilter, brandFilter,
                         cat, cat,
                         ctx,
-                        onlyWithStock
+                        onlyWithStock, ctx
                 )
                 .query(Long.class)
                 .single();
 
-        String pageSql = """
-                WITH base AS (
+        String pageSql = ProductStockAvailabilitySql.CTE + """
                   SELECT
                     p.id,
                     p.sku,
@@ -143,34 +117,10 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                     active_offer.offer_name,
                     active_offer.offer_price,
                     active_offer.offer_min_quantity,
-                
-                    CASE
-                      WHEN (p.manage_by_serial = TRUE
-                       AND UPPER(COALESCE(p.category, '')) IN ('MOTOR','MOTOCICLETAS')) THEN (
-                        SELECT COUNT(1)
-                          FROM product_serial_unit psu
-                         WHERE psu.product_id = p.id
-                           AND psu.status = 'EN_ALMACEN'
-                      )
-                      ELSE GREATEST(COALESCE(ps.quantity_on_hand, 0) - COALESCE(res.reserved_qty, 0), 0)
-                    END AS stock_available
+                """ + ProductStockAvailabilitySql.STOCK_COLUMNS + """
                 
                   FROM product p
-                  LEFT JOIN product_stock ps ON ps.product_id = p.id
-                  LEFT JOIN (
-                    SELECT product_id, SUM(quantity) AS reserved_qty
-                    FROM product_stock_reservation
-                    WHERE status = 'ACTIVE'
-                      AND reserved_date = CURRENT_DATE
-                      AND (CAST(? AS BIGINT) IS NULL OR proforma_id <> COALESCE((
-                        SELECT id
-                          FROM proforma
-                         WHERE number = CAST(? AS BIGINT)
-                         ORDER BY id DESC
-                         LIMIT 1
-                      ), -1))
-                    GROUP BY product_id
-                  ) res ON res.product_id = p.id
+                """ + ProductStockAvailabilitySql.JOINS + """
                   LEFT JOIN LATERAL (
                     SELECT
                       pbo.id AS offer_id,
@@ -202,9 +152,10 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                   affects_stock, facturable_sunat,
                   unit_price,
                   offer_id, offer_code, offer_name, offer_price, offer_min_quantity,
-                  stock_available
+                  stock_available, stock_on_hand, stock_reserved, stock_reserved_by_source
                 FROM base
-                WHERE (? = FALSE OR affects_stock = FALSE OR stock_available > 0)
+                """ + "WHERE " + ProductStockAvailabilitySql.STOCK_FILTER + """
+
                 ORDER BY name ASC
                 LIMIT ?
                 OFFSET ?
@@ -215,14 +166,14 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
 
         List<ProductSalesDetail> content = jdbcClient.sql(pageSql)
                 .params(
+                        sourceProformaNumber,
                         pl,
-                        sourceProformaNumber, sourceProformaNumber,
                         like, like, like,
                         sub, subLike, subLike, subLike, subLike, subLike,
                         brandFilter, brandFilter,
                         cat, cat,
                         ctx,
-                        onlyWithStock,
+                        onlyWithStock, ctx,
                         size,
                         page * size
                 )
@@ -260,8 +211,10 @@ public class PostgresProductSalesDetailRepository implements ProductSalesDetailR
                                 rs.getBigDecimal("offer_price")
                         ))
 
-                        // ✅ NUEVO: stock disponible calculado
                         .stockAvailable(rs.getBigDecimal("stock_available"))
+                        .stockOnHand(rs.getBigDecimal("stock_on_hand"))
+                        .stockReserved(rs.getBigDecimal("stock_reserved"))
+                        .stockReservedBySource(rs.getBigDecimal("stock_reserved_by_source"))
 
                         .images(List.of())
                         .availableSerialUnits(List.of())

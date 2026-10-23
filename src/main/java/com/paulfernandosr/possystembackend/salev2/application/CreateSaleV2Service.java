@@ -369,9 +369,12 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
                 request.getNotes()
         );
 
-        if (sourceProforma != null) {
-            productStockReservationRepository.consumeActiveForProforma(sourceProforma.getId());
-        }
+        // Aggregate duplicates and internal proforma items before applying any stock movement.
+        // The repository holds product locks until this sale transaction commits or rolls back.
+        productStockReservationRepository.prepareStockForSale(
+                collectStockQuantities(computedLines, sourceProformaItems),
+                sourceProforma == null ? null : sourceProforma.getId(),
+                request.getStockReservationReassignments(), saleId, user.getId());
 
         for (ComputedLine line : computedLines) {
             Long saleItemId = saleV2Repository.insertSaleItem(
@@ -695,6 +698,32 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
         return filtered;
     }
 
+    private Map<Long, BigDecimal> collectStockQuantities(List<ComputedLine> lines, List<ProformaItem> proformaItems) {
+        Map<Long, BigDecimal> quantities = new TreeMap<>();
+        for (ComputedLine line : lines) {
+            if (Boolean.TRUE.equals(line.getProduct().getAffectsStock())) {
+                quantities.merge(line.getProduct().getId(), line.getQuantity(), BigDecimal::add);
+            }
+        }
+        for (ProformaItem item : proformaItems) {
+            if (Boolean.TRUE.equals(item.getFacturableSunat()) || !Boolean.TRUE.equals(item.getAffectsStock())) continue;
+            ProductSnapshot product = productSnapshotRepository.findSnapshotById(item.getProductId());
+            if (product == null) {
+                throw new InvalidSaleV2Exception("Producto interno no encontrado: " + item.getProductId());
+            }
+            if (Boolean.TRUE.equals(product.getManageBySerial())) {
+                throw new InvalidSaleV2Exception("Producto interno no facturable con serie/VIN no soportado en conversión. SKU=" + nzs(product.getSku()));
+            }
+            if (nz(item.getQuantity()).signum() <= 0) {
+                throw new InvalidSaleV2Exception("Cantidad inválida para ítem interno de proforma. SKU=" + nzs(item.getSku()));
+            }
+            if (Boolean.TRUE.equals(product.getAffectsStock())) {
+                quantities.merge(product.getId(), item.getQuantity(), BigDecimal::add);
+            }
+        }
+        return quantities;
+    }
+
     private void processInternalProformaStockMovements(List<ProformaItem> proformaItems) {
         if (proformaItems == null || proformaItems.isEmpty()) {
             return;
@@ -724,6 +753,8 @@ public class CreateSaleV2Service implements CreateSaleV2UseCase {
             if (product == null) {
                 throw new InvalidSaleV2Exception("Producto interno no encontrado: " + item.getProductId());
             }
+
+            if (!Boolean.TRUE.equals(product.getAffectsStock())) continue;
 
             if (Boolean.TRUE.equals(product.getManageBySerial())) {
                 throw new InvalidSaleV2Exception(

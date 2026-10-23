@@ -4,6 +4,7 @@ import com.paulfernandosr.possystembackend.salev2.domain.model.DocType;
 import com.paulfernandosr.possystembackend.salev2.domain.model.PaymentMethod;
 import com.paulfernandosr.possystembackend.salev2.domain.model.PaymentType;
 import com.paulfernandosr.possystembackend.salev2.domain.model.TaxStatus;
+import com.paulfernandosr.possystembackend.stockreservation.domain.model.StockReservationReassignment;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -32,6 +33,7 @@ public class ConvertProformaV2Request {
     private PaymentMethod method; // EFECTIVO/YAPE/TRANSFERENCIA/OTRO
 
     private List<LineSerials> serials;
+    private List<StockReservationReassignment> stockReservationReassignments;
 
     @Getter
     @Setter

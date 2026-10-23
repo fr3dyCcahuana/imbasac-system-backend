@@ -42,6 +42,9 @@ public class ProductSalesDetail {
     private java.math.BigDecimal offerDiscountPercent;
 
     private java.math.BigDecimal stockAvailable;
+    private java.math.BigDecimal stockOnHand;
+    private java.math.BigDecimal stockReserved;
+    private java.math.BigDecimal stockReservedBySource;
 
     private java.util.List<ProductImage> images;
     private java.util.List<ProductSerialUnit> availableSerialUnits;

@@ -1,10 +1,10 @@
 package com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input;
 
 import com.paulfernandosr.possystembackend.common.infrastructure.response.SuccessResponse;
+import com.paulfernandosr.possystembackend.salev2.application.CreateIdempotentSaleV2Service;
 import com.paulfernandosr.possystembackend.salev2.domain.model.VoidSaleV2Response;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.AdminEditSaleV2BeforeSunatUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.CreateCreditNoteUseCase;
-import com.paulfernandosr.possystembackend.salev2.domain.port.input.CreateSaleV2UseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetSaleCreditNotesUseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetSaleV2UseCase;
 import com.paulfernandosr.possystembackend.salev2.domain.port.input.GetSalesV2PageUseCase;
@@ -40,7 +40,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SaleV2RestController {
 
-    private final CreateSaleV2UseCase createSaleV2UseCase;
+    private final CreateIdempotentSaleV2Service createSaleV2UseCase;
     private final AdminEditSaleV2BeforeSunatUseCase adminEditSaleV2BeforeSunatUseCase;
     private final VoidSaleV2UseCase voidSaleV2UseCase;
     private final GetSalesV2PageUseCase getSalesV2PageUseCase;

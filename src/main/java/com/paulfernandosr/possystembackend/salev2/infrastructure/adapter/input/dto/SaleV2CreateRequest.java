@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.salev2.infrastructure.adapter.input.dto;
 
 import com.paulfernandosr.possystembackend.salev2.domain.model.*;
+import com.paulfernandosr.possystembackend.stockreservation.domain.model.StockReservationReassignment;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -13,6 +14,9 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class SaleV2CreateRequest {
+
+    /** Identificador estable del intento de registro; se reutiliza al reintentar la misma venta. */
+    private String idempotencyKey;
 
     private Long stationId;
     private Long saleSessionId;
@@ -80,6 +84,7 @@ public class SaleV2CreateRequest {
     private Long sourceProformaId;
 
     private List<Item> items;
+    private List<StockReservationReassignment> stockReservationReassignments;
     private Payment payment;
 
     @Getter

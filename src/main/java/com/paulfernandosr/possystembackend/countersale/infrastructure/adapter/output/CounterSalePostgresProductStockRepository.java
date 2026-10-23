@@ -9,6 +9,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.TreeSet;
 
 @Repository
 @RequiredArgsConstructor
@@ -50,7 +52,22 @@ public class CounterSalePostgresProductStockRepository implements ProductStockRe
     }
 
     @Override
+    public void lockProducts(Collection<Long> productIds) {
+        for (Long productId : new TreeSet<>(productIds)) {
+            lockProductOrFail(productId);
+        }
+    }
+
+    private void lockProductOrFail(Long productId) {
+        jdbcClient.sql("SELECT quantity_on_hand FROM product_stock WHERE product_id = ? FOR UPDATE")
+                .param(productId).query(BigDecimal.class).optional()
+                .orElseThrow(() -> new InvalidCounterSaleException("Stock insuficiente para productId=" + productId));
+    }
+
+    @Override
     public StockMovementBalance decreaseOnHandOrFail(Long productId, BigDecimal quantity) {
+        // Match the reservation mutex before taking the reservation availability snapshot.
+        lockProductOrFail(productId);
         String sql = """
             UPDATE product_stock
                SET quantity_on_hand = quantity_on_hand - ?,

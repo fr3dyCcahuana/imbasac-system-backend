@@ -6,6 +6,8 @@ import com.paulfernandosr.possystembackend.countersale.domain.exception.InvalidC
 import com.paulfernandosr.possystembackend.customer.domain.exception.InvalidCustomerException;
 import com.paulfernandosr.possystembackend.proformav2.domain.exception.InvalidProformaV2Exception;
 import com.paulfernandosr.possystembackend.salev2.domain.exception.InvalidSaleV2Exception;
+import com.paulfernandosr.possystembackend.salev2.domain.exception.SaleIdempotencyConflictException;
+import com.paulfernandosr.possystembackend.salev2.domain.exception.SaleCreateRejectedException;
 import com.paulfernandosr.possystembackend.security.domain.exception.InvalidCredentialsException;
 import com.paulfernandosr.possystembackend.security.domain.exception.InvalidSessionException;
 import com.paulfernandosr.possystembackend.stockreservation.domain.exception.StockReservationException;
@@ -83,6 +85,19 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.badRequest()
                 .body(ErrorResponse.badRequest(exception));
+    }
+
+    @ExceptionHandler(SaleIdempotencyConflictException.class)
+    public ResponseEntity<ErrorResponse> handleSaleIdempotencyConflict(SaleIdempotencyConflictException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ErrorResponse.conflict(exception));
+    }
+
+    @ExceptionHandler(SaleCreateRejectedException.class)
+    public ResponseEntity<ErrorResponse> handleSaleCreateRejected(SaleCreateRejectedException exception) {
+        ErrorResponse response = ErrorResponse.builder().status(HttpStatus.BAD_REQUEST.value())
+                .error(exception.getMessage()).saleOperationRejected(true)
+                .idempotencyKey(exception.getIdempotencyKey().toString()).timestamp(LocalDateTime.now()).build();
+        return ResponseEntity.badRequest().body(response);
     }
 
     @ExceptionHandler({

@@ -3,6 +3,7 @@ package com.paulfernandosr.possystembackend.product.infrastructure.adapter.outpu
 import com.paulfernandosr.possystembackend.product.domain.ProductSerialUnit;
 import com.paulfernandosr.possystembackend.product.domain.port.output.ProductStockValidationRepository;
 import com.paulfernandosr.possystembackend.product.infrastructure.adapter.input.dto.ProductStockValidationDto;
+import com.paulfernandosr.possystembackend.product.infrastructure.adapter.input.dto.ProductStockReservationDto;
 import com.paulfernandosr.possystembackend.product.infrastructure.adapter.output.mapper.ProductSerialUnitRowMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -28,9 +29,7 @@ public class PostgresProductStockValidationRepository implements ProductStockVal
 
         String placeholders = cleanIds.stream().map(x -> "?").collect(Collectors.joining(","));
 
-        // 1) Base info + stock_available (igual que tu repo sales-detail)
-        String sql = """
-            WITH base AS (
+        String sql = ProductStockAvailabilitySql.CTE + """
               SELECT
                 p.id,
                 p.affects_stock,
@@ -41,32 +40,9 @@ public class PostgresProductStockValidationRepository implements ProductStockVal
                    AND UPPER(COALESCE(p.category, '')) IN ('MOTOR','MOTOCICLETAS')
                   THEN TRUE ELSE FALSE
                 END AS manage_by_serial,
-                CASE
-                  WHEN (p.manage_by_serial = TRUE
-                   AND UPPER(COALESCE(p.category, '')) IN ('MOTOR','MOTOCICLETAS')) THEN (
-                    SELECT COUNT(1)
-                      FROM product_serial_unit psu
-                     WHERE psu.product_id = p.id
-                       AND psu.status = 'EN_ALMACEN'
-                  )
-                  ELSE GREATEST(COALESCE(ps.quantity_on_hand, 0) - COALESCE(res.reserved_qty, 0), 0)
-                END AS stock_available
+            """ + ProductStockAvailabilitySql.STOCK_COLUMNS + """
               FROM product p
-              LEFT JOIN product_stock ps ON ps.product_id = p.id
-              LEFT JOIN (
-                SELECT product_id, SUM(quantity) AS reserved_qty
-                FROM product_stock_reservation
-                WHERE status = 'ACTIVE'
-                  AND reserved_date = CURRENT_DATE
-                  AND (CAST(? AS BIGINT) IS NULL OR proforma_id <> COALESCE((
-                    SELECT id
-                      FROM proforma
-                     WHERE number = CAST(? AS BIGINT)
-                     ORDER BY id DESC
-                     LIMIT 1
-                  ), -1))
-                GROUP BY product_id
-              ) res ON res.product_id = p.id
+            """ + ProductStockAvailabilitySql.JOINS + """
               WHERE p.id IN (""" + placeholders + """
               )
             )
@@ -76,7 +52,10 @@ public class PostgresProductStockValidationRepository implements ProductStockVal
               gift_allowed,
               facturable_sunat,
               manage_by_serial,
-              stock_available
+              stock_available,
+              stock_on_hand,
+              stock_reserved,
+              stock_reserved_by_source
             FROM base
             """;
 
@@ -102,6 +81,10 @@ public class PostgresProductStockValidationRepository implements ProductStockVal
                             .facturableSunat((Boolean) rs.getObject("facturable_sunat"))
                             .manageBySerial((Boolean) rs.getObject("manage_by_serial"))
                             .stockAvailable(stockAvailable)
+                            .stockOnHand(rs.getBigDecimal("stock_on_hand"))
+                            .stockReserved(rs.getBigDecimal("stock_reserved"))
+                            .stockReservedBySource(rs.getBigDecimal("stock_reserved_by_source"))
+                            .stockReservations(List.of())
                             .inStock(inStock)
                             .availableSerialUnits(List.of())
                             .build();
@@ -110,6 +93,8 @@ public class PostgresProductStockValidationRepository implements ProductStockVal
 
         Map<Long, ProductStockValidationDto> byId = found.stream()
                 .collect(Collectors.toMap(ProductStockValidationDto::getId, x -> x, (a, b) -> a, LinkedHashMap::new));
+
+        attachOtherReservations(byId, sourceProformaNumber);
 
         // 2) Serial units (si aplica)
         if (includeSerialUnits) {
@@ -175,6 +160,10 @@ public class PostgresProductStockValidationRepository implements ProductStockVal
                         .id(id)
                         .exists(false)
                         .stockAvailable(BigDecimal.ZERO)
+                        .stockOnHand(BigDecimal.ZERO)
+                        .stockReserved(BigDecimal.ZERO)
+                        .stockReservedBySource(BigDecimal.ZERO)
+                        .stockReservations(List.of())
                         .inStock(false)
                         .availableSerialUnits(List.of())
                         .build());
@@ -187,8 +176,65 @@ public class PostgresProductStockValidationRepository implements ProductStockVal
     private List<Object> validationParams(Long sourceProformaNumber, List<Long> cleanIds) {
         List<Object> params = new ArrayList<>();
         params.add(sourceProformaNumber);
-        params.add(sourceProformaNumber);
         params.addAll(cleanIds);
         return params;
+    }
+
+    private void attachOtherReservations(Map<Long, ProductStockValidationDto> byId, Long sourceProformaNumber) {
+        List<Long> ids = byId.values().stream()
+                .filter(product -> !Boolean.FALSE.equals(product.getAffectsStock()))
+                .filter(product -> !Boolean.TRUE.equals(product.getManageBySerial()))
+                .filter(product -> product.getStockReserved().signum() > 0)
+                .map(ProductStockValidationDto::getId)
+                .toList();
+        if (ids.isEmpty()) return;
+
+        String placeholders = ids.stream().map(id -> "?").collect(Collectors.joining(","));
+        String sql = """
+            SELECT r.product_id, r.id AS reservation_id, r.proforma_id,
+                   pf.series AS proforma_series, pf.number AS proforma_number,
+                   r.reserved_by,
+                   COALESCE(NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), ''),
+                            u.username, 'Sin vendedor') AS reserved_by_name,
+                   r.quantity, r.expires_at
+              FROM product_stock_reservation r
+              JOIN proforma pf ON pf.id = r.proforma_id
+              LEFT JOIN users u ON u.id = r.reserved_by
+             WHERE r.status = 'ACTIVE'
+               AND r.reserved_date = CURRENT_DATE
+               AND r.proforma_id IS DISTINCT FROM (
+                 SELECT id FROM proforma WHERE number = CAST(? AS BIGINT)
+                  ORDER BY id DESC LIMIT 1
+               )
+               AND r.product_id IN (
+            """ + placeholders + """
+               )
+             ORDER BY r.product_id, r.expires_at, r.created_at, r.id
+            """;
+
+        jdbcClient.sql(sql)
+                .params(validationParams(sourceProformaNumber, ids).toArray())
+                .query((rs, rowNum) -> new ReservationRow(
+                        rs.getLong("product_id"),
+                        ProductStockReservationDto.builder()
+                                .reservationId(rs.getLong("reservation_id"))
+                                .proformaId(rs.getLong("proforma_id"))
+                                .proformaSeries(rs.getString("proforma_series"))
+                                .proformaNumber(rs.getLong("proforma_number"))
+                                .reservedBy((Long) rs.getObject("reserved_by"))
+                                .reservedByName(rs.getString("reserved_by_name"))
+                                .quantity(rs.getBigDecimal("quantity"))
+                                .expiresAt(rs.getTimestamp("expires_at") == null ? null :
+                                        rs.getTimestamp("expires_at").toLocalDateTime())
+                                .build()
+                ))
+                .list()
+                .stream()
+                .collect(Collectors.groupingBy(ReservationRow::productId,
+                        Collectors.mapping(ReservationRow::reservation, Collectors.toList())))
+                .forEach((id, reservations) -> byId.get(id).setStockReservations(reservations));
+    }
+
+    private record ReservationRow(Long productId, ProductStockReservationDto reservation) {
     }
 }

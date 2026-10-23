@@ -17,6 +17,8 @@ public class ErrorResponse {
     private int status;
     private String error;
     private String cause;
+    private Boolean saleOperationRejected;
+    private String idempotencyKey;
     private LocalDateTime timestamp;
 
     public static ErrorResponse badRequest(Exception exception) {

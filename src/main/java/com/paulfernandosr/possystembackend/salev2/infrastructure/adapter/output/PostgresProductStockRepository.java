@@ -54,6 +54,11 @@ public class PostgresProductStockRepository implements ProductStockRepository {
 
     @Override
     public StockMovementBalance decreaseOnHandOrFail(Long productId, BigDecimal quantity) {
+        // A separate statement takes the same mutex as reservation creation. The subsequent
+        // UPDATE gets a fresh READ COMMITTED snapshot after any competing transaction commits.
+        jdbcClient.sql("SELECT quantity_on_hand FROM product_stock WHERE product_id = ? FOR UPDATE")
+                .param(productId).query(BigDecimal.class).optional()
+                .orElseThrow(() -> new InvalidSaleV2Exception("Stock insuficiente para productId=" + productId));
         String sql = """
             UPDATE product_stock
                SET quantity_on_hand = quantity_on_hand - ?,

@@ -122,6 +122,7 @@ public class ConvertProformaToSaleV2Service implements ConvertProformaToSaleV2Us
                 // La venta desde proforma se resuelve por NÚMERO visible.
                 // CreateSaleV2Service bloqueará por p.number y guardará relación por p.id.
                 .sourceProformaNumber(p.getNumber())
+                .stockReservationReassignments(request.getStockReservationReassignments())
                 .items(mapItems(items, serialsByLine, request.getDocType()))
                 .payment(null)
                 .build();

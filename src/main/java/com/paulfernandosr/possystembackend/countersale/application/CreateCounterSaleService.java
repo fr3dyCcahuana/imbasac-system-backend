@@ -204,6 +204,12 @@ public class CreateCounterSaleService implements CreateCounterSaleUseCase {
         Totals totals = calculateTotals(taxStatus, igvIncluded, igvRate, computedLines);
         validateDocumentRules(request, totals);
 
+        // Match sales/reservations lock order before writing items or decrementing any product.
+        productStockRepository.lockProducts(computedLines.stream()
+                .filter(line -> Boolean.TRUE.equals(line.getProduct().getAffectsStock()))
+                .map(line -> line.getProduct().getId())
+                .distinct().sorted().toList());
+
         Long counterSaleId = counterSaleRepository.insertCounterSale(
                 request.getStationId(),
                 resolvedSaleSessionId,

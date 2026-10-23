@@ -21,6 +21,10 @@ public class ProductStockValidationDto {
     private Boolean facturableSunat;
 
     private BigDecimal stockAvailable;
+    private BigDecimal stockOnHand;
+    private BigDecimal stockReserved;
+    private BigDecimal stockReservedBySource;
+    private List<ProductStockReservationDto> stockReservations;
     private boolean inStock;
 
     private List<ProductSerialUnit> availableSerialUnits;
