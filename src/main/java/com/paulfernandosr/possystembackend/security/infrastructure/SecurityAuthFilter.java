@@ -1,7 +1,6 @@
 package com.paulfernandosr.possystembackend.security.infrastructure;
 
-import com.paulfernandosr.possystembackend.common.infrastructure.ExceptionUtils;
-import com.paulfernandosr.possystembackend.security.infrastructure.adapter.output.RedisSessionRepository;
+import com.paulfernandosr.possystembackend.security.domain.port.output.SessionRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,7 +25,7 @@ import java.io.IOException;
 public class SecurityAuthFilter extends OncePerRequestFilter {
     private final JsonWebTokenUtils jsonWebTokenUtils;
     private final UserDetailsService userDetailsService;
-    private final RedisSessionRepository redisSessionRepository;
+    private final SessionRepository sessionRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -37,8 +36,9 @@ public class SecurityAuthFilter extends OncePerRequestFilter {
         String token = null;
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             token = authHeader.substring(7);
-        } else {
-            // EventSource (SSE) no puede enviar el header Authorization: aceptar el token por query param.
+        } else if ("GET".equals(request.getMethod())
+                && "/community-notifications/stream".equals(request.getServletPath())) {
+            // Temporary EventSource compatibility until authenticated streaming is migrated.
             String paramToken = request.getParameter("token");
             if (paramToken != null && !paramToken.isBlank()) {
                 token = paramToken;
@@ -51,12 +51,15 @@ public class SecurityAuthFilter extends OncePerRequestFilter {
         }
 
         try {
-            final String username = jsonWebTokenUtils.extractUsername(token);
+            var identity = jsonWebTokenUtils.parseAccessToken(token);
+            final String username = identity.username();
 
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-                if (jsonWebTokenUtils.isTokenValid(token, userDetails) && redisSessionRepository.existsByUsername(username)) {
+                if (userDetails.isEnabled() && userDetails.isAccountNonLocked()
+                        && userDetails.isAccountNonExpired() && userDetails.isCredentialsNonExpired()
+                        && sessionRepository.isActive(identity.sessionId(), username)) {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             userDetails,
                             null,
@@ -68,8 +71,8 @@ public class SecurityAuthFilter extends OncePerRequestFilter {
                 }
             }
         } catch (Exception exception) {
-            log.error("SecurityAuthFilter:doFilterInternal {}", ExceptionUtils.getError(exception));
-            log.error("SecurityAuthFilter:doFilterInternal {}", ExceptionUtils.getCause(exception));
+            // Parser/Redis messages may contain credentials or connection details.
+            log.debug("Authentication rejected ({})", exception.getClass().getSimpleName());
         }
 
         filterChain.doFilter(request, response);

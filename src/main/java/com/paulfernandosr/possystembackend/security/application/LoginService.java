@@ -33,16 +33,19 @@ public class LoginService implements LoginUseCase {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UserNotFoundException("User not found with identification: " + username));
 
+        if (!user.isEnabled()) {
+            throw new InvalidCredentialsException("User credentials are invalid");
+        }
+
         if (user.requiresCashSession() && user.isNotOnRegister()) {
             throw new InvalidCredentialsException("User requires cash session and is not on register with identification: " + username);
         }
 
-        sessionRepository.deleteByUsername(username);
-
+        UUID sessionId = UUID.randomUUID();
         Session session = Session.builder()
-                .id(UUID.randomUUID())
+                .id(sessionId)
                 .username(username)
-                .token(tokenGenerationPort.generateToken(username))
+                .token(tokenGenerationPort.generateToken(username, sessionId))
                 .build();
 
         sessionRepository.create(session);

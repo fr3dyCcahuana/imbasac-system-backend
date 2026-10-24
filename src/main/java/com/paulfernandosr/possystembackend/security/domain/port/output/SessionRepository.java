@@ -10,9 +10,9 @@ public interface SessionRepository {
 
     Optional<Session> findById(UUID sessionId);
 
-    boolean existsByUsername(String username);
+    boolean isActive(String accessSessionId, String username);
 
-    void refreshById(UUID sessionId);
+    boolean refreshById(UUID sessionId);
 
     void deleteById(UUID sessionId);
 

@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.user.domain;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.paulfernandosr.possystembackend.permission.domain.Permission;
 import com.paulfernandosr.possystembackend.role.domain.Role;
 import com.paulfernandosr.possystembackend.role.domain.RoleName;
@@ -17,6 +18,7 @@ public class User {
     private String firstName;
     private String lastName;
     private String username;
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
     private Role role;
     private boolean enabled;

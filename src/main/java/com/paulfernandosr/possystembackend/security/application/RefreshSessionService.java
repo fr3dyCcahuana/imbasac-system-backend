@@ -5,6 +5,7 @@ import com.paulfernandosr.possystembackend.security.domain.exception.InvalidSess
 import com.paulfernandosr.possystembackend.security.domain.port.input.RefreshSessionUseCase;
 import com.paulfernandosr.possystembackend.security.domain.port.output.TokenGenerationPort;
 import com.paulfernandosr.possystembackend.security.domain.port.output.SessionRepository;
+import com.paulfernandosr.possystembackend.user.domain.port.output.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -15,15 +16,25 @@ import java.util.UUID;
 public class RefreshSessionService implements RefreshSessionUseCase {
     private final SessionRepository sessionRepository;
     private final TokenGenerationPort tokenGenerationPort;
+    private final UserRepository userRepository;
 
     @Override
     public Session refreshSession(UUID sessionId) {
         Session session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new InvalidSessionException("Invalid session with identification: " + sessionId));
+                .orElseThrow(() -> new InvalidSessionException("Invalid session"));
 
-        sessionRepository.refreshById(sessionId);
+        boolean enabled = userRepository.findByUsername(session.getUsername())
+                .map(user -> user.isEnabled()).orElse(false);
+        if (!enabled) {
+            sessionRepository.deleteById(sessionId);
+            throw new InvalidSessionException("Invalid session");
+        }
 
-        session.setToken(tokenGenerationPort.generateToken(session.getUsername()));
+        if (!sessionRepository.refreshById(sessionId)) {
+            throw new InvalidSessionException("Invalid session");
+        }
+
+        session.setToken(tokenGenerationPort.generateToken(session.getUsername(), sessionId));
 
         return session;
     }
