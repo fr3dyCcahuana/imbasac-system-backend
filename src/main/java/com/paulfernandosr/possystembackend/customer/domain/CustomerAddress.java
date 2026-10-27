@@ -42,4 +42,5 @@ public class CustomerAddress {
     private java.time.LocalDateTime geolocationVerifiedAt;
     private Long geolocationVerifiedBy;
     private String geolocationAddressHash;
+    private java.time.LocalDateTime updatedAt;
 }

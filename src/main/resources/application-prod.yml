@@ -123,8 +123,8 @@ app:
       bounds: [-81.5, -18.5, -68.5, 0.5]
       center: [-75.0152, -9.19]
       min-zoom: 4
-      max-zoom: 14
-      urban-zoom: 14
+      max-zoom: 21
+      urban-zoom: 18
     geocoder:
       enabled: true
       provider: NOMINATIM

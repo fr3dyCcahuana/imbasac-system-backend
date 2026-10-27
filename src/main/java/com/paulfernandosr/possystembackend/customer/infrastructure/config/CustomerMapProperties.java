@@ -19,8 +19,8 @@ public class CustomerMapProperties {
         private double[] bounds = {-81.5, -18.5, -68.5, 0.5};
         private double[] center = {-75.0152, -9.19};
         private double minZoom = 4;
-        private double maxZoom = 19;
-        private double urbanZoom = 17;
+        private double maxZoom = 21;
+        private double urbanZoom = 18;
     }
 
     @Getter

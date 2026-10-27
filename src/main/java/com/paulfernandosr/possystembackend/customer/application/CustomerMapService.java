@@ -118,10 +118,14 @@ public class CustomerMapService {
                                                            boolean verified) {
         User actor = currentUser(principal);
         validateCoordinates(request == null ? null : request.getLatitude(), request == null ? null : request.getLongitude());
+        if (request.getAccuracyMeters() != null
+                && (!Double.isFinite(request.getAccuracyMeters()) || request.getAccuracyMeters() < 0)) {
+            throw new InvalidCustomerException("La precision debe ser un numero finito mayor o igual a cero");
+        }
         CustomerAddress locked = lockAddress(customerId, addressId);
 
-        if (request != null && request.getExpectedUpdatedAt() != null && locked.getGeolocatedAt() != null
-                && locked.getGeolocatedAt().isAfter(request.getExpectedUpdatedAt())) {
+        if (request.getExpectedUpdatedAt() != null
+                && !request.getExpectedUpdatedAt().equals(locked.getUpdatedAt())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "La ubicacion fue modificada por otro usuario. Actualice la informacion.");
         }
 
@@ -138,9 +142,10 @@ public class CustomerMapService {
                     geolocation_accuracy_meters = ?,
                     geolocated_at = CURRENT_TIMESTAMP,
                     geolocated_by = ?,
-                    geolocation_verified_at = CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE geolocation_verified_at END,
-                    geolocation_verified_by = CASE WHEN ? THEN ? ELSE geolocation_verified_by END,
-                    geolocation_address_hash = ?
+                    geolocation_verified_at = CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END,
+                    geolocation_verified_by = CASE WHEN ? THEN ? ELSE NULL END,
+                    geolocation_address_hash = ?,
+                    updated_at = clock_timestamp()
                 WHERE id = ?
                   AND customer_id = ?
                   AND enabled = TRUE
@@ -418,22 +423,22 @@ public class CustomerMapService {
                 CustomerAddressGeolocationDetailResponse detail = detail(target.customerId(), target.addressId());
                 NominatimMatch match = searchNominatim(detail, properties.getGeocoder());
                 if (match == null || match.result() == null || !hasText(match.result().lat()) || !hasText(match.result().lon())) {
-                    markAddressStatus(target.customerId(), target.addressId(), GeolocationStatus.NOT_FOUND, actorId);
+                    markAddressStatus(target.customerId(), target.addressId(), GeolocationStatus.NOT_FOUND, actorId, detail.getUpdatedAt());
                     rejected++;
                     continue;
                 }
                 if (hasText(match.rejectionReason())) {
-                    markAddressStatus(target.customerId(), target.addressId(), GeolocationStatus.NEEDS_REVIEW, actorId);
+                    markAddressStatus(target.customerId(), target.addressId(), GeolocationStatus.NEEDS_REVIEW, actorId, detail.getUpdatedAt());
                     rejected++;
                     continue;
                 }
                 if (match.approximate()) {
-                    markAddressStatus(target.customerId(), target.addressId(), GeolocationStatus.NEEDS_REVIEW, actorId);
+                    markAddressStatus(target.customerId(), target.addressId(), GeolocationStatus.NEEDS_REVIEW, actorId, detail.getUpdatedAt());
                     rejected++;
                     continue;
                 }
 
-                saveGeocoderLocation(target, match.result(), actorId);
+                saveGeocoderLocation(target, match.result(), actorId, detail.getUpdatedAt());
                 saved++;
             } catch (Exception ex) {
                 failed++;
@@ -750,7 +755,13 @@ public class CustomerMapService {
         StringBuilder sql = new StringBuilder(select).append("""
                 FROM customer_address ca
                 INNER JOIN customers c ON c.id = ca.customer_id
-                LEFT JOIN customer_assignments ass ON ass.customer_id = c.id AND ass.active = TRUE
+                LEFT JOIN LATERAL (
+                    SELECT assignment.user_id
+                    FROM customer_assignments assignment
+                    WHERE assignment.customer_id = c.id AND assignment.active = TRUE
+                    ORDER BY assignment.assigned_at DESC NULLS LAST, assignment.id DESC
+                    LIMIT 1
+                ) ass ON TRUE
                 LEFT JOIN users u ON u.id = ass.user_id
                 WHERE ca.enabled = TRUE
                   AND c.enabled = TRUE
@@ -758,6 +769,10 @@ public class CustomerMapService {
                 """);
 
         List<Object> params = new ArrayList<>();
+        if (hasText(value(filters, "addressId"))) {
+            sql.append(" AND ca.id = ?");
+            params.add(Long.valueOf(value(filters, "addressId")));
+        }
         String search = value(filters, "search");
         if (hasText(search)) {
             sql.append("""
@@ -800,7 +815,7 @@ public class CustomerMapService {
         addDoubleRange(sql, params, "ca.longitude", "<=", value(filters, "maxLongitude"));
 
         if (!summary) {
-            sql.append(" ORDER BY ca.geolocation_status, c.legal_name, ca.fiscal DESC, ca.position ASC LIMIT 5000");
+            sql.append(" ORDER BY ca.geolocation_status, c.legal_name, ca.fiscal DESC, ca.position ASC, ca.id ASC LIMIT 5000");
         }
 
         return new QueryParts(sql.toString(), params);
@@ -833,10 +848,16 @@ public class CustomerMapService {
                     trim(concat(COALESCE(geo_user.first_name, ''), ' ', COALESCE(geo_user.last_name, ''))) AS geolocated_by_name,
                     ca.geolocation_verified_at,
                     trim(concat(COALESCE(ver_user.first_name, ''), ' ', COALESCE(ver_user.last_name, ''))) AS geolocation_verified_by_name,
-                    ca.updated_at
+                    GREATEST(ca.updated_at, ca.geolocated_at) AS updated_at
                 FROM customer_address ca
                 INNER JOIN customers c ON c.id = ca.customer_id
-                LEFT JOIN customer_assignments ass ON ass.customer_id = c.id AND ass.active = TRUE
+                LEFT JOIN LATERAL (
+                    SELECT assignment.user_id
+                    FROM customer_assignments assignment
+                    WHERE assignment.customer_id = c.id AND assignment.active = TRUE
+                    ORDER BY assignment.assigned_at DESC NULLS LAST, assignment.id DESC
+                    LIMIT 1
+                ) ass ON TRUE
                 LEFT JOIN users u ON u.id = ass.user_id
                 LEFT JOIN users geo_user ON geo_user.id = ca.geolocated_by
                 LEFT JOIN users ver_user ON ver_user.id = ca.geolocation_verified_by
@@ -900,22 +921,28 @@ public class CustomerMapService {
         }
     }
 
-    private void markAddressStatus(Long customerId, Long addressId, GeolocationStatus status, Long actorId) {
-        jdbcClient.sql("""
+    private void markAddressStatus(Long customerId, Long addressId, GeolocationStatus status, Long actorId, LocalDateTime expectedUpdatedAt) {
+        int updated = jdbcClient.sql("""
                 UPDATE customer_address
                 SET geolocation_status = ?,
                     geolocation_source = ?,
                     geolocated_at = CURRENT_TIMESTAMP,
-                    geolocated_by = ?
+                    geolocated_by = ?,
+                    updated_at = clock_timestamp()
                 WHERE id = ?
                   AND customer_id = ?
                   AND enabled = TRUE
+                  AND geolocation_status IN ('PENDING', 'NEEDS_REVIEW', 'NOT_FOUND')
+                  AND GREATEST(updated_at, geolocated_at) IS NOT DISTINCT FROM ?
                 """)
-                .params(status.name(), GeolocationSource.GEOCODER.name(), actorId, addressId, customerId)
+                .params(status.name(), GeolocationSource.GEOCODER.name(), actorId, addressId, customerId, expectedUpdatedAt)
                 .update();
+        if (updated != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "La direccion cambio durante la busqueda automatica");
+        }
     }
 
-    private void saveGeocoderLocation(BatchTarget target, NominatimResult result, Long actorId) {
+    private void saveGeocoderLocation(BatchTarget target, NominatimResult result, Long actorId, LocalDateTime expectedUpdatedAt) {
         double latitude = Double.parseDouble(result.lat());
         double longitude = Double.parseDouble(result.lon());
         validateCoordinates(latitude, longitude);
@@ -932,10 +959,15 @@ public class CustomerMapService {
                     geolocation_accuracy_meters = ?,
                     geolocated_at = CURRENT_TIMESTAMP,
                     geolocated_by = ?,
-                    geolocation_address_hash = ?
+                    geolocation_address_hash = ?,
+                    geolocation_verified_at = NULL,
+                    geolocation_verified_by = NULL,
+                    updated_at = clock_timestamp()
                 WHERE id = ?
                   AND customer_id = ?
                   AND enabled = TRUE
+                  AND geolocation_status IN ('PENDING', 'NEEDS_REVIEW', 'NOT_FOUND')
+                  AND GREATEST(updated_at, geolocated_at) IS NOT DISTINCT FROM ?
                 """)
                 .params(latitude,
                         longitude,
@@ -945,11 +977,12 @@ public class CustomerMapService {
                         actorId,
                         hash,
                         target.addressId(),
-                        target.customerId())
+                        target.customerId(),
+                        expectedUpdatedAt)
                 .update();
 
         if (updated != 1) {
-            throw new InvalidCustomerException("La direccion no pertenece al cliente");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "La direccion cambio durante la busqueda automatica");
         }
     }
 
@@ -959,7 +992,8 @@ public class CustomerMapService {
                        phone, email, fiscal, enabled, position, latitude, longitude,
                        geolocation_status, geolocation_source, geolocation_accuracy_meters,
                        geolocated_at, geolocated_by, geolocation_verified_at,
-                       geolocation_verified_by, geolocation_address_hash
+                       geolocation_verified_by, geolocation_address_hash,
+                       GREATEST(updated_at, geolocated_at) AS updated_at
                 FROM customer_address
                 WHERE id = ?
                   AND customer_id = ?
@@ -1039,6 +1073,9 @@ public class CustomerMapService {
     private void validateCoordinates(Double latitude, Double longitude) {
         if (latitude == null || longitude == null) {
             throw new InvalidCustomerException("Latitude and longitude are required together");
+        }
+        if (!Double.isFinite(latitude) || !Double.isFinite(longitude)) {
+            throw new InvalidCustomerException("Las coordenadas deben ser numeros finitos");
         }
         if (latitude < -90 || latitude > 90) {
             throw new InvalidCustomerException("Latitude is invalid");
