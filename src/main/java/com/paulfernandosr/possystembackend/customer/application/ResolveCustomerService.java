@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.customer.application;
 
 import com.paulfernandosr.possystembackend.customer.domain.Customer;
+import com.paulfernandosr.possystembackend.customer.domain.CustomerEditRevision;
 import com.paulfernandosr.possystembackend.customer.domain.DocumentType;
 import com.paulfernandosr.possystembackend.customer.domain.exception.CustomerNotFoundException;
 import com.paulfernandosr.possystembackend.customer.domain.exception.InvalidCustomerException;
@@ -25,6 +26,7 @@ public class ResolveCustomerService implements ResolveCustomerUseCase {
         if (foundCustomer.isPresent()) {
             Customer existingCustomer = foundCustomer.get();
             refreshMissingResolvedData(existingCustomer);
+            existingCustomer.setEditRevision(CustomerEditRevision.calculate(existingCustomer));
             return existingCustomer;
         }
 

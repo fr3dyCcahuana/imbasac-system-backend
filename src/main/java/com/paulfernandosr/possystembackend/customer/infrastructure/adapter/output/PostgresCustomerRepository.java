@@ -5,6 +5,7 @@ import com.paulfernandosr.possystembackend.common.domain.Pageable;
 import com.paulfernandosr.possystembackend.common.infrastructure.mapper.QueryMapper;
 import com.paulfernandosr.possystembackend.customer.domain.Customer;
 import com.paulfernandosr.possystembackend.customer.domain.CustomerAddress;
+import com.paulfernandosr.possystembackend.customer.domain.CustomerEditRevision;
 import com.paulfernandosr.possystembackend.customer.domain.DocumentType;
 import com.paulfernandosr.possystembackend.customer.domain.port.output.CustomerRepository;
 import lombok.RequiredArgsConstructor;
@@ -69,8 +70,8 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 .params(customer.getLegalName(),
                         customer.getDocumentType().toString(),
                         customer.getDocumentNumber(),
-                        null,
-                        null,
+                        customer.getPhone(),
+                        customer.getEmail(),
                         customer.getGivenNames(),
                         customer.getLastName(),
                         customer.getSecondLastName(),
@@ -110,6 +111,8 @@ public class PostgresCustomerRepository implements CustomerRepository {
 
         // Direcciones (fiscal + anexos)
         createCustomerAddresses(customer);
+        loadCustomerAddresses(customer);
+        customer.setEditRevision(CustomerEditRevision.calculate(customer));
     }
 
     @Override
@@ -119,6 +122,8 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 SET legal_name = ?,
                     document_type = ?,
                     document_number = ?,
+                    phone = ?,
+                    email = ?,
                     given_names = ?,
                     last_name = ?,
                     second_last_name = ?,
@@ -154,6 +159,8 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 .params(customer.getLegalName(),
                         customer.getDocumentType().toString(),
                         customer.getDocumentNumber(),
+                        customer.getPhone(),
+                        customer.getEmail(),
                         customer.getGivenNames(),
                         customer.getLastName(),
                         customer.getSecondLastName(),
@@ -297,7 +304,24 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 .optional();
 
         customerOpt.ifPresent(this::loadCustomerAddresses);
+        customerOpt.ifPresent(customer -> customer.setEditRevision(CustomerEditRevision.calculate(customer)));
         return customerOpt;
+    }
+
+    @Override
+    public Optional<Customer> findByIdForUpdate(Long customerId) {
+        Optional<Long> parent = jdbcClient.sql("SELECT id FROM customers WHERE id = ? FOR UPDATE")
+                .param(customerId)
+                .query(Long.class)
+                .optional();
+        if (parent.isEmpty()) {
+            return Optional.empty();
+        }
+        jdbcClient.sql("SELECT id FROM customer_address WHERE customer_id = ? ORDER BY id FOR UPDATE")
+                .param(customerId)
+                .query(Long.class)
+                .list();
+        return findById(customerId);
     }
 
     @Override
@@ -352,6 +376,7 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 .optional();
 
         customerOpt.ifPresent(this::loadCustomerAddresses);
+        customerOpt.ifPresent(customer -> customer.setEditRevision(CustomerEditRevision.calculate(customer)));
         return customerOpt;
     }
 
@@ -381,7 +406,8 @@ public class PostgresCustomerRepository implements CustomerRepository {
                     geolocated_by,
                     geolocation_verified_at,
                     geolocation_verified_by,
-                    geolocation_address_hash
+                    geolocation_address_hash,
+                    updated_at
                 FROM customer_address
                 WHERE customer_id = ?
                 ORDER BY fiscal DESC, position ASC, id ASC
@@ -419,6 +445,26 @@ public class PostgresCustomerRepository implements CustomerRepository {
                         department,
                         province,
                         district,
+                        sunat_status,
+                        sunat_condition,
+                        street_type,
+                        street_name,
+                        zone_code,
+                        zone_type,
+                        address_number,
+                        interior,
+                        lot,
+                        apartment,
+                        block,
+                        kilometer,
+                        retention_agent,
+                        good_contributor,
+                        sunat_type,
+                        economic_activity,
+                        number_of_employees,
+                        billing_type,
+                        accounting_type,
+                        foreign_trade,
                         enabled
                     FROM
                         customers
@@ -494,7 +540,8 @@ public class PostgresCustomerRepository implements CustomerRepository {
                     geolocated_by,
                     geolocation_verified_at,
                     geolocation_verified_by,
-                    geolocation_address_hash
+                    geolocation_address_hash,
+                    updated_at
                 FROM customer_address
                 WHERE customer_id IN (:customerIds)
                 ORDER BY fiscal DESC, position ASC, id ASC
@@ -514,6 +561,7 @@ public class PostgresCustomerRepository implements CustomerRepository {
 
         for (Customer customer : customers) {
             customer.setAddresses(addressesByCustomerId.getOrDefault(customer.getId(), List.of()));
+            customer.setEditRevision(CustomerEditRevision.calculate(customer));
         }
     }
 
@@ -646,6 +694,10 @@ public class PostgresCustomerRepository implements CustomerRepository {
         customerAddress.setId(addressId);
         customerAddress.setCustomerId(customerId);
 
+        if (customerAddress.isFiscal()) {
+            syncMainAddressFromFiscal(customerId);
+        }
+
         return customerAddress;
     }
 
@@ -725,7 +777,7 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 ? "NEEDS_REVIEW"
                 : (current.getGeolocationStatus() == null ? "PENDING" : current.getGeolocationStatus().name());
 
-        return jdbcClient.sql(updateAddressSql)
+        CustomerAddress updatedAddress = jdbcClient.sql(updateAddressSql)
                 .params(customerAddress.getAddress(),
                         customerAddress.getUbigeo(),
                         customerAddress.getDepartment(),
@@ -740,6 +792,30 @@ public class PostgresCustomerRepository implements CustomerRepository {
                 .query(CustomerAddress.class)
                 .optional()
                 .orElseThrow(() -> new IllegalArgumentException("Customer address not found"));
+        if (updatedAddress.isFiscal()) {
+            syncMainAddressFromFiscal(customerId);
+        }
+        return updatedAddress;
+    }
+
+    private void syncMainAddressFromFiscal(Long customerId) {
+        jdbcClient.sql("""
+                UPDATE customers c
+                SET address = ca.address,
+                    ubigeo = ca.ubigeo,
+                    department = ca.department,
+                    province = ca.province,
+                    district = ca.district,
+                    phone = NULL,
+                    email = NULL
+                FROM customer_address ca
+                WHERE c.id = ?
+                  AND ca.customer_id = c.id
+                  AND ca.fiscal = TRUE
+                  AND ca.enabled = TRUE
+                """)
+                .param(customerId)
+                .update();
     }
 
     private int nextAddressPosition(Long customerId) {
@@ -758,6 +834,11 @@ public class PostgresCustomerRepository implements CustomerRepository {
     @Override
     public void replaceAddresses(Long customerId, List<CustomerAddress> addresses) {
         if (addresses == null) return;
+
+        // Release the old fiscal flag before promoting another retained/new address.
+        jdbcClient.sql("UPDATE customer_address SET fiscal = FALSE WHERE customer_id = ? AND fiscal = TRUE")
+                .param(customerId)
+                .update();
 
         Set<Long> retainedIds = new HashSet<>();
 

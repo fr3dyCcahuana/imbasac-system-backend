@@ -29,8 +29,18 @@ class SecurityAuthFilterTest {
     }
     @Test void rejectsOldSessionEvenWhenUserHasAnotherLogin() throws Exception {
         configure(true);
-        filter.doFilter(bearer(), new MockHttpServletResponse(), new MockFilterChain());
+        var request=bearer();
+        filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        assertThat(request.getAttribute("imbasac.verifiedTokenUsername")).isEqualTo("client");
+        assertThat(request.getAttribute("imbasac.auditFailureReason")).isEqualTo("SESSION_NOT_ACTIVE");
+    }
+    @Test void forgedTokenCannotAttributeAUserToTheAudit() throws Exception {
+        when(tokens.parseAccessToken("secret")).thenThrow(new io.jsonwebtoken.JwtException("DO_NOT_COPY"));
+        var request=bearer(); filter.doFilter(request,new MockHttpServletResponse(),new MockFilterChain());
+        assertThat(request.getAttribute("imbasac.verifiedTokenUsername")).isNull();
+        assertThat(request.getAttribute("imbasac.auditFailureReason")).isEqualTo("SESSION_TOKEN_INVALID");
+        verifyNoInteractions(users,sessions);
     }
     @Test void rejectsDisabledAccount() throws Exception {
         configure(false);
@@ -44,12 +54,13 @@ class SecurityAuthFilterTest {
         filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
         verifyNoInteractions(tokens, users, sessions);
     }
-    @Test void temporarySseQueryCompatibilityIsRestrictedToGetStream() throws Exception {
+    @Test void sseAlsoRejectsQueryCredentialsAfterBearerMigration() throws Exception {
         configure(true); when(sessions.isActive(session, "client")).thenReturn(true);
         var request = new MockHttpServletRequest("GET", "/community-notifications/stream");
         request.setServletPath("/community-notifications/stream"); request.addParameter("token", "secret");
         filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
-        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verifyNoInteractions(tokens,users,sessions);
     }
     @Test void failsClosedWhenSessionStoreIsUnavailable() throws Exception {
         configure(true); when(sessions.isActive(session, "client")).thenThrow(new IllegalStateException("store offline"));

@@ -20,6 +20,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
@@ -27,6 +28,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -306,7 +308,10 @@ public class SunatRucScraper {
 
             Optional<JuridicalPerson> person = parseJuridicalPerson(html, ruc);
             if (person.isEmpty()) {
-                return Optional.empty();
+                if (isExplicitRucNotFound(html)) {
+                    return Optional.empty();
+                }
+                throw lookupUnavailable();
             }
 
             List<JuridicalPersonLocal> annexLocations = safeFetchAnnexLocations(html, ruc, cookieHeader);
@@ -314,10 +319,10 @@ public class SunatRucScraper {
             return person;
         } catch (RestClientException ex) {
             log.warn("SUNAT RUC: error HTTP con RestClient para {}: {}", ruc, shortMessage(ex));
-            return Optional.empty();
+            throw lookupUnavailable();
         } catch (RuntimeException ex) {
             log.warn("SUNAT RUC: error interpretando RestClient para {}: {}", ruc, shortMessage(ex));
-            return Optional.empty();
+            throw lookupUnavailable();
         }
     }
 
@@ -421,27 +426,22 @@ public class SunatRucScraper {
         }
 
         Document document = Jsoup.parse(html);
-        String fullText = SunatUbigeoResolver.normalizeKey(document.text());
-
-        if (fullText == null || fullText.contains("NO REGISTRA") || fullText.contains("NO EXISTE")) {
-            log.info("SUNAT RUC: respuesta indica no registrado/no existe para {}", requestedRuc);
-            return Optional.empty();
-        }
 
         Map<String, String> fields = extractFieldMap(document);
         log.info("SUNAT RUC: campos detectados para {} => {}", requestedRuc, fields.keySet());
 
-        String rucWithName = firstNonBlank(fields.get("NUMERO DE RUC"), findRucNameInText(document.text(), requestedRuc));
+        String rucWithName = fields.get("NUMERO DE RUC");
 
-        if (isBlank(rucWithName) || !rucWithName.contains(requestedRuc)) {
+        if (isBlank(rucWithName)) {
             log.info("SUNAT RUC: no se encontró campo Número de RUC para {}. rucWithName={}", requestedRuc, safe(rucWithName));
             return Optional.empty();
         }
 
         Matcher matcher = RUC_AND_NAME_PATTERN.matcher(rucWithName);
-        String businessName = matcher.matches()
-                ? matcher.group(2)
-                : rucWithName.replace(requestedRuc, "").replace("-", "");
+        if (!matcher.matches() || !requestedRuc.equals(matcher.group(1))) {
+            return Optional.empty();
+        }
+        String businessName = matcher.group(2);
 
         if (isBlank(businessName)) {
             log.info("SUNAT RUC: no se pudo determinar razón social para {}", requestedRuc);
@@ -756,9 +756,24 @@ public class SunatRucScraper {
         String text = SunatUbigeoResolver.normalizeKey(Jsoup.parse(html).text());
         return text != null
                 && text.contains(ruc)
-                && text.contains("NUMERO DE RUC")
-                && !text.contains("NO REGISTRA")
-                && !text.contains("NO EXISTE");
+                && text.contains("NUMERO DE RUC");
+    }
+
+    private boolean isExplicitRucNotFound(String html) {
+        if (isBlank(html) || isCaptchaOrCodePage(html)) {
+            return false;
+        }
+        String text = SunatUbigeoResolver.normalizeKey(Jsoup.parse(html).text());
+        return text != null && Pattern.compile(
+                "\\b(?:EL (?:NUMERO DE )?RUC(?: INGRESADO)? NO (?:EXISTE|SE ENCUENTRA REGISTRADO)"
+                        + "|NO EXISTE EL (?:NUMERO DE )?RUC(?: INGRESADO)?"
+                        + "|NO SE ENCONTRARON RESULTADOS PARA EL RUC)\\b")
+                .matcher(text).find();
+    }
+
+    private ResponseStatusException lookupUnavailable() {
+        return new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "No se pudo completar la consulta de RUC en SUNAT. Intente nuevamente en unos momentos.");
     }
 
     private boolean isCaptchaOrCodePage(String html) {
@@ -826,18 +841,6 @@ public class SunatRucScraper {
         if (isBlank(current)) return incoming;
         if (isBlank(incoming)) return current;
         return current + "; " + incoming;
-    }
-
-    private String findRucNameInText(String text, String ruc) {
-        if (isBlank(text) || isBlank(ruc)) {
-            return null;
-        }
-
-        String normalizedText = text.replace('\u00A0', ' ').replaceAll("\\s+", " ").trim();
-        Matcher matcher = Pattern.compile(Pattern.quote(ruc) + "\\s*-?\\s*(.+?)(?=\\s+Tipo\\s+Contribuyente\\s*:|\\s+Nombre\\s+Comercial\\s*:|$)",
-                        Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE)
-                .matcher(normalizedText);
-        return matcher.find() ? ruc + " - " + matcher.group(1).trim() : null;
     }
 
     private String normalizeLabel(String value) {

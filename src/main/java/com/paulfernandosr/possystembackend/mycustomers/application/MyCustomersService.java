@@ -214,10 +214,10 @@ public class MyCustomersService {
         MapSqlParameterSource params = new MapSqlParameterSource("customerId", customerId);
         return jdbc.query("""
                 WITH selected_customer AS (
-                    SELECT regexp_replace(coalesce(address_main.phone,''), '\\D', '', 'g') AS phone_digits
+                    SELECT regexp_replace(coalesce(CASE WHEN address_main.id IS NULL THEN c.phone ELSE address_main.phone END,''), '\\D', '', 'g') AS phone_digits
                     FROM customers c
                     LEFT JOIN LATERAL (
-                        SELECT phone
+                        SELECT id, phone
                         FROM customer_address
                         WHERE customer_id = c.id
                           AND enabled = TRUE
@@ -530,7 +530,7 @@ public class MyCustomersService {
                     AND (
                         c.legal_name ILIKE :search
                         OR c.document_number ILIKE :search
-                        OR address_main.phone ILIKE :search
+                        OR (CASE WHEN address_main.id IS NULL THEN c.phone ELSE address_main.phone END) ILIKE :search
                     )
                     """);
             params.addValue("search", "%" + cleanSearch + "%");
@@ -568,8 +568,8 @@ public class MyCustomersService {
                 LEFT JOIN LATERAL (
                     SELECT max(COALESCE(w.last_message_at, w.last_event_at, w.conversation_created_at))::timestamp AS last_message_at
                     FROM whatsapp.conversation_current_v w
-                    WHERE regexp_replace(coalesce(w.phone_number,''), '\\D', '', 'g') = regexp_replace(coalesce(address_main.phone,''), '\\D', '', 'g')
-                      AND coalesce(address_main.phone, '') <> ''
+                    WHERE regexp_replace(coalesce(w.phone_number,''), '\\D', '', 'g') = regexp_replace(coalesce(CASE WHEN address_main.id IS NULL THEN c.phone ELSE address_main.phone END,''), '\\D', '', 'g')
+                      AND coalesce(CASE WHEN address_main.id IS NULL THEN c.phone ELSE address_main.phone END, '') <> ''
                 ) wa_contact ON TRUE
                 """
                 : """
@@ -656,8 +656,8 @@ public class MyCustomersService {
                         c.legal_name,
                         c.document_type,
                         c.document_number,
-                        address_main.phone,
-                        address_main.email,
+                        CASE WHEN address_main.id IS NULL THEN c.phone ELSE address_main.phone END AS phone,
+                        CASE WHEN address_main.id IS NULL THEN c.email ELSE address_main.email END AS email,
                         COALESCE(address_main.address, c.address) AS address,
                         COALESCE(address_main.district, c.district) AS district,
                         ca.user_id AS responsible_user_id,
@@ -681,7 +681,7 @@ public class MyCustomersService {
                         next_followup.next_followup_type,
                         next_followup.next_followup_status,
                         CASE
-                            WHEN address_main.phone IS NULL OR btrim(address_main.phone) = '' THEN 'SIN_TELEFONO'
+                            WHEN coalesce(CASE WHEN address_main.id IS NULL THEN c.phone ELSE address_main.phone END, '') = '' THEN 'SIN_TELEFONO'
                             WHEN wa_contact.last_message_at IS NULL THEN 'LISTO_PARA_CONTACTAR'
                             WHEN wa_contact.last_message_at >= CURRENT_TIMESTAMP - interval '7 days' THEN 'CONVERSACION_ACTIVA'
                             ELSE 'SIN_CONTACTO_RECIENTE'
@@ -812,10 +812,10 @@ public class MyCustomersService {
 
     private CustomerContact customerContact(Long customerId) {
         return jdbc.queryForObject("""
-                SELECT c.legal_name, address_main.phone
+                SELECT c.legal_name, CASE WHEN address_main.id IS NULL THEN c.phone ELSE address_main.phone END AS phone
                 FROM customers c
                 LEFT JOIN LATERAL (
-                    SELECT phone
+                    SELECT id, phone
                     FROM customer_address
                     WHERE customer_id = c.id
                       AND enabled = TRUE

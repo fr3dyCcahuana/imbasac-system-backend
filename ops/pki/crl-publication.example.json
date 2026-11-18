@@ -1,0 +1,9 @@
+{
+  "issuerDirectory": "/var/lib/imbasac-ca/device-issuer",
+  "passphraseFile": "/var/lib/imbasac-ca/private/issuer.pass",
+  "spoolDirectory": "/var/lib/imbasac-ca/crl-spool",
+  "rootCertificate": "/etc/imbasac/pki/public/device-root.crt.pem",
+  "rootCrl": "/etc/imbasac/pki/public/device-root.crl.pem",
+  "issuerCertificate": "/etc/imbasac/pki/public/device-issuer.crt.pem",
+  "targetBundle": "/etc/imbasac/pki/public/device-crls.pem"
+}

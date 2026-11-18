@@ -15,16 +15,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
+import java.net.http.HttpClient;
 import java.security.Principal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -34,6 +37,9 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
@@ -46,6 +52,10 @@ public class CustomerMapService {
     private final CustomerMapProperties properties;
     private final ObjectMapper objectMapper;
     private Instant lastGeocoderRequest = Instant.EPOCH;
+    private final Object geocoderRateLock = new Object();
+    private final Map<URI, CachedGeocoderResult> geocoderCache = new LinkedHashMap<>(16, 0.75f, true);
+    private final ConcurrentMap<URI, CompletableFuture<NominatimResult[]>> geocoderInFlight = new ConcurrentHashMap<>();
+    private volatile GeocoderHttpClient geocoderHttpClient;
     private volatile AdminAreaBounds adminAreaBounds;
     private final AtomicBoolean automaticBatchRunning = new AtomicBoolean(false);
     private volatile GeolocationBatchResponse lastAutomaticBatch = idleAutomaticBatch();
@@ -488,18 +498,8 @@ public class CustomerMapService {
                                             CustomerMapProperties.GeocoderSettings geocoder) {
         List<GeocoderAttempt> attemptsToSearch = buildGeocoderQueries(detail);
         double[] bounds = properties.getMap().getBounds();
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(geocoder.getTimeoutMs());
-        requestFactory.setReadTimeout(geocoder.getTimeoutMs());
-        RestClient client = RestClient.builder()
-                .requestFactory(requestFactory)
-                .defaultHeader(HttpHeaders.USER_AGENT, geocoder.getUserAgent())
-                .defaultHeader(HttpHeaders.ACCEPT_LANGUAGE, geocoder.getLanguage())
-                .build();
 
-        Exception lastError = null;
         NominatimMatch firstRejected = null;
-        int retries = Math.max(1, geocoder.getMaxRetries() + 1);
         for (GeocoderAttempt searchAttempt : attemptsToSearch) {
             URI uri = UriComponentsBuilder.fromHttpUrl(geocoder.getBaseUrl())
                     .path("/search")
@@ -515,36 +515,129 @@ public class CustomerMapService {
                     .encode()
                     .toUri();
 
-            for (int attempt = 0; attempt < retries; attempt++) {
-                waitForGeocoderSlot(geocoder);
-                try {
-                    NominatimResult[] results = client
-                            .get()
-                            .uri(uri)
-                            .retrieve()
-                            .body(NominatimResult[].class);
-                    if (results != null && results.length > 0) {
-                        for (NominatimResult result : results) {
-                            String rejectionReason = geocoderRejectionReason(detail, result);
-                            NominatimMatch match = new NominatimMatch(result, searchAttempt.approximate(), rejectionReason);
-                            if (!hasText(rejectionReason)) {
-                                return match;
-                            }
-                            if (firstRejected == null) {
-                                firstRejected = match;
-                            }
-                        }
-                    }
-                } catch (Exception ex) {
-                    lastError = ex;
+            for (NominatimResult result : lookupNominatim(uri, geocoder)) {
+                if (result == null) continue;
+                String rejectionReason = geocoderRejectionReason(detail, result);
+                NominatimMatch match = new NominatimMatch(result, searchAttempt.approximate(), rejectionReason);
+                if (!hasText(rejectionReason)) {
+                    return match;
+                }
+                if (firstRejected == null) {
+                    firstRejected = match;
                 }
             }
         }
 
-        if (lastError != null) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "No se pudo consultar el geocoder configurado", lastError);
-        }
         return firstRejected;
+    }
+
+    private NominatimResult[] lookupNominatim(URI uri, CustomerMapProperties.GeocoderSettings settings) {
+        NominatimResult[] cached = cachedGeocoderResult(uri, settings);
+        if (cached != null) {
+            log.debug("Customer map geocoder lookup: cacheHit=true");
+            return cached;
+        }
+
+        CompletableFuture<NominatimResult[]> pending = new CompletableFuture<>();
+        CompletableFuture<NominatimResult[]> existing = geocoderInFlight.putIfAbsent(uri, pending);
+        if (existing != null) {
+            try {
+                return existing.join();
+            } catch (CompletionException exception) {
+                if (exception.getCause() instanceof RuntimeException cause) throw cause;
+                throw exception;
+            }
+        }
+
+        try {
+            // Another request may have completed between the cache read and ownership acquisition.
+            NominatimResult[] results = cachedGeocoderResult(uri, settings);
+            if (results == null) {
+                results = requestNominatim(uri, settings);
+                cacheGeocoderResult(uri, results, settings);
+            }
+            pending.complete(results);
+            return results;
+        } catch (RuntimeException | Error exception) {
+            pending.completeExceptionally(exception);
+            throw exception;
+        } finally {
+            geocoderInFlight.remove(uri, pending);
+        }
+    }
+
+    private NominatimResult[] cachedGeocoderResult(URI uri, CustomerMapProperties.GeocoderSettings settings) {
+        if (settings.getCacheMaxEntries() <= 0) return null;
+        synchronized (geocoderCache) {
+            CachedGeocoderResult entry = geocoderCache.get(uri);
+            if (entry == null) return null;
+            long ttl = entry.results().length == 0 ? settings.getEmptyCacheTtlSeconds() : settings.getCacheTtlSeconds();
+            if (ttl > 0 && entry.cachedAt().plusSeconds(ttl).isAfter(Instant.now())) {
+                return entry.results();
+            }
+            geocoderCache.remove(uri);
+            return null;
+        }
+    }
+
+    private void cacheGeocoderResult(URI uri, NominatimResult[] results, CustomerMapProperties.GeocoderSettings settings) {
+        int maxEntries = Math.max(0, settings.getCacheMaxEntries());
+        long ttl = results.length == 0 ? settings.getEmptyCacheTtlSeconds() : settings.getCacheTtlSeconds();
+        if (maxEntries == 0 || ttl <= 0) return;
+        synchronized (geocoderCache) {
+            geocoderCache.entrySet().removeIf(item -> {
+                long itemTtl = item.getValue().results().length == 0
+                        ? settings.getEmptyCacheTtlSeconds() : settings.getCacheTtlSeconds();
+                return itemTtl <= 0 || !item.getValue().cachedAt().plusSeconds(itemTtl).isAfter(Instant.now());
+            });
+            geocoderCache.put(uri, new CachedGeocoderResult(results, Instant.now()));
+            while (geocoderCache.size() > maxEntries) {
+                geocoderCache.remove(geocoderCache.keySet().iterator().next());
+            }
+        }
+    }
+
+    private NominatimResult[] requestNominatim(URI uri, CustomerMapProperties.GeocoderSettings settings) {
+        int attempts = Math.max(1, settings.getMaxRetries() + 1);
+        RestClient client = geocoderClient(settings);
+        for (int attempt = 0; attempt < attempts; attempt++) {
+            waitForGeocoderSlot(settings);
+            long started = System.nanoTime();
+            try {
+                NominatimResult[] results = client.get().uri(uri).retrieve().body(NominatimResult[].class);
+                log.debug("Customer map geocoder upstream: durationMs={}, attempt={}",
+                        (System.nanoTime() - started) / 1_000_000, attempt + 1);
+                return results == null ? new NominatimResult[0] : results;
+            } catch (RuntimeException exception) {
+                boolean transientFailure = exception instanceof ResourceAccessException
+                        || exception instanceof RestClientResponseException response
+                        && (response.getStatusCode().value() == 429 || response.getStatusCode().is5xxServerError());
+                if (!transientFailure || attempt + 1 == attempts) {
+                    throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                            "No se pudo consultar el geocoder configurado", exception);
+                }
+            }
+        }
+        throw new IllegalStateException("Geocoder request attempts exhausted");
+    }
+
+    private RestClient geocoderClient(CustomerMapProperties.GeocoderSettings settings) {
+        GeocoderHttpClient current = geocoderHttpClient;
+        if (current != null && current.matches(settings)) return current.client();
+        synchronized (geocoderCache) {
+            current = geocoderHttpClient;
+            if (current != null && current.matches(settings)) return current.client();
+            int timeout = Math.max(1, settings.getTimeoutMs());
+            HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofMillis(timeout)).build();
+            JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
+            factory.setReadTimeout(Duration.ofMillis(timeout));
+            RestClient client = RestClient.builder().requestFactory(factory)
+                    .defaultHeader(HttpHeaders.USER_AGENT, settings.getUserAgent())
+                    .defaultHeader(HttpHeaders.ACCEPT_LANGUAGE, settings.getLanguage()).build();
+            geocoderHttpClient = new GeocoderHttpClient(client, settings.getTimeoutMs(),
+                    settings.getUserAgent(), settings.getLanguage());
+            return client;
+        }
     }
 
     private String geocoderRejectionReason(CustomerAddressGeolocationDetailResponse detail, NominatimResult result) {
@@ -693,19 +786,22 @@ public class CustomerMapService {
                 .trim();
     }
 
-    private synchronized void waitForGeocoderSlot(CustomerMapProperties.GeocoderSettings geocoder) {
-        int perMinute = Math.max(1, geocoder.getRateLimitPerMinute());
-        long minDelayMs = Math.max(1000, 60_000L / perMinute);
-        long elapsedMs = Duration.between(lastGeocoderRequest, Instant.now()).toMillis();
-        if (elapsedMs < minDelayMs) {
-            try {
-                Thread.sleep(minDelayMs - elapsedMs);
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Consulta de geocoder interrumpida", ex);
+    private void waitForGeocoderSlot(CustomerMapProperties.GeocoderSettings geocoder) {
+        synchronized (geocoderRateLock) {
+            int perMinute = Math.max(1, geocoder.getRateLimitPerMinute());
+            long minDelayMs = Math.max(1000, 60_000L / perMinute);
+            long elapsedMs = Duration.between(lastGeocoderRequest, Instant.now()).toMillis();
+            if (elapsedMs < minDelayMs) {
+                log.debug("Customer map geocoder rate limit: waitMs={}", minDelayMs - elapsedMs);
+                try {
+                    Thread.sleep(minDelayMs - elapsedMs);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Consulta de geocoder interrumpida", ex);
+                }
             }
+            lastGeocoderRequest = Instant.now();
         }
-        lastGeocoderRequest = Instant.now();
     }
 
     private Double estimateAccuracyMeters(NominatimResult result) {
@@ -1166,6 +1262,16 @@ public class CustomerMapService {
     }
 
     private record NominatimMatch(NominatimResult result, boolean approximate, String rejectionReason) {
+    }
+
+    private record CachedGeocoderResult(NominatimResult[] results, Instant cachedAt) {
+    }
+
+    private record GeocoderHttpClient(RestClient client, int timeoutMs, String userAgent, String language) {
+        boolean matches(CustomerMapProperties.GeocoderSettings settings) {
+            return timeoutMs == settings.getTimeoutMs() && Objects.equals(userAgent, settings.getUserAgent())
+                    && Objects.equals(language, settings.getLanguage());
+        }
     }
 
     private record NominatimResult(String lat,

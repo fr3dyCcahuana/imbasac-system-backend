@@ -1,0 +1,3 @@
+# Install as root:root 0440 only after visudo -cf, never grant a shell.
+# The empty argument string restricts the executable to invocation without arguments.
+posapp ALL=(imbasac-ca) NOPASSWD: /usr/local/lib/imbasac-ca/sign-request ""

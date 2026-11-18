@@ -21,11 +21,17 @@ import java.io.IOException;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class SecurityAuthFilter extends OncePerRequestFilter {
     private final JsonWebTokenUtils jsonWebTokenUtils;
     private final UserDetailsService userDetailsService;
     private final SessionRepository sessionRepository;
+    private final com.paulfernandosr.possystembackend.trustedclient.ControlSessionGuard controlSessions;
+    public SecurityAuthFilter(JsonWebTokenUtils tokens,UserDetailsService users,SessionRepository sessions) { this(tokens,users,sessions,null); }
+    @org.springframework.beans.factory.annotation.Autowired
+    public SecurityAuthFilter(JsonWebTokenUtils tokens,UserDetailsService users,SessionRepository sessions,
+            com.paulfernandosr.possystembackend.trustedclient.ControlSessionGuard guard) {
+        this.jsonWebTokenUtils=tokens;this.userDetailsService=users;this.sessionRepository=sessions;this.controlSessions=guard;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -36,13 +42,6 @@ public class SecurityAuthFilter extends OncePerRequestFilter {
         String token = null;
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             token = authHeader.substring(7);
-        } else if ("GET".equals(request.getMethod())
-                && "/community-notifications/stream".equals(request.getServletPath())) {
-            // Temporary EventSource compatibility until authenticated streaming is migrated.
-            String paramToken = request.getParameter("token");
-            if (paramToken != null && !paramToken.isBlank()) {
-                token = paramToken;
-            }
         }
 
         if (token == null) {
@@ -53,13 +52,18 @@ public class SecurityAuthFilter extends OncePerRequestFilter {
         try {
             var identity = jsonWebTokenUtils.parseAccessToken(token);
             final String username = identity.username();
+            // Signed, valid access token identity is diagnostic evidence, not access authorization.
+            request.setAttribute("imbasac.verifiedTokenUsername",username);
+            request.setAttribute("imbasac.verifiedTokenSessionKey",identity.sessionId());
 
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-                if (userDetails.isEnabled() && userDetails.isAccountNonLocked()
-                        && userDetails.isAccountNonExpired() && userDetails.isCredentialsNonExpired()
-                        && sessionRepository.isActive(identity.sessionId(), username)) {
+                boolean accountAllowed=userDetails.isEnabled() && userDetails.isAccountNonLocked()
+                        && userDetails.isAccountNonExpired() && userDetails.isCredentialsNonExpired();
+                boolean sessionActive=accountAllowed && sessionRepository.isActive(identity.sessionId(),username);
+                boolean controlAllowed=sessionActive && (controlSessions==null || controlSessions.active(identity.sessionId(),username,false));
+                if (controlAllowed) {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             userDetails,
                             null,
@@ -68,9 +72,19 @@ public class SecurityAuthFilter extends OncePerRequestFilter {
 
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                    request.setAttribute("imbasac.authenticatedUsername",username);
+                    request.setAttribute("imbasac.accessSessionKey",identity.sessionId());
+                    request.setAttribute("imbasac.accessTokenExpiresAt",identity.expiresAt());
+                } else {
+                    request.setAttribute(com.paulfernandosr.possystembackend.accessaudit.domain.AuditFailure.ATTRIBUTE,
+                            !accountAllowed?"SESSION_ACCOUNT_DISABLED":!sessionActive?"SESSION_NOT_ACTIVE":"SESSION_POLICY_REJECTED");
                 }
             }
         } catch (Exception exception) {
+            request.setAttribute(com.paulfernandosr.possystembackend.accessaudit.domain.AuditFailure.ATTRIBUTE,
+                    exception instanceof io.jsonwebtoken.ExpiredJwtException?"SESSION_TOKEN_EXPIRED"
+                    : exception instanceof io.jsonwebtoken.JwtException || exception instanceof IllegalArgumentException?"SESSION_TOKEN_INVALID"
+                    :"SESSION_VALIDATION_UNAVAILABLE");
             // Parser/Redis messages may contain credentials or connection details.
             log.debug("Authentication rejected ({})", exception.getClass().getSimpleName());
         }

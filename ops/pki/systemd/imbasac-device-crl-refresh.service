@@ -1,0 +1,21 @@
+[Unit]
+Description=Regenerar CRL firmada de emisora IMBASAC
+After=time-sync.target
+
+[Service]
+Type=oneshot
+User=imbasac-ca
+Group=imbasac-ca
+ExecStart=/usr/local/lib/imbasac-ca/crl-refresh
+WorkingDirectory=/var/lib/imbasac-ca
+UMask=0077
+TimeoutStartSec=60
+KillMode=control-group
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/imbasac-ca/device-issuer /var/lib/imbasac-ca/crl-spool
+ReadOnlyPaths=/var/lib/imbasac-ca/device-issuer/private
+StandardOutput=journal
+StandardError=journal

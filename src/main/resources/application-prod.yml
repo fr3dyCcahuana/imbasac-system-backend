@@ -3,9 +3,9 @@ spring:
     name: pos-system-backend
 
   datasource:
-    url: jdbc:postgresql://127.0.0.1:5432/imbasac_prod
-    username: imbasac
-    password: MyNewPass123FCP
+    url: ${IMBASAC_SPRING_DATASOURCE_URL}
+    username: ${IMBASAC_SPRING_DATASOURCE_USERNAME}
+    password: ${IMBASAC_SPRING_DATASOURCE_PASSWORD}
 
   data:
     redis:
@@ -42,10 +42,36 @@ logging:
 
 security:
   token:
-    secret: bSZWQDl3ZDVtUW0memhHNEc3ME82ZlYmYms5enVFSmU=
+    secret: ${IMBASAC_SECURITY_TOKEN_SECRET}
     expiration: 2400
   session:
     ttl: 21600
+
+  # Release defaults: enable only through the reviewed external security configuration.
+  access-control:
+    enabled: false
+    strike-threshold: 3
+    incident-cooldown-seconds: 60
+  access-audit:
+    enabled: false
+  device-policy:
+    enabled: false
+    individual-enabled: false
+  device-certificates:
+    enabled: false
+    enrollment-enabled: false
+    issuer-bundle-path: ${IMBASAC_DEVICE_ISSUER_BUNDLE:}
+  ca-signer:
+    enabled: false
+    transport: linux-local
+    revocation-delivery-enabled: false
+  trusted-proxy:
+    enabled: false
+    certificate-sha256: ${IMBASAC_NGINX_CERT_SHA256:}
+  sunat-files:
+    enabled: false
+  geoip:
+    enabled: false
 
 integration:
   mtc-license:
@@ -78,10 +104,10 @@ integration:
     cached-token-ttl-seconds-fallback: 3300
 
     auth:
-      guias-client-id: "f6d277a4-ec59-456e-b6fd-7cb7a06affeb"
-      guias-client-secret: "eda9LAm/0bcz+HktGUK3Cw=="
-      usu-secundario-produccion-user: TICKOCKL
-      usu-secundario-produccion-password: haldlecto
+      guias-client-id: ${IMBASAC_INTEGRATION_GUIDE_REMISSION_AUTH_GUIAS_CLIENT_ID}
+      guias-client-secret: ${IMBASAC_INTEGRATION_GUIDE_REMISSION_AUTH_GUIAS_CLIENT_SECRET}
+      usu-secundario-produccion-user: ${IMBASAC_INTEGRATION_GUIDE_REMISSION_AUTH_USU_SECUNDARIO_PRODUCCION_USER}
+      usu-secundario-produccion-password: ${IMBASAC_INTEGRATION_GUIDE_REMISSION_AUTH_USU_SECUNDARIO_PRODUCCION_PASSWORD}
 
     company:
       ruc: "20527826358"
@@ -99,8 +125,8 @@ sale:
   sunat:
     mode: "1"
     url: http://127.0.0.1:8093/API_SUNAT/post.php
-    username: "CPEIMBA2"
-    password: "Haldlecto26"
+    username: ${IMBASAC_SALE_SUNAT_USERNAME}
+    password: ${IMBASAC_SALE_SUNAT_PASSWORD}
     business:
       ruc: "20527826358"
       businessName: "IMPORTACIONES BAEZ SOCIEDAD ANONIMA CERRADA"
@@ -113,17 +139,17 @@ sale:
       department: "MADRE DE DIOS"
 
 common:
-  hashedPassword: $2a$12$UJsm7R3LJ0IvFNXuOpxB2OPWBrBp/1kTcivvYXlsji2ZlpA.I./j6
+  hashedPassword: ${IMBASAC_COMMON_HASHEDPASSWORD}
 
 app:
   customer-map:
     map:
-      google-maps-api-key: ${GOOGLE_MAPS_API_KEY:AIzaSyASi87XpHhYaZl0EABY89gzM-fCPMdUNLU}
+      google-maps-api-key: ${GOOGLE_MAPS_API_KEY:}
       google-maps-map-id: ${GOOGLE_MAPS_MAP_ID:81d711e1d002638abc802d69}
       bounds: [-81.5, -18.5, -68.5, 0.5]
       center: [-75.0152, -9.19]
       min-zoom: 4
-      max-zoom: 21
+      max-zoom: 22
       urban-zoom: 18
     geocoder:
       enabled: true

@@ -1,0 +1,12 @@
+[
+  "/etc/nginx/sites-available/imbasac.cloud",
+  "/etc/nginx/sites-available/pos",
+  "/etc/nginx/sites-available/php-internal-localhost.conf",
+  "/etc/systemd/system/pos-backend.service",
+  "/opt/pos-backend",
+  "/var/www/imbasac-front",
+  "/var/www/images",
+  "/var/www/files",
+  "/var/www/apache/API_SUNAT",
+  "/var/www/apache/API_SUNAT_GUIAS"
+]

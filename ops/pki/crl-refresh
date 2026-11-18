@@ -1,0 +1,16 @@
+#!/usr/bin/python3 -I
+import importlib.util
+import os
+from pathlib import Path
+import sys
+
+path = Path('/usr/local/lib/imbasac-ca/crl_jobs.py')
+if path.is_symlink() or path.stat().st_uid != 0 or path.stat().st_mode & 0o022:
+    sys.exit('CRL_REFRESH_FAILED')
+for parent in path.parents:
+    if parent.is_symlink() or parent.stat().st_uid != 0 or parent.stat().st_mode & 0o022:
+        sys.exit('CRL_REFRESH_FAILED')
+specification = importlib.util.spec_from_file_location('imbasac_crl_jobs', path)
+module = importlib.util.module_from_spec(specification)
+specification.loader.exec_module(module)
+raise SystemExit(module.main('generate'))

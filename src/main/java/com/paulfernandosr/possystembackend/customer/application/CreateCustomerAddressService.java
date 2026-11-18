@@ -1,5 +1,6 @@
 package com.paulfernandosr.possystembackend.customer.application;
 
+import com.paulfernandosr.possystembackend.customer.domain.Customer;
 import com.paulfernandosr.possystembackend.customer.domain.CustomerAddress;
 import com.paulfernandosr.possystembackend.customer.domain.exception.CustomerAddressAlreadyExistsException;
 import com.paulfernandosr.possystembackend.customer.domain.exception.CustomerNotFoundException;
@@ -8,6 +9,7 @@ import com.paulfernandosr.possystembackend.customer.domain.port.input.CreateCust
 import com.paulfernandosr.possystembackend.customer.domain.port.output.CustomerRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -16,8 +18,16 @@ public class CreateCustomerAddressService implements CreateCustomerAddressUseCas
     private final CustomerAddressContactValidator contactValidator;
 
     @Override
+    @Transactional
     public CustomerAddress createCustomerAddress(Long customerId, CustomerAddress customerAddress) {
-        validateCustomerExists(customerId);
+        Customer existing = customerRepository.findByIdForUpdate(customerId)
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found with identification: " + customerId));
+        boolean firstEnabledAddress = existing.getAddresses() == null
+                || existing.getAddresses().stream().noneMatch(address -> address != null && address.isEnabled());
+        if (customerAddress != null && firstEnabledAddress) {
+            if (isBlank(customerAddress.getPhone())) customerAddress.setPhone(existing.getPhone());
+            if (isBlank(customerAddress.getEmail())) customerAddress.setEmail(existing.getEmail());
+        }
         validateCustomerAddress(customerAddress);
 
         if (customerRepository.existsAddress(customerId, customerAddress.getAddress(), customerAddress.getUbigeo())) {
@@ -35,13 +45,11 @@ public class CreateCustomerAddressService implements CreateCustomerAddressUseCas
         customerAddress.setCustomerId(customerId);
         customerAddress.setEnabled(true);
 
-        return customerRepository.createAddress(customerId, customerAddress);
-    }
-
-    private void validateCustomerExists(Long customerId) {
-        if (!customerRepository.existsById(customerId)) {
-            throw new CustomerNotFoundException("Customer not found with identification: " + customerId);
+        CustomerAddress created = customerRepository.createAddress(customerId, customerAddress);
+        if (firstEnabledAddress) {
+            customerRepository.updateContact(customerId, null, null);
         }
+        return created;
     }
 
     private void validateCustomerAddress(CustomerAddress customerAddress) {

@@ -1,49 +1,77 @@
 spring:
   application:
     name: pos-system-backend
+
   datasource:
-    #url: jdbc:postgresql://localhost:5432/imbasac
-    url: jdbc:postgresql://localhost:5432/imbasac_prod_local
-    username: imbasac
-    password: imbasac
+    url: ${IMBASAC_SPRING_DATASOURCE_URL}
+    username: ${IMBASAC_SPRING_DATASOURCE_USERNAME}
+    password: ${IMBASAC_SPRING_DATASOURCE_PASSWORD}
+
   data:
     redis:
-      host: localhost
+      host: 127.0.0.1
       port: 6379
       timeout: 10000
+
   servlet:
     multipart:
       max-file-size: 100MB
       max-request-size: 100MB
       file-size-threshold: 2MB
+
 server:
   port: 8091
-  address: 0.0.0.0
+  address: 127.0.0.1
+  forward-headers-strategy: framework
 
+logging:
   level:
     root: INFO
+    org.springframework.web: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+
+  file:
+    name: /opt/pos-backend/pos-backend.log
+
+  logback:
+    rollingpolicy:
+      max-file-size: 20MB
+      max-history: 30
+      total-size-cap: 1GB
 
 security:
   token:
-    secret: bSZWQDl3ZDVtUW0memhHNEc3ME82ZlYmYms5enVFSmU=
-    expiration: 30000000
+    secret: ${IMBASAC_SECURITY_TOKEN_SECRET}
+    expiration: 2400
   session:
-    ttl: 30000000
+    ttl: 21600
 
-
-#headless: true → no intenta abrir UI
-#debug-enabled: false → no guarda evidencias ni logs debug
-#network-log-enabled: false → no ensucia logs con tráfico HTTP del navegador
-
-#integration:
-#  mtc-license:
-#    search-url: https://slcp.mtc.gob.pe/
-#    headless: true
-#    timeout-ms: 30000
-#    session-ttl-seconds: 120
-#    debug-enabled: false
-#    network-log-enabled: false
-#    debug-dir: /var/www/html/logs/mtc-debug
+  # Release defaults: enable only through the reviewed external security configuration.
+  access-control:
+    enabled: false
+    strike-threshold: 3
+    incident-cooldown-seconds: 60
+  access-audit:
+    enabled: false
+  device-policy:
+    enabled: false
+    individual-enabled: false
+  device-certificates:
+    enabled: false
+    enrollment-enabled: false
+    issuer-bundle-path: ${IMBASAC_DEVICE_ISSUER_BUNDLE:}
+  ca-signer:
+    enabled: false
+    transport: linux-local
+    revocation-delivery-enabled: false
+  trusted-proxy:
+    enabled: false
+    certificate-sha256: ${IMBASAC_NGINX_CERT_SHA256:}
+  sunat-files:
+    enabled: false
+  geoip:
+    enabled: false
 
 integration:
   mtc-license:
@@ -52,74 +80,76 @@ integration:
       search-url: https://licencias.mtc.gob.pe/#/index
       session-ttl-seconds: 180
     search-url: https://slcp.mtc.gob.pe/
-    headless: false
+    headless: true
     timeout-ms: 30000
     session-ttl-seconds: 120
-    debug-enabled: true
-    network-log-enabled: true
-    debug-dir: logs/mtc-debug
-
+    debug-enabled: false
+    network-log-enabled: false
+    debug-dir: /var/log/pos-backend/mtc-debug
+    proxy-enabled: true
+    proxy-server: socks5://127.0.0.1:1080
+    proxy-bypass: localhost,127.0.0.1
+  customer-lookup:
+    proxy-enabled: true
+    proxy-server: socks5://127.0.0.1:1080
+    connect-timeout-ms: 30000
+    read-timeout-ms: 60000
 
   guide-remission:
-    base-url: "http://127.0.0.1/API_SUNAT_GUIAS"
+    base-url: http://127.0.0.1:8093/API_SUNAT_GUIAS
     connect-timeout-seconds: 10
-    read-timeout-seconds: 60
-    ticket-query-delay-millis: 3000
+    read-timeout-seconds: 90
+    ticket-query-delay-millis: 20000
     token-ttl-skew-seconds: 60
     cached-token-ttl-seconds-fallback: 3300
 
     auth:
-      guias-client-id: "test-85e5b0ae-255c-4891-a595-0b98c65c9854"
-      guias-client-secret: "test-Hty/M6QshYvPgItX2P0+Kw=="
-      usu-secundario-produccion-user: "MODDATOS"
-      usu-secundario-produccion-password: "MODDATOS"
+      guias-client-id: ${IMBASAC_INTEGRATION_GUIDE_REMISSION_AUTH_GUIAS_CLIENT_ID}
+      guias-client-secret: ${IMBASAC_INTEGRATION_GUIDE_REMISSION_AUTH_GUIAS_CLIENT_SECRET}
+      usu-secundario-produccion-user: ${IMBASAC_INTEGRATION_GUIDE_REMISSION_AUTH_USU_SECUNDARIO_PRODUCCION_USER}
+      usu-secundario-produccion-password: ${IMBASAC_INTEGRATION_GUIDE_REMISSION_AUTH_USU_SECUNDARIO_PRODUCCION_PASSWORD}
 
     company:
       ruc: "20527826358"
-      razon-social: "IMPORTACIONES BAEZ S.A.C."
-      nombre-comercial: "IMBASAC"
-      domicilio-fiscal: "AV. LOS EJEMPLOS 123"
-      ubigeo: "150101"
+      razon-social: "IMPORTACIONES BAEZ SOCIEDAD ANONIMA CERRADA"
+      nombre-comercial: "IMBA S.A.C."
+      domicilio-fiscal: "AV. TAMBOPATA 854"
+      ubigeo: "170101"
       urbanizacion: "-"
-      distrito: "LIMA"
-      provincia: "LIMA"
-      departamento: "LIMA"
-      modo: 0
+      distrito: "TAMBOPATA"
+      provincia: "TAMBOPATA"
+      departamento: "MADRE DE DIOS"
+      modo: 1
 
 sale:
   sunat:
-    mode: "0"
-    url: http://localhost/API_SUNAT/post.php
-    username: "MODDATOS"
-    password: "MODDATOS"
+    mode: "1"
+    url: http://127.0.0.1:8093/API_SUNAT/post.php
+    username: ${IMBASAC_SALE_SUNAT_USERNAME}
+    password: ${IMBASAC_SALE_SUNAT_PASSWORD}
     business:
-      ruc: "20611603739"
-      businessName: "IMPORTACIONES EL HUECO 365 DIAS DE 1000 OFERTAS S.A.C"
-      tradeName: "IMPORTACIONES EL HUECO"
-      taxAddress: "JR. SAN CRISTOBAL 327"
-      ubigeo: "180101"
-      neighborhood: "CHAUPIMARCA"
-      district: "CHAUPIMARCA"
-      province: "CERRO DE PASCO"
-      department: "PASCO"
+      ruc: "20527826358"
+      businessName: "IMPORTACIONES BAEZ SOCIEDAD ANONIMA CERRADA"
+      tradeName: "IMBA S.A.C."
+      taxAddress: "AV. TAMBOPATA 854"
+      ubigeo: "170101"
+      neighborhood: "-"
+      district: "TAMBOPATA"
+      province: "TAMBOPATA"
+      department: "MADRE DE DIOS"
 
 common:
-  hashedPassword: $2a$12$UJsm7R3LJ0IvFNXuOpxB2OPWBrBp/1kTcivvYXlsji2ZlpA.I./j6
-
-#app:
-#  files:
-#    products-images-dir: /var/www/altoquik/images/products
-#    products-images-base-url: http://localhost:8091
+  hashedPassword: ${IMBASAC_COMMON_HASHEDPASSWORD}
 
 app:
   customer-map:
     map:
-      google-maps-api-key: ${GOOGLE_MAPS_API_KEY:AIzaSyASi87XpHhYaZl0EABY89gzM-fCPMdUNLU}
+      google-maps-api-key: ${GOOGLE_MAPS_API_KEY:}
       google-maps-map-id: ${GOOGLE_MAPS_MAP_ID:81d711e1d002638abc802d69}
       bounds: [-81.5, -18.5, -68.5, 0.5]
       center: [-75.0152, -9.19]
       min-zoom: 4
-      max-zoom: 21
+      max-zoom: 22
       urban-zoom: 18
     geocoder:
       enabled: true
@@ -139,16 +169,16 @@ app:
   whatsapp-agent:
     base-url: http://127.0.0.1:8092
   files:
-    products-images-dir: src/main/resources/static/images/products
+    products-images-dir: /var/www/images/products
     products-images-public-path: /images/products
+    products-images-base-url: http://imbasac.cloud/images/products
     promotions-images-dir: /var/www/images/promotions
     promotions-images-public-path: /images/promotions
-
-    manual-pdfs-dir: ./storage/manual-pdfs
+    manual-pdfs-dir: /var/www/files/manual-pdfs
     manual-pdfs-public-path: /files/manual-pdfs
-    community-dir: ./storage/community
+    community-dir: /var/www/files/community
     community-public-path: /files/community
-    company-community-dir: ./storage/company-community
+    company-community-dir: /var/www/files/company-community
     company-community-public-path: /files/company-community
     sunat-xml-public-path: /sunat-files/xml
     sunat-cdr-public-path: /sunat-files/cdr

@@ -19,7 +19,7 @@ public class CustomerMapProperties {
         private double[] bounds = {-81.5, -18.5, -68.5, 0.5};
         private double[] center = {-75.0152, -9.19};
         private double minZoom = 4;
-        private double maxZoom = 21;
+        private double maxZoom = 22;
         private double urbanZoom = 18;
     }
 
@@ -32,6 +32,9 @@ public class CustomerMapProperties {
         private int timeoutMs = 8000;
         private int rateLimitPerMinute = 4;
         private int maxRetries = 1;
+        private long cacheTtlSeconds = 86400;
+        private long emptyCacheTtlSeconds = 900;
+        private int cacheMaxEntries = 1000;
         private String country = "PE";
         private String language = "es";
         private String userAgent = "IMBASAC customer map";

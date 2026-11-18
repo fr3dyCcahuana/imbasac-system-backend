@@ -22,9 +22,12 @@ public class CommunityNotificationRestController {
     private final CommunityNotificationSseService sseService;
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter stream(Authentication authentication) {
+    public SseEmitter stream(Authentication authentication,jakarta.servlet.http.HttpServletRequest request) {
         Long userId = communityService.currentUserId(authentication);
-        return sseService.subscribe(userId);
+        if(!(request.getAttribute("imbasac.accessSessionKey") instanceof String sid)
+                || !(request.getAttribute("imbasac.accessTokenExpiresAt") instanceof java.time.Instant expires))
+            throw new org.springframework.security.access.AccessDeniedException("Session required");
+        return sseService.subscribe(userId,authentication.getName(),sid,expires);
     }
 
     @GetMapping("/unread")

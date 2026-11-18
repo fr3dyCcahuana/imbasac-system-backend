@@ -1,0 +1,12 @@
+[Unit]
+Description=Actualizar CRL IMBASAC diariamente fuera del horario comercial
+
+[Timer]
+OnCalendar=*-*-* 22:15:00 America/Lima
+RandomizedDelaySec=5m
+AccuracySec=1m
+Persistent=false
+Unit=imbasac-device-crl-publish.service
+
+[Install]
+WantedBy=timers.target

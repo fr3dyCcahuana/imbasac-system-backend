@@ -13,6 +13,8 @@ import java.util.List;
 @AllArgsConstructor
 public class Customer {
     private Long id;
+    /** Snapshot revision required when replacing the complete customer. */
+    private String editRevision;
     private String legalName;
     private DocumentType documentType;
     private String documentNumber;

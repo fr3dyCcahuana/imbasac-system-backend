@@ -2,6 +2,7 @@ package com.paulfernandosr.possystembackend.customer.application;
 
 import com.paulfernandosr.possystembackend.customer.domain.Customer;
 import com.paulfernandosr.possystembackend.customer.domain.CustomerAddress;
+import com.paulfernandosr.possystembackend.customer.domain.CustomerEditRevision;
 import com.paulfernandosr.possystembackend.customer.domain.DocumentType;
 import com.paulfernandosr.possystembackend.customer.domain.exception.CustomerAlreadyExistsException;
 import com.paulfernandosr.possystembackend.customer.domain.exception.CustomerNotFoundException;
@@ -11,6 +12,8 @@ import com.paulfernandosr.possystembackend.customer.domain.port.output.CustomerR
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -31,10 +34,18 @@ public class UpdateCustomerService implements UpdateCustomerUseCase {
             throw new InvalidCustomerException("Customer id is required");
         }
 
-        Customer existingCustomer = customerRepository.findById(customerId)
+        validateRequiredCustomerData(customer);
+        if (isBlank(customer.getEditRevision())) {
+            throw staleCustomer();
+        }
+
+        Customer existingCustomer = customerRepository.findByIdForUpdate(customerId)
                 .orElseThrow(() -> new CustomerNotFoundException("Customer not found with identification: " + customerId));
 
-        validateRequiredCustomerData(customer);
+        if (!customer.getEditRevision().equals(CustomerEditRevision.calculate(existingCustomer))) {
+            throw staleCustomer();
+        }
+
         String legacyPhone = customer.getPhone();
         String legacyEmail = customer.getEmail();
         boolean preserveExistingAddresses = isBlank(customer.getAddress()) && customer.getAddresses() == null;
@@ -48,6 +59,10 @@ public class UpdateCustomerService implements UpdateCustomerUseCase {
         } else {
             normalizeAddressesAndSyncMainAddress(customer, legacyPhone, legacyEmail);
         }
+
+        boolean hasAddresses = customer.getAddresses() != null && !customer.getAddresses().isEmpty();
+        customer.setPhone(hasAddresses ? null : contactValidator.normalizeOptionalPeruvianMobile(legacyPhone));
+        customer.setEmail(hasAddresses ? null : contactValidator.normalizeOptionalEmail(legacyEmail));
 
         if (customerRepository.existsByDocumentExcludingId(
                 customer.getDocumentType(),
@@ -67,6 +82,11 @@ public class UpdateCustomerService implements UpdateCustomerUseCase {
 
         return customerRepository.findById(customerId)
                 .orElseThrow(() -> new CustomerNotFoundException("Customer not found with identification: " + customerId));
+    }
+
+    private ResponseStatusException staleCustomer() {
+        return new ResponseStatusException(HttpStatus.CONFLICT,
+                "El cliente fue actualizado. Cierre la edicion y vuelva a cargar sus datos antes de guardar.");
     }
 
     private void validateRequiredCustomerData(Customer customer) {

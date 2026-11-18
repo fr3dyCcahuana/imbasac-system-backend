@@ -53,6 +53,21 @@ public class RedisSessionRepository implements SessionRepository {
             return redis.call('DEL', KEYS[1])
             """, Long.class);
 
+    private static final DefaultRedisScript<Long> DELETE_ACCESS_SESSION = new DefaultRedisScript<>("""
+            if redis.call('GET', KEYS[1]) ~= ARGV[2] then return 0 end
+            if redis.call('GET', KEYS[2]) == ARGV[1] then redis.call('DEL', KEYS[2]) end
+            return redis.call('DEL', KEYS[1])
+            """, Long.class);
+
+    public void invalidateAccessSession(String accessSessionId, String username) {
+        if (accessSessionId == null || !accessSessionId.matches("[a-f0-9]{64}") || username == null || username.isBlank()) {
+            throw new IllegalArgumentException("Invalid audit session reference");
+        }
+        stringRedisTemplate.execute(DELETE_ACCESS_SESSION,
+                List.of(RedisConstants.SESSION_PREFIX + accessSessionId, RedisConstants.USER_PREFIX + username),
+                accessSessionId, username);
+    }
+
     @Override
     public void create(Session session) {
         checkTtl();

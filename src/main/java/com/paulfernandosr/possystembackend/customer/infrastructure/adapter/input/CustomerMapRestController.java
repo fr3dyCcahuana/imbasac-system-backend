@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @RestController
@@ -61,7 +62,12 @@ public class CustomerMapRestController {
     @PostMapping("/customers/{customerId}/addresses/{addressId}/geolocation/suggest")
     public ResponseEntity<SuccessResponse<GeocodingSuggestionResponse>> suggest(@PathVariable Long customerId,
                                                                                 @PathVariable Long addressId) {
-        return ResponseEntity.ok(SuccessResponse.ok(service.suggest(customerId, addressId)));
+        long started = System.nanoTime();
+        GeocodingSuggestionResponse suggestion = service.suggest(customerId, addressId);
+        double durationMs = (System.nanoTime() - started) / 1_000_000D;
+        return ResponseEntity.ok()
+                .header("Server-Timing", String.format(Locale.ROOT, "geolocation;dur=%.1f", durationMs))
+                .body(SuccessResponse.ok(suggestion));
     }
 
     @PostMapping("/customer-addresses/geolocation/batch")

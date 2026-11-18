@@ -27,8 +27,10 @@ class JsonWebTokenUtilsTest {
         UUID session = UUID.randomUUID();
         var first = tokens.generateToken("client", session);
         var second = tokens.generateToken("client", session);
-        assertThat(tokens.parseAccessToken(first.value()))
-                .isEqualTo(new JsonWebTokenUtils.AccessTokenIdentity("client", AccessSessionId.fromRefreshCredential(session)));
+        var identity=tokens.parseAccessToken(first.value());
+        assertThat(identity.username()).isEqualTo("client");
+        assertThat(identity.sessionId()).isEqualTo(AccessSessionId.fromRefreshCredential(session));
+        assertThat(identity.expiresAt()).isAfter(java.time.Instant.now()).isBefore(java.time.Instant.now().plusSeconds(301));
         assertThat(first.value()).isNotEqualTo(second.value());
         var claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(first.value()).getPayload();
         assertThat(claims.get("sid", String.class)).doesNotContain(session.toString());

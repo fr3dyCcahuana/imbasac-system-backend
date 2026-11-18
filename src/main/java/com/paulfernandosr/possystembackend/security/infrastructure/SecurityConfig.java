@@ -1,5 +1,8 @@
 package com.paulfernandosr.possystembackend.security.infrastructure;
 
+import com.paulfernandosr.possystembackend.deviceaccess.infrastructure.DevicePolicyFilter;
+import com.paulfernandosr.possystembackend.accessaudit.infrastructure.AccessAuditCaptureFilter;
+import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -30,6 +33,8 @@ public class SecurityConfig {
     private final SecurityAuthFilter jsonWebTokenAuthFilter;
     private final SecurityAuthEntryPoint securityAuthEntryPoint;
     private final SecurityAccessDeniedHandler securityAccessDeniedHandler;
+    private final DevicePolicyFilter devicePolicyFilter;
+    private final AccessAuditCaptureFilter accessAuditCaptureFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -39,6 +44,16 @@ public class SecurityConfig {
                         .authenticationEntryPoint(securityAuthEntryPoint)
                         .accessDeniedHandler(securityAccessDeniedHandler))
                 .authorizeHttpRequests(auth -> auth
+                        // Continuations follow the initial JWT/device checks; SSE revalidates its live session.
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
+                        .requestMatchers("/auth/client-validation").authenticated()
+                        .requestMatchers("/security/access-audit/**").hasAuthority("VIEW_SECURITY_AUDIT")
+                        .requestMatchers("/security/access-control/**").hasAuthority("VIEW_SECURITY_CONTROL")
+                        .requestMatchers("/security/device-certificates/event-location/**").hasAuthority("VIEW_SECURITY_AUDIT")
+                        .requestMatchers("/security/device-certificates/**").hasAuthority("VIEW_SECURITY_CONTROL")
+                        .requestMatchers("/security/sunat-files/**").hasAuthority("VIEW_SUNAT_DOCUMENTS")
+                        .requestMatchers("/reports/products/slow-moving", "/reports/products/slow-moving/**")
+                        .hasAuthority("MANAGE_DASHBOARD")
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/landing/**").permitAll()
                         .requestMatchers("/images/**").permitAll()
@@ -127,6 +142,8 @@ public class SecurityConfig {
                 .sessionManagement(smc -> smc.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jsonWebTokenAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(devicePolicyFilter, SecurityAuthFilter.class)
+                .addFilterBefore(accessAuditCaptureFilter, SecurityAuthFilter.class)
                 .build();
     }
 

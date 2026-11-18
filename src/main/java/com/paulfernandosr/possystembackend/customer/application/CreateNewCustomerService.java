@@ -9,6 +9,7 @@ import com.paulfernandosr.possystembackend.customer.domain.port.input.CreateNewC
 import com.paulfernandosr.possystembackend.customer.domain.port.output.CustomerRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +22,7 @@ public class CreateNewCustomerService implements CreateNewCustomerUseCase {
     private final CustomerAddressContactValidator contactValidator;
 
     @Override
+    @Transactional
     public Customer createNewCustomer(Customer customer) {
         validateRequiredCustomerData(customer);
         String legacyPhone = customer.getPhone();
@@ -28,8 +30,9 @@ public class CreateNewCustomerService implements CreateNewCustomerUseCase {
         normalizeCustomer(customer);
         validateManualCustomerData(customer);
         normalizeOptionalAddress(customer, legacyPhone, legacyEmail);
-        customer.setPhone(null);
-        customer.setEmail(null);
+        boolean hasAddresses = customer.getAddresses() != null && !customer.getAddresses().isEmpty();
+        customer.setPhone(hasAddresses ? null : contactValidator.normalizeOptionalPeruvianMobile(legacyPhone));
+        customer.setEmail(hasAddresses ? null : contactValidator.normalizeOptionalEmail(legacyEmail));
 
         boolean doesCustomerExists = customerRepository.existsByDocument(
                 customer.getDocumentType(),

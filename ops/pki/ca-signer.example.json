@@ -1,0 +1,5 @@
+{
+  "issuerDirectory": "/var/lib/imbasac-ca/device-issuer",
+  "passphraseFile": "/var/lib/imbasac-ca/private/issuer.pass",
+  "outputDirectory": "/var/lib/imbasac-ca/requests"
+}

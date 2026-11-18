@@ -2,7 +2,7 @@ spring:
   application:
     name: pos-system-backend
   datasource:
-    url: jdbc:postgresql://localhost:5432/imbasac
+    url: jdbc:postgresql://localhost:5432/imbasac_prod_local
     username: imbasac
     password: imbasac
   data:
@@ -28,6 +28,25 @@ security:
     expiration: 1200
   session:
     ttl: 21600
+  # Administración local de equipos, cupos, strikes y bloqueos.
+  # Requiere las migraciones de seguridad aplicadas en la base local.
+  # Después de habilitarlo hay que iniciar sesión de nuevo.
+  access-control:
+    enabled: true
+    strike-threshold: 3
+    incident-cooldown-seconds: 60
+  # Estos componentes se habilitan al preparar la CA y el canal de confianza.
+  # La administración no cambia por sí sola la política de acceso de CLIENTE.
+  device-policy:
+    enabled: false
+  device-certificates:
+    enabled: false
+    # Recibe solicitudes públicas en local antes de configurar la CA emisora.
+    enrollment-enabled: true
+  ca-signer:
+    enabled: false
+  trusted-proxy:
+    enabled: false
 
 
 #headless: true → no intenta abrir UI
@@ -118,7 +137,7 @@ app:
       bounds: [-81.5, -18.5, -68.5, 0.5]
       center: [-75.0152, -9.19]
       min-zoom: 4
-      max-zoom: 21
+      max-zoom: 22
       urban-zoom: 18
     geocoder:
       enabled: true

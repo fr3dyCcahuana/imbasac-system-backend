@@ -16,6 +16,9 @@ public interface CustomerRepository {
 
     Optional<Customer> findById(Long customerId);
 
+    /** Locks the parent and its existing addresses until the surrounding transaction completes. */
+    Optional<Customer> findByIdForUpdate(Long customerId);
+
     Optional<Customer> findByDocument(DocumentType documentType, String documentNumber);
 
     Page<Customer> findPage(String query, Pageable pageable);

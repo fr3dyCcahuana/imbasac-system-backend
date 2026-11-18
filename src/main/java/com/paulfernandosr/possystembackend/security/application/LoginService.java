@@ -1,6 +1,7 @@
 package com.paulfernandosr.possystembackend.security.application;
 
 import com.paulfernandosr.possystembackend.security.domain.exception.InvalidCredentialsException;
+import com.paulfernandosr.possystembackend.deviceaccess.application.DeviceAccessPolicyService;
 import com.paulfernandosr.possystembackend.security.domain.Session;
 import com.paulfernandosr.possystembackend.security.domain.port.input.LoginUseCase;
 import com.paulfernandosr.possystembackend.security.domain.port.output.AuthenticationPort;
@@ -15,26 +16,42 @@ import org.springframework.stereotype.Component;
 import java.util.UUID;
 
 @Component
-@RequiredArgsConstructor
 public class LoginService implements LoginUseCase {
     private final AuthenticationPort authenticationPort;
     private final TokenGenerationPort tokenGenerationPort;
     private final SessionRepository sessionRepository;
     private final UserRepository userRepository;
+    private final DeviceAccessPolicyService devicePolicy;
+    private final com.paulfernandosr.possystembackend.trustedclient.ControlSessionGuard controlSessions;
+    public LoginService(AuthenticationPort authenticationPort,TokenGenerationPort tokenGenerationPort,SessionRepository sessionRepository,UserRepository userRepository,DeviceAccessPolicyService devicePolicy) {
+        this(authenticationPort,tokenGenerationPort,sessionRepository,userRepository,devicePolicy,null);
+    }
+    @org.springframework.beans.factory.annotation.Autowired
+    public LoginService(AuthenticationPort authenticationPort,TokenGenerationPort tokenGenerationPort,SessionRepository sessionRepository,UserRepository userRepository,DeviceAccessPolicyService devicePolicy,
+            com.paulfernandosr.possystembackend.trustedclient.ControlSessionGuard controlSessions) {
+        this.authenticationPort=authenticationPort;this.tokenGenerationPort=tokenGenerationPort;this.sessionRepository=sessionRepository;
+        this.userRepository=userRepository;this.devicePolicy=devicePolicy;this.controlSessions=controlSessions;
+    }
 
     @Override
     public Session login(String username, String password) {
+        // Credential snapshot stays inside the authentication boundary, never in public User DTOs.
+        var credentialSnapshot=controlSessions==null?null:controlSessions.capture(username);
         boolean isAuthenticated = authenticationPort.authenticate(username, password);
 
         if (!isAuthenticated) {
             throw new InvalidCredentialsException("User credentials are invalid");
         }
 
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UserNotFoundException("User not found with identification: " + username));
+        User user=userRepository.findByUsername(username).orElseThrow(()->new InvalidCredentialsException("User credentials are invalid"));
 
         if (!user.isEnabled()) {
             throw new InvalidCredentialsException("User credentials are invalid");
+        }
+
+        try { devicePolicy.check(user); }
+        catch(com.paulfernandosr.possystembackend.deviceaccess.domain.DevicePolicyException error) {
+            devicePolicy.recordUnauthorizedLogin(user,error);throw error;
         }
 
         if (user.requiresCashSession() && user.isNotOnRegister()) {
@@ -42,6 +59,7 @@ public class LoginService implements LoginUseCase {
         }
 
         UUID sessionId = UUID.randomUUID();
+        if(controlSessions!=null) controlSessions.register(user,sessionId,credentialSnapshot);
         Session session = Session.builder()
                 .id(sessionId)
                 .username(username)

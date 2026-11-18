@@ -7,6 +7,7 @@ import com.paulfernandosr.possystembackend.customer.domain.port.input.UpdateCust
 import com.paulfernandosr.possystembackend.customer.domain.port.output.CustomerRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -15,10 +16,10 @@ public class UpdateCustomerAddressService implements UpdateCustomerAddressUseCas
     private final CustomerAddressContactValidator contactValidator;
 
     @Override
+    @Transactional
     public CustomerAddress updateCustomerAddress(Long customerId, Long addressId, CustomerAddress customerAddress) {
-        if (!customerRepository.existsById(customerId)) {
-            throw new CustomerNotFoundException("Customer not found with identification: " + customerId);
-        }
+        customerRepository.findByIdForUpdate(customerId)
+                .orElseThrow(() -> new CustomerNotFoundException("Customer not found with identification: " + customerId));
 
         validateCustomerAddress(addressId, customerAddress);
 

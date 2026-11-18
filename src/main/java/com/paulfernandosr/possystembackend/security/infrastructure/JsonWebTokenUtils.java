@@ -55,10 +55,12 @@ public class JsonWebTokenUtils {
         if (sid == null || !sid.matches("[a-f0-9]{64}")) {
             throw new JwtException("Invalid access token session");
         }
-        return new AccessTokenIdentity(claims.getSubject(), sid);
+        return new AccessTokenIdentity(claims.getSubject(), sid,claims.getExpiration().toInstant());
     }
     private SecretKey getSignKey() {
         return Keys.hmacShaKeyFor(Decoders.BASE64.decode(tokenSecret));
     }
-    public record AccessTokenIdentity(String username, String sessionId) {}
+    public record AccessTokenIdentity(String username, String sessionId,java.time.Instant expiresAt) {
+        public AccessTokenIdentity(String username,String sessionId) { this(username,sessionId,java.time.Instant.MAX); }
+    }
 }

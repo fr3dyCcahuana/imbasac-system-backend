@@ -14,6 +14,6 @@ public class LogoutService implements LogoutUseCase {
 
     @Override
     public void logout(UUID sessionId) {
-        sessionRepository.deleteById(sessionId);
+        sessionRepository.logout(sessionId);
     }
 }

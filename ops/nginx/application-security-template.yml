@@ -1,0 +1,39 @@
+# EXTERNAL profile example, do not place production secrets in this repository.
+# Keep all features off during first compatible deployment; enable only after isolated acceptance.
+server:
+  address: 127.0.0.1
+  port: 8091
+  forward-headers-strategy: none
+  ssl:
+    enabled: true
+    key-store: file:/etc/imbasac/pki/internal/backend.p12
+    key-store-type: PKCS12
+    key-store-password: ${IMBASAC_BACKEND_KEYSTORE_PASSWORD}
+    trust-store: file:/etc/imbasac/pki/internal/proxy-trust.p12
+    trust-store-type: PKCS12
+    trust-store-password: ${IMBASAC_PROXY_TRUSTSTORE_PASSWORD}
+    client-auth: need
+security:
+  ca-signer:
+    enabled: false
+  sunat-files:
+    enabled: false
+    xml-directory: /var/www/apache/API_SUNAT/files/facturacion_electronica/FIRMA
+    cdr-directory: /var/www/apache/API_SUNAT/files/facturacion_electronica/CDR
+  trusted-proxy:
+    enabled: false
+    certificate-sha256: ${IMBASAC_NGINX_CERT_SHA256:}
+  device-certificates:
+    enabled: false
+    issuer-bundle-path: /etc/imbasac/pki/public/device-trust.pem
+  device-policy:
+    enabled: false
+  access-control:
+    enabled: true
+    strike-threshold: 3
+    incident-cooldown-seconds: 60
+  access-audit:
+    enabled: false
+  geoip:
+    enabled: false
+    database-path: /var/lib/imbasac/geoip/GeoLite2-City.mmdb

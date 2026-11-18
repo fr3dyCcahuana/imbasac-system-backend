@@ -16,5 +16,7 @@ public interface SessionRepository {
 
     void deleteById(UUID sessionId);
 
+    default void logout(UUID sessionId) { deleteById(sessionId); }
+
     void deleteByUsername(String username);
 }

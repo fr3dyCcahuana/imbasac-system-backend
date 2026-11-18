@@ -46,6 +46,7 @@ public class CustomerCommercialService {
 
     @Transactional
     public CustomerContactUpdateResponse updateContact(Long customerId, Map<String, Object> patch) {
+        lockCustomer(customerId);
         Customer customer = getCustomer(customerId);
         CustomerAddress address = findMainAddress(customer)
                 .orElseThrow(() -> new InvalidCustomerException("Customer does not have a main address"));
@@ -58,6 +59,7 @@ public class CustomerCommercialService {
             throw new InvalidCustomerException("Contact patch is required");
         }
 
+        lockCustomer(customerId);
         CustomerAddress address = lockAddress(customerId, addressId);
         String phone = address.getPhone();
         String email = address.getEmail();
